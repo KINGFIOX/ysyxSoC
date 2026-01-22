@@ -18,6 +18,7 @@
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
+          overlays = [ (import ./overlay.nix) ];
         };
 
         # 创建 ccache 包装目录，通过 PATH prepend 方式使用 ccache
@@ -59,6 +60,7 @@
             scala_2_13
             circt
             metals # mill 不会自动下载
+            mill_0_12_4
 
             # ========================
             # Verilog/仿真工具

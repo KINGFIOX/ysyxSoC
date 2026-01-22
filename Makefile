@@ -6,7 +6,7 @@ SCALA_FILES = $(shell find src/ -name "*.scala")
 FIRTOOL_VERSION = 1.105.0
 FIRTOOL_PATCH_DIR = $(shell pwd)/patch/firtool
 
-MILL = ./mill
+MILL = mill
 
 $(V_FILE_FINAL): $(SCALA_FILES)
 # Replace firtool with a newer version
