@@ -2,6 +2,17 @@
 #include <memory/paddr.h>
 #include <cpu/cpu.h>
 
+// MROM 读取函数 - 用于 AXI4MROM 模块
+// MROM 基地址: 0x20000000
+void mrom_read(int addr, int* data) {
+  *data = (int)paddr_read((paddr_t)addr, 4);
+}
+
+// Flash 读取函数 - 用于 SPI Flash 模块
+// Flash XIP 基地址: 0x30000000
+void flash_read(int addr, int* data) {
+  *data = (int)paddr_read((paddr_t)addr, 4);
+}
 
 void pmem_read_dpi(int en, int addr, int len, int* data) {
   if (!en) {
