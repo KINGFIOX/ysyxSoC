@@ -21,7 +21,7 @@ class SourceD(info: ChipLinkInfo) extends Module
 
   // Map ChipLink transaction to TileLink source
   val cl2tl = info.sourceMap.map(_.swap)
-  val nestedMap = cl2tl.groupBy(_._1.domain).mapValues(_.map { case (TXN(_, cls), tls) => (cls, tls) })
+  val nestedMap = cl2tl.groupBy(_._1.domain).view.mapValues(_.map { case (TXN(_, cls), tls) => (cls, tls) }).toMap
   val muxes = Seq.tabulate(info.params.domains) { i =>
     info.mux(nestedMap.lift(i).getOrElse(Map(0 -> 0)))
   }

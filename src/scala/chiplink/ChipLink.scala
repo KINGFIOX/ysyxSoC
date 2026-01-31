@@ -4,6 +4,7 @@ package sifive.blocks.devices.chiplink
 import chisel3._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.resources.SimpleBus
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.util._

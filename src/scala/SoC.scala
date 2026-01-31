@@ -11,6 +11,8 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.amba.apb._
 import freechips.rocketchip.system.SimAXIMem
 
+import ysyx.core.DebugBundle
+
 object AXI4SlaveNodeGenerator {
   def apply(params: Option[MasterPortParams], address: Seq[AddressSet])(implicit valName: ValName) =
     AXI4SlaveNode(params.map(p => AXI4SlavePortParameters(
@@ -76,6 +78,12 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     // connect interrupt signal to cpu
     val intr_from_chipSlave = IO(Input(Bool()))
     cpu.module.interrupt := intr_from_chipSlave
+
+    // expose step and debug signals for simulation
+    val step = IO(Input(Bool()))
+    val debug = IO(Output(new DebugBundle))
+    cpu.module.step := step
+    debug := cpu.module.debug
 
     val sdramBundle = if (Config.sdramUseAXI) lsdram_axi.get.module.sdram_bundle
                       else                    lsdram_apb.get.module.sdram_bundle
@@ -152,5 +160,11 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     externalPins.ps2 <> masic.ps2
     externalPins.vga <> masic.vga
     externalPins.uart <> masic.uart
+
+    // expose step and debug for simulation
+    val step = IO(Input(Bool()))
+    val debug = IO(Output(new DebugBundle))
+    masic.step := step
+    debug := masic.debug
   }
 }

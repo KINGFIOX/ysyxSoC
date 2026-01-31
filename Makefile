@@ -1,26 +1,95 @@
-V_FILE_GEN   = build/ysyxSoCTop.sv
-V_FILE_FINAL = build/ysyxSoCFull.v
-SCALA_FILES = $(shell find src/ -name "*.scala")
+#***************************************************************************************
+# ysyxSoC Makefile
+# 
+# 功能:
+#   1. Chisel -> Verilog 生成
+#   2. Verilator 编译
+#   3. NPC 仿真程序构建
+#   4. Kconfig 配置系统
+#***************************************************************************************
+
+# =============================== 路径定义 ===============================
+
+NPC_HOME  := $(abspath .)
+BUILD_DIR := $(NPC_HOME)/build
+MILL      := mill
+
+# =============================== Chisel -> Verilog ===============================
+
+# Chisel 生成的文件
+V_FILE_GEN     := $(BUILD_DIR)/ysyxSoCTop.sv
+V_FILE_FINAL   := $(BUILD_DIR)/ysyxSoCFull.v
+NPC_FILE_GEN   := $(BUILD_DIR)/NPCSoC.sv
+NPC_FILE_FINAL := $(BUILD_DIR)/NPCSoC.v
+
+SCALA_FILES := $(shell find src/scala -name "*.scala" 2>/dev/null)
 
 # Firtool version
-FIRTOOL_VERSION = 1.105.0
-FIRTOOL_PATCH_DIR = $(shell pwd)/patch/firtool
+FIRTOOL_VERSION   := 1.105.0
+FIRTOOL_PATCH_DIR := $(NPC_HOME)/patch/firtool
 
-MILL = mill
-
+# 生成 ysyxSoCFull.v
 $(V_FILE_FINAL): $(SCALA_FILES)
-# Replace firtool with a newer version
-# TODO: This can be removed after chisel publishes a new version
 	@./patch/update-firtool.sh $(FIRTOOL_VERSION) $(FIRTOOL_PATCH_DIR)
 	$(MILL) -i ysyxsoc.runMain ysyx.Elaborate --target-dir $(@D)
 	mv $(V_FILE_GEN) $@
 	sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g' $@
 	sed -i '/firrtl_black_box_resource_files.f/, $$d' $@
 
+# 生成 NPCSoC.v (仿真用)
+$(NPC_FILE_FINAL): $(SCALA_FILES)
+	@./patch/update-firtool.sh $(FIRTOOL_VERSION) $(FIRTOOL_PATCH_DIR)
+	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(@D)
+	mv $(NPC_FILE_GEN) $@
+	sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g' $@
+	sed -i '/firrtl_black_box_resource_files.f/, $$d' $@
+
 verilog: $(V_FILE_FINAL)
 
-clean:
-	-rm -rf build/
+npc-verilog: $(NPC_FILE_FINAL)
+
+# =============================== Verilator 编译 ===============================
+
+VERILATOR      ?= verilator
+VERILATOR_TOP  := NPCSoC
+VERILATOR_MDIR := $(BUILD_DIR)/obj-verilator
+VERILATOR_MK   := $(VERILATOR_MDIR)/V$(VERILATOR_TOP).mk
+VERILATOR_LIB  := $(VERILATOR_MDIR)/V$(VERILATOR_TOP)__ALL.a
+
+# Verilator 配置选项 (从 menuconfig 获取)
+VERILATOR_DEFINES := $(if $(CONFIG_DIFFTEST),+define+CONFIG_DIFFTEST,)
+VERILATOR_DEFINES += $(if $(CONFIG_VERILATOR_TRACE),+define+CONFIG_VERILATOR_TRACE,)
+
+# SV 文件列表
+VERILATOR_SRCS := $(NPC_FILE_FINAL)
+VERILATOR_SRCS += $(shell find perip -name "*.v" 2>/dev/null)
+
+# 生成 Verilator Makefile
+$(VERILATOR_MK): $(NPC_FILE_FINAL)
+	@echo "=== Verilating $(VERILATOR_TOP) ==="
+	@mkdir -p $(VERILATOR_MDIR)
+	$(VERILATOR) --cc $(VERILATOR_SRCS) \
+		--Mdir $(VERILATOR_MDIR) \
+		--top-module $(VERILATOR_TOP) \
+		--trace \
+		-O2 -Wall -Wno-fatal \
+		$(VERILATOR_DEFINES) \
+		-CFLAGS "-std=c++17 -O2"
+
+# 编译 Verilator 库
+$(VERILATOR_LIB): $(VERILATOR_MK)
+	@echo "=== Building Verilator library ==="
+	$(MAKE) -C $(VERILATOR_MDIR) -f V$(VERILATOR_TOP).mk
+
+verilate: $(VERILATOR_LIB)
+
+# =============================== NPC 仿真程序构建 ===============================
+
+# 构建完整的 NPC 仿真程序
+build-npc: verilate
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME)
+
+# =============================== 开发工具 ===============================
 
 dev-init:
 	git submodule update --init --recursive
@@ -32,4 +101,84 @@ bsp:
 idea:
 	$(MILL) -i mill.idea.GenIdea/idea
 
-.PHONY: verilog clean dev-init bsp
+reformat:
+	$(MILL) -i __.reformat
+
+checkformat:
+	$(MILL) -i __.checkFormat
+
+# =============================== Kconfig 配置 ===============================
+
+menuconfig:
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) menuconfig
+
+savedefconfig:
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) savedefconfig
+
+%defconfig:
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) $@
+
+# =============================== 运行与调试 ===============================
+
+IMG ?=
+
+run: build-npc
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) run IMG=$(IMG)
+
+gdb: build-npc
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) gdb IMG=$(IMG)
+
+sim:
+	@gtkwave $(BUILD_DIR)/npc_core.vcd
+
+# =============================== 清理 ===============================
+
+clean:
+	-rm -rf $(BUILD_DIR)
+
+clean-tools:
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) clean-tools
+
+distclean: clean
+	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) distclean
+
+clean-all: distclean clean-tools
+
+# =============================== 帮助 ===============================
+
+help:
+	@echo "ysyxSoC Makefile"
+	@echo ""
+	@echo "Chisel -> Verilog:"
+	@echo "  verilog       - 生成 ysyxSoCFull.v"
+	@echo "  npc-verilog   - 生成 NPCSoC.v (仿真用)"
+	@echo ""
+	@echo "Verilator:"
+	@echo "  verilate      - 编译 Verilator 库"
+	@echo "  build-npc     - 构建 NPC 仿真程序"
+	@echo ""
+	@echo "运行与调试:"
+	@echo "  run IMG=<bin> - 运行仿真"
+	@echo "  gdb IMG=<bin> - GDB 调试"
+	@echo "  sim           - 查看波形"
+	@echo ""
+	@echo "配置:"
+	@echo "  menuconfig    - 图形化配置界面"
+	@echo "  savedefconfig - 保存当前配置"
+	@echo ""
+	@echo "开发工具:"
+	@echo "  dev-init      - 初始化子模块"
+	@echo "  bsp           - 安装 BSP"
+	@echo "  idea          - 生成 IntelliJ IDEA 项目"
+	@echo ""
+	@echo "清理:"
+	@echo "  clean         - 清理构建目录"
+	@echo "  distclean     - 清理所有生成文件"
+	@echo "  clean-all     - 清理所有 (包括工具)"
+
+.PHONY: verilog npc-verilog verilate build-npc
+.PHONY: dev-init bsp idea reformat checkformat
+.PHONY: menuconfig savedefconfig
+.PHONY: run gdb sim
+.PHONY: clean clean-tools distclean clean-all
+.PHONY: help

@@ -6,6 +6,7 @@ import chisel3.util._
 import freechips.rocketchip.subsystem._
 import org.chipsalliance.cde.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.resources.{MemoryDevice, SimpleBus}
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.devices.tilelink._
@@ -36,7 +37,7 @@ class LinkTopBase(implicit p: Parameters) extends LazyModule {
   )
 
   val chiplink = LazyModule(new ChipLink(chiplinkParam))
-  val sink = chiplink.ioNode.makeSink
+  val sink = chiplink.ioNode.makeSink()
 
   chiplink.node := fxbar
   ferr.node := fxbar
