@@ -65,10 +65,8 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     if (Config.hasChipLink) {
       // connect chiplink slave interface to crossbar
       (chipMaster.get.slave zip chiplinkNode.get.in) foreach { case (io, (bundle, _)) => io <> bundle }
-
       // connect chiplink dma interface to cpu
       cpu.module.slave <> chipMaster.get.master_mem(0)
-
       // expose chiplink fpga I/O interface as ports
       fpga_io.get <> chipMaster.get.module.fpga_io
     } else {
@@ -109,7 +107,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
 
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) with DontTouch {
-    val masic = asic.module
+    val masic = asic.module // module asic
 
     if (Config.hasChipLink) {
       val fpga = LazyModule(new ysyxSoCFPGA)
@@ -120,8 +118,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
       mfpga.fpga_io.b2c <> masic.fpga_io.get.c2b
 
       (fpga.master_mem zip fpga.axi4MasterMemNode.in).map { case (io, (_, edge)) =>
-        val mem = LazyModule(new SimAXIMem(edge,
-          base = ChipLinkParam.mem.base, size = ChipLinkParam.mem.mask + 1))
+        val mem = LazyModule(new SimAXIMem(edge, base = ChipLinkParam.mem.base, size = ChipLinkParam.mem.mask + 1))
         Module(mem.module)
         mem.io_axi4.head <> io
       }

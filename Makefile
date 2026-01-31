@@ -29,4 +29,7 @@ dev-init:
 bsp:
 	$(MILL) -i mill.bsp.BSP/install
 
+idea:
+	$(MILL) -i mill.idea.GenIdea/idea
+
 .PHONY: verilog clean dev-init bsp
