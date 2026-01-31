@@ -21,7 +21,20 @@ trait HasThisChisel extends SbtModule {
   def chiselPluginIvy: Option[Dep] = v.chiselPluginIvy
   override def scalaVersion = defaultScalaVersion
   override def scalacOptions = super.scalacOptions() ++
-    Agg("-language:reflectiveCalls", "-Ymacro-annotations", "-Ytasty-reader")
+    Agg(
+      "-language:reflectiveCalls",
+      "-Ymacro-annotations",
+      "-Ytasty-reader",
+      // Filter out deprecation warnings from rocketchip and Chisel
+      // These are upstream issues that cannot be fixed in user code
+      "-Wconf:cat=deprecation&origin=freechips\\.rocketchip\\..*:s",       // rocketchip deprecations
+      "-Wconf:cat=deprecation&origin=chisel3\\..*:s",                      // Chisel deprecations
+      "-Wconf:cat=deprecation&msg=.*BlackBox.*:s",                         // BlackBox deprecations
+      "-Wconf:cat=deprecation&msg=.*HasBlackBox.*:s",                      // HasBlackBoxResource etc
+      "-Wconf:cat=deprecation&msg=.*Diplomacy.*:s",                        // Diplomacy deprecations
+      "-Wconf:cat=deprecation&msg=.*firrtl.*:s",                           // FIRRTL deprecations
+      "-Wconf:cat=deprecation&msg=.*productHash.*:s",                      // Scala 2.13.17 MurmurHash3 deprecation
+    )
   override def ivyDeps = super.ivyDeps() ++ Agg(chiselIvy.get)
   override def scalacPluginIvyDeps = super.scalacPluginIvyDeps() ++ Agg(chiselPluginIvy.get)
 }
