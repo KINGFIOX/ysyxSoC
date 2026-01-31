@@ -1,12 +1,12 @@
 import mill._
 import scalalib._
-import $file.`rocket-chip`.dependencies.hardfloat.{common => hardfloatCommon}
+import $file.`rocket-chip`.dependencies.hardfloat.{common => hardfloatCommon} // import $file.xxx 目录下的 mill 构建文件
 import $file.`rocket-chip`.dependencies.cde.{common => cdeCommon}
 import $file.`rocket-chip`.dependencies.diplomacy.{common => diplomacyCommon}
 import $file.`rocket-chip`.{common => rocketChipCommon}
 
-val chiselVersion = "7.0.0-M2"
-val defaultScalaVersion = "2.13.14"
+val chiselVersion = "7.6.0"
+val defaultScalaVersion = "2.13.18"
 val pwd = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
 object v {
@@ -82,6 +82,6 @@ trait ysyxSoCModule extends ScalaModule {
 object ysyxsoc extends ysyxSoC
 trait ysyxSoC extends ysyxSoCModule with HasThisChisel {
   override def millSourcePath = pwd
-  override def sources = Task.Sources(millSourcePath / "src")
+  override def sources = Task.Sources(millSourcePath / "src" / "scala")
   def rocketModule = rocketchip
 }
