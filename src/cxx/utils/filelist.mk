@@ -15,6 +15,8 @@
 
 ifeq ($(CONFIG_ITRACE)$(CONFIG_IQUEUE),)
 SRCS-BLACKLIST-y += src/cxx/utils/disasm.c
+else
+LIBS += -lcapstone
 endif
 
 ifeq ($(CONFIG_FTRACE),)
