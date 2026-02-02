@@ -16,11 +16,11 @@
 ifeq ($(CONFIG_ITRACE)$(CONFIG_IQUEUE),)
 SRCS-BLACKLIST-y += src/cxx/utils/disasm.c
 else
-LIBCAPSTONE = tools/capstone/repo/libcapstone.so.5
-CFLAGS += -I tools/capstone/repo/include
+LIBCAPSTONE = $(YSYX_HOME)/tools/capstone/repo/libcapstone.so.5
+CFLAGS += -I $(YSYX_HOME)/tools/capstone/repo/include
 src/cxx/utils/disasm.c: $(LIBCAPSTONE)
 $(LIBCAPSTONE):
-	$(MAKE) -C tools/capstone
+	$(MAKE) -C $(YSYX_HOME)/tools/capstone
 endif
 
 ifeq ($(CONFIG_FTRACE),)

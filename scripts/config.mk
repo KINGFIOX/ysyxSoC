@@ -32,8 +32,8 @@ endif
 # $ make test
 # > test
 Q            := @
-KCONFIG_PATH := $(NPC_HOME)/tools/kconfig
-FIXDEP_PATH  := $(NPC_HOME)/tools/fixdep
+KCONFIG_PATH := $(YSYX_HOME)/tools/kconfig
+FIXDEP_PATH  := $(YSYX_HOME)/tools/fixdep
 Kconfig      := $(NPC_HOME)/Kconfig
 rm-distclean += include/generated include/config .config .config.old
 silent := -s
