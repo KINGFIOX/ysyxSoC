@@ -21,54 +21,26 @@ $(warning $(COLOR_RED)Warning: .config does not exist!$(COLOR_END))
 $(warning $(COLOR_RED)To build the project, first run 'make menuconfig'.$(COLOR_END))
 endif
 
-# # @ 的作用: 不显示命令的输出. Q(quiet)
-# test:
-# 	echo "test"
-# $ make test
-# > echo test
-# > test
-# test:
-# 	@echo "test"
-# $ make test
-# > test
 Q            := @
-KCONFIG_PATH := $(YSYX_HOME)/tools/kconfig
-FIXDEP_PATH  := $(YSYX_HOME)/tools/fixdep
 Kconfig      := $(NPC_HOME)/Kconfig
 rm-distclean += include/generated include/config .config .config.old
 silent := -s
 
-CONF   := $(KCONFIG_PATH)/build/conf
-MCONF  := $(KCONFIG_PATH)/build/mconf
-FIXDEP := $(FIXDEP_PATH)/build/fixdep
+# 使用系统安装的 kconfig 和 fixdep 工具
+CONF   := conf
+MCONF  := mconf
+FIXDEP := fixdep
 
-# 编译 conf
-$(CONF):
-	$(Q)$(MAKE) $(silent) -C $(KCONFIG_PATH) NAME=conf
-
-# 编译 mconf
-$(MCONF):
-	$(Q)$(MAKE) $(silent) -C $(KCONFIG_PATH) NAME=mconf
-
-# 编译 fixdep
-$(FIXDEP):
-	$(Q)$(MAKE) $(silent) -C $(FIXDEP_PATH)
-
-# mconf Kconfig 启动图形化配置界面
-# conf -s --syncconfig Kconfig 生成配置文件到 include/config/auto.conf, 用于后续的编译
-menuconfig: $(MCONF) $(CONF) $(FIXDEP)
+menuconfig:
 	$(Q)$(MCONF) $(Kconfig)
 	$(Q)$(CONF) $(silent) --syncconfig $(Kconfig)
 
-# conf -s --savedefconfig=configs/
-savedefconfig: $(CONF)
-	$(Q)$< $(silent) --$@=configs/defconfig $(Kconfig)
+savedefconfig:
+	$(Q)$(CONF) $(silent) --savedefconfig=configs/defconfig $(Kconfig)
 
-# $< 表示第一个依赖文件, 也就是这里的 $(CONF)
-# $@ 表示目标文件, 这里是 riscv32-am_defconfig (就是匹配到的 %defconfig)
-%defconfig: $(CONF) $(FIXDEP)
-	$(Q)$< $(silent) --defconfig=configs/$@ $(Kconfig)
-	$(Q)$< $(silent) --syncconfig $(Kconfig)
+%defconfig:
+	$(Q)$(CONF) $(silent) --defconfig=configs/$@ $(Kconfig)
+	$(Q)$(CONF) $(silent) --syncconfig $(Kconfig)
 
 .PHONY: menuconfig savedefconfig defconfig
 

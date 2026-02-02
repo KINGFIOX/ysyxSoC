@@ -27,7 +27,7 @@ static csh handle;
 
 void init_disasm() {
   void *dl_handle;
-  dl_handle = dlopen("tools/capstone/repo/libcapstone." CS_LIB_SUFFIX, RTLD_LAZY);
+  dl_handle = dlopen("libcapstone." CS_LIB_SUFFIX, RTLD_LAZY);
   assert(dl_handle);
 
   cs_err (*cs_open_dl)(cs_arch arch, cs_mode mode, csh *handle) = NULL;
