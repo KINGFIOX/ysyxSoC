@@ -28,10 +28,8 @@ void mrom_read(int addr, int *data) {
   }
 }
 
-// Flash 读取函数 - 用于 SPI Flash 模块
-// Flash XIP 基地址: 0x30000000
 void flash_read(int addr, int* data) {
-  *data = (int)vaddr_read((paddr_t)addr, 4);
+  assert(0);
 }
 
 void exception_dpi(int en, int pc, int mcause, int a0, int tval) {
