@@ -108,7 +108,7 @@ void init_monitor(int argc, char *argv[]) {
 
   /* Initialize NPC core after loading the image */
   extern bool npc_core_init(int argc, char *argv[]);
-  npc_core_init(argc, argv); // 必须要在 load_img 之后初始化 npc
+  npc_core_init(argc, argv);
 
   /* Initialize function tracer. */
   IFDEF(CONFIG_FTRACE, init_ftrace(img_file));

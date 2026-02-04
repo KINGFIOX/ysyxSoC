@@ -32,7 +32,11 @@ module uart_top_apb (
   wire       rts_internal;
   assign rtsn       = ~rts_internal;
   //--------------------------------------------------------
-  assign in_pready  = in_psel && in_penable;
+  // 一旦被选中(psel)就立即返回 ready，不反压总线
+  // 原实现 in_psel && in_penable 在部分时序下可能导致 pready 传播延迟
+  // assign in_pready  = in_psel && in_penable;
+  assign in_pready  = 1'b1;
+
   assign in_pslverr = 1'b0;
   assign reg_we     = ~reset & in_psel & ~in_penable & in_pwrite;
   assign reg_re     = ~reset & in_psel & ~in_penable & ~in_pwrite;

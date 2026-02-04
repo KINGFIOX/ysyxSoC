@@ -83,7 +83,7 @@ $(VERILATOR_MK): $(V_SIM_FINAL) $(VERILATOR_PERIP_SRCS)
 	$(VERILATOR) --cc $(VERILATOR_SRCS) \
 		--Mdir $(VERILATOR_MDIR) \
 		--top-module $(VERILATOR_TOP) \
-		--trace --no-timing --autoflush \
+		--trace --no-timing --autoflush --assert \
 		-O2 -Wall -Wno-fatal \
 		$(VERILATOR_INCS) \
 		$(VERILATOR_DEFINES) \

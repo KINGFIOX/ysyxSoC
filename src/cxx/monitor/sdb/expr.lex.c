@@ -1,6 +1,6 @@
-#line 1 "src/monitor/sdb/expr.lex.c"
+#line 1 "src/cxx/monitor/sdb/expr.lex.c"
 
-#line 3 "src/monitor/sdb/expr.lex.c"
+#line 3 "src/cxx/monitor/sdb/expr.lex.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -719,14 +719,14 @@ int yy_flex_debug = 0;
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
 char *yytext;
-#line 1 "src/monitor/sdb/expr.l"
+#line 1 "src/cxx/monitor/sdb/expr.l"
 /* prefix="sdb_expr": 定义前缀, 命名空间, 避免冲突, yy_scan_string -> sdb_expr_scan_string, etc. */
 /* noinput 不生成默认的 yyinput, 避免引用 stdin 读入 */
 /* nounput, 不生成 unput, 不引入 unput, 表达式求值一遍扫描就可以了, 不需要回退 */
 /* noyywrap, 不引入 yywrap, 字符串是直接传入的, 不需要判断文件结尾 */
 /* nodefault, 不使用失败的 default 规则, 而是直接报错, 以免掩盖错误 */
 #define YY_NO_INPUT 1
-#line 9 "src/monitor/sdb/expr.l"
+#line 9 "src/cxx/monitor/sdb/expr.l"
 #include <stdlib.h>
 #include <common.h>
 #include <isa.h>
@@ -737,8 +737,8 @@ char *yytext;
 extern bool sdb_expr_lexer_error;
 extern int sdb_exprerror(const char *msg);
 
-#line 740 "src/monitor/sdb/expr.lex.c"
-#line 741 "src/monitor/sdb/expr.lex.c"
+#line 740 "src/cxx/monitor/sdb/expr.lex.c"
+#line 741 "src/cxx/monitor/sdb/expr.lex.c"
 
 #define INITIAL 0
 
@@ -953,9 +953,9 @@ YY_DECL
 		}
 
 	{
-#line 21 "src/monitor/sdb/expr.l"
+#line 21 "src/cxx/monitor/sdb/expr.l"
 
-#line 958 "src/monitor/sdb/expr.lex.c"
+#line 958 "src/cxx/monitor/sdb/expr.lex.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1015,22 +1015,22 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 /* rule 1 can match eol */
 YY_RULE_SETUP
-#line 22 "src/monitor/sdb/expr.l"
+#line 22 "src/cxx/monitor/sdb/expr.l"
 ; /* 空白操作符 */
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 23 "src/monitor/sdb/expr.l"
+#line 23 "src/cxx/monitor/sdb/expr.l"
 { yylval = strtoull(yytext, NULL, 16); return TK_NUM; } /* 十六进制 */
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 24 "src/monitor/sdb/expr.l"
+#line 24 "src/cxx/monitor/sdb/expr.l"
 { yylval = strtoull(yytext, NULL, 10); return TK_NUM; } /* 十进制 */
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 25 "src/monitor/sdb/expr.l"
+#line 25 "src/cxx/monitor/sdb/expr.l"
 {
                             bool ok = false;
                             word_t v = isa_reg_str2val(yytext + 1 /* 去掉前缀 $ */ , &ok);
@@ -1041,60 +1041,60 @@ YY_RULE_SETUP
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 32 "src/monitor/sdb/expr.l"
+#line 32 "src/cxx/monitor/sdb/expr.l"
 { return EQ; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 33 "src/monitor/sdb/expr.l"
+#line 33 "src/cxx/monitor/sdb/expr.l"
 { return NE; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 34 "src/monitor/sdb/expr.l"
+#line 34 "src/cxx/monitor/sdb/expr.l"
 { return LT; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 35 "src/monitor/sdb/expr.l"
+#line 35 "src/cxx/monitor/sdb/expr.l"
 { return LE; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 36 "src/monitor/sdb/expr.l"
+#line 36 "src/cxx/monitor/sdb/expr.l"
 { return GT; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 37 "src/monitor/sdb/expr.l"
+#line 37 "src/cxx/monitor/sdb/expr.l"
 { return GE; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 38 "src/monitor/sdb/expr.l"
+#line 38 "src/cxx/monitor/sdb/expr.l"
 { return AND; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 39 "src/monitor/sdb/expr.l"
+#line 39 "src/cxx/monitor/sdb/expr.l"
 { return OR; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 40 "src/monitor/sdb/expr.l"
+#line 40 "src/cxx/monitor/sdb/expr.l"
 { return yytext[0]; } /* 返回符号本身 */
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 41 "src/monitor/sdb/expr.l"
+#line 41 "src/cxx/monitor/sdb/expr.l"
 { sdb_expr_lexer_error = true; sdb_exprerror("invalid character"); return yytext[0]; } /* 未知字符 */
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 42 "src/monitor/sdb/expr.l"
+#line 42 "src/cxx/monitor/sdb/expr.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1097 "src/monitor/sdb/expr.lex.c"
+#line 1097 "src/cxx/monitor/sdb/expr.lex.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2062,7 +2062,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 42 "src/monitor/sdb/expr.l"
+#line 42 "src/cxx/monitor/sdb/expr.l"
 
 
 

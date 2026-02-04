@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_SDB_EXPR_SRC_MONITOR_SDB_EXPR_TAB_H_INCLUDED
-# define YY_SDB_EXPR_SRC_MONITOR_SDB_EXPR_TAB_H_INCLUDED
+#ifndef YY_SDB_EXPR_SRC_CXX_MONITOR_SDB_EXPR_TAB_H_INCLUDED
+# define YY_SDB_EXPR_SRC_CXX_MONITOR_SDB_EXPR_TAB_H_INCLUDED
 /* Debug traces.  */
 #ifndef SDB_EXPRDEBUG
 # if defined YYDEBUG
@@ -92,4 +92,4 @@ extern SDB_EXPRSTYPE sdb_exprlval;
 int sdb_exprparse (void);
 
 
-#endif /* !YY_SDB_EXPR_SRC_MONITOR_SDB_EXPR_TAB_H_INCLUDED  */
+#endif /* !YY_SDB_EXPR_SRC_CXX_MONITOR_SDB_EXPR_TAB_H_INCLUDED  */

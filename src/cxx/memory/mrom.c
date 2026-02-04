@@ -19,6 +19,14 @@
 #define MROM_BASE CONFIG_SOC_MROM_BASE
 #define MROM_SIZE CONFIG_SOC_MROM_SIZE
 
+static const uint32_t builtin_img[] = {
+    0x00000297, // auipc t0,0
+    0x00028823, // sb  zero,16(t0)
+    0x0102c503, // lbu a0,16(t0)
+    0x00100073, // ebreak (used as npc_trap)
+    0xdeadbeef, // some data
+};
+
 static uint8_t mrom[MROM_SIZE] PG_ALIGN = {};
 static size_t mrom_loaded_size = 0;
 
@@ -33,7 +41,8 @@ long init_mrom(const char *img_file) {
 
   if (img_file == NULL) {
     Log("No image is given. Use the default build-in image.");
-    mrom_loaded_size = MROM_SIZE;  // 假设内置镜像
+    memcpy(mrom, builtin_img, sizeof(builtin_img));
+    mrom_loaded_size = sizeof(builtin_img);
     return mrom_loaded_size;
   }
 

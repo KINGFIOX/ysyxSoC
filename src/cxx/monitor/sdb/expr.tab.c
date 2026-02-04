@@ -75,7 +75,7 @@
 #define yychar          sdb_exprchar
 
 /* First part of user prologue.  */
-#line 3 "src/monitor/sdb/expr.y"
+#line 3 "src/cxx/monitor/sdb/expr.y"
 
 #include <common.h> /* 引入头文件 */
 #include <memory/vaddr.h>
@@ -100,7 +100,7 @@ bool sdb_expr_lexer_error; /* yy_lexer_error -> sdb_expr_lexer_error */
 static bool runtime_error;
 
 
-#line 104 "src/monitor/sdb/expr.tab.c"
+#line 104 "src/cxx/monitor/sdb/expr.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -1399,157 +1399,157 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* expression: logic_or  */
-#line 48 "src/monitor/sdb/expr.y"
+#line 48 "src/cxx/monitor/sdb/expr.y"
            { parse_result = yyvsp[0]; }
-#line 1405 "src/monitor/sdb/expr.tab.c"
+#line 1405 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 3: /* logic_or: logic_and  */
-#line 52 "src/monitor/sdb/expr.y"
+#line 52 "src/cxx/monitor/sdb/expr.y"
             { yyval = yyvsp[0]; }
-#line 1411 "src/monitor/sdb/expr.tab.c"
+#line 1411 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 4: /* logic_or: logic_or OR logic_and  */
-#line 53 "src/monitor/sdb/expr.y"
+#line 53 "src/cxx/monitor/sdb/expr.y"
                           { yyval = yyvsp[-2] || yyvsp[0]; }
-#line 1417 "src/monitor/sdb/expr.tab.c"
+#line 1417 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 5: /* logic_and: equality  */
-#line 57 "src/monitor/sdb/expr.y"
+#line 57 "src/cxx/monitor/sdb/expr.y"
            { yyval = yyvsp[0]; }
-#line 1423 "src/monitor/sdb/expr.tab.c"
+#line 1423 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 6: /* logic_and: logic_and AND equality  */
-#line 58 "src/monitor/sdb/expr.y"
+#line 58 "src/cxx/monitor/sdb/expr.y"
                            { yyval = yyvsp[-2] && yyvsp[0]; }
-#line 1429 "src/monitor/sdb/expr.tab.c"
+#line 1429 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 7: /* equality: comparison  */
-#line 62 "src/monitor/sdb/expr.y"
+#line 62 "src/cxx/monitor/sdb/expr.y"
              { yyval = yyvsp[0]; }
-#line 1435 "src/monitor/sdb/expr.tab.c"
+#line 1435 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 8: /* equality: equality EQ equality  */
-#line 63 "src/monitor/sdb/expr.y"
+#line 63 "src/cxx/monitor/sdb/expr.y"
                          { yyval = ((sword_t)yyvsp[-2] == (sword_t)yyvsp[0]); }
-#line 1441 "src/monitor/sdb/expr.tab.c"
+#line 1441 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 9: /* equality: equality NE equality  */
-#line 64 "src/monitor/sdb/expr.y"
+#line 64 "src/cxx/monitor/sdb/expr.y"
                          { yyval = ((sword_t)yyvsp[-2] != (sword_t)yyvsp[0]); }
-#line 1447 "src/monitor/sdb/expr.tab.c"
+#line 1447 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 10: /* comparison: term  */
-#line 68 "src/monitor/sdb/expr.y"
+#line 68 "src/cxx/monitor/sdb/expr.y"
        { yyval = yyvsp[0]; }
-#line 1453 "src/monitor/sdb/expr.tab.c"
+#line 1453 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 11: /* comparison: comparison LT term  */
-#line 69 "src/monitor/sdb/expr.y"
+#line 69 "src/cxx/monitor/sdb/expr.y"
                        { yyval = ((sword_t)yyvsp[-2] <  (sword_t)yyvsp[0]); }
-#line 1459 "src/monitor/sdb/expr.tab.c"
+#line 1459 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 12: /* comparison: comparison LE term  */
-#line 70 "src/monitor/sdb/expr.y"
+#line 70 "src/cxx/monitor/sdb/expr.y"
                        { yyval = ((sword_t)yyvsp[-2] <= (sword_t)yyvsp[0]); }
-#line 1465 "src/monitor/sdb/expr.tab.c"
+#line 1465 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 13: /* comparison: comparison GT term  */
-#line 71 "src/monitor/sdb/expr.y"
+#line 71 "src/cxx/monitor/sdb/expr.y"
                        { yyval = ((sword_t)yyvsp[-2] >  (sword_t)yyvsp[0]); }
-#line 1471 "src/monitor/sdb/expr.tab.c"
+#line 1471 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 14: /* comparison: comparison GE term  */
-#line 72 "src/monitor/sdb/expr.y"
+#line 72 "src/cxx/monitor/sdb/expr.y"
                        { yyval = ((sword_t)yyvsp[-2] >= (sword_t)yyvsp[0]); }
-#line 1477 "src/monitor/sdb/expr.tab.c"
+#line 1477 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 15: /* term: factor  */
-#line 76 "src/monitor/sdb/expr.y"
+#line 76 "src/cxx/monitor/sdb/expr.y"
          { yyval = yyvsp[0]; }
-#line 1483 "src/monitor/sdb/expr.tab.c"
+#line 1483 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 16: /* term: term '-' factor  */
-#line 77 "src/monitor/sdb/expr.y"
+#line 77 "src/cxx/monitor/sdb/expr.y"
                     { yyval = (word_t)((sword_t)yyvsp[-2] - (sword_t)yyvsp[0]); }
-#line 1489 "src/monitor/sdb/expr.tab.c"
+#line 1489 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 17: /* term: term '+' factor  */
-#line 78 "src/monitor/sdb/expr.y"
+#line 78 "src/cxx/monitor/sdb/expr.y"
                     { yyval = (word_t)((sword_t)yyvsp[-2] + (sword_t)yyvsp[0]); }
-#line 1495 "src/monitor/sdb/expr.tab.c"
+#line 1495 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 18: /* factor: unary  */
-#line 82 "src/monitor/sdb/expr.y"
+#line 82 "src/cxx/monitor/sdb/expr.y"
         { yyval = yyvsp[0]; }
-#line 1501 "src/monitor/sdb/expr.tab.c"
+#line 1501 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 19: /* factor: factor '*' unary  */
-#line 83 "src/monitor/sdb/expr.y"
+#line 83 "src/cxx/monitor/sdb/expr.y"
                      { yyval = (word_t)((sword_t)yyvsp[-2] * (sword_t)yyvsp[0]); }
-#line 1507 "src/monitor/sdb/expr.tab.c"
+#line 1507 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 20: /* factor: factor '/' unary  */
-#line 84 "src/monitor/sdb/expr.y"
+#line 84 "src/cxx/monitor/sdb/expr.y"
                      { if (yyvsp[0] == 0) { runtime_error = true; sdb_exprerror("division by zero"); yyval = 0; } else { yyval = (word_t)((sword_t)yyvsp[-2] / (sword_t)yyvsp[0]); } }
-#line 1513 "src/monitor/sdb/expr.tab.c"
+#line 1513 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 21: /* unary: primary  */
-#line 88 "src/monitor/sdb/expr.y"
+#line 88 "src/cxx/monitor/sdb/expr.y"
           { yyval = yyvsp[0]; }
-#line 1519 "src/monitor/sdb/expr.tab.c"
+#line 1519 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 22: /* unary: '-' unary  */
-#line 89 "src/monitor/sdb/expr.y"
+#line 89 "src/cxx/monitor/sdb/expr.y"
                            { yyval = (word_t)(-((sword_t)yyvsp[0])); }
-#line 1525 "src/monitor/sdb/expr.tab.c"
+#line 1525 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 23: /* unary: '*' unary  */
-#line 90 "src/monitor/sdb/expr.y"
-                          { if (likely(in_pmem(yyvsp[0]))) { yyval = vaddr_read(yyvsp[0], sizeof(word_t)); } else { yyval = 0xdeadbeef; runtime_error = true; sdb_exprerror("invalid memory access"); } }
-#line 1531 "src/monitor/sdb/expr.tab.c"
+#line 90 "src/cxx/monitor/sdb/expr.y"
+                          { extern bool in_mrom(paddr_t); extern bool in_sram(paddr_t); if (in_mrom(yyvsp[0]) || in_sram(yyvsp[0])) { yyval = vaddr_read(yyvsp[0], sizeof(word_t)); } else { yyval = 0xdeadbeef; runtime_error = true; sdb_exprerror("invalid memory access"); } }
+#line 1531 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 24: /* primary: TK_NUM  */
-#line 94 "src/monitor/sdb/expr.y"
+#line 94 "src/cxx/monitor/sdb/expr.y"
          { yyval = yyvsp[0]; }
-#line 1537 "src/monitor/sdb/expr.tab.c"
+#line 1537 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 25: /* primary: TK_REG  */
-#line 95 "src/monitor/sdb/expr.y"
+#line 95 "src/cxx/monitor/sdb/expr.y"
            { yyval = yyvsp[0]; }
-#line 1543 "src/monitor/sdb/expr.tab.c"
+#line 1543 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
   case 26: /* primary: '(' expression ')'  */
-#line 96 "src/monitor/sdb/expr.y"
+#line 96 "src/cxx/monitor/sdb/expr.y"
                        { yyval = yyvsp[-1]; }
-#line 1549 "src/monitor/sdb/expr.tab.c"
+#line 1549 "src/cxx/monitor/sdb/expr.tab.c"
     break;
 
 
-#line 1553 "src/monitor/sdb/expr.tab.c"
+#line 1553 "src/cxx/monitor/sdb/expr.tab.c"
 
       default: break;
     }
@@ -1773,7 +1773,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 99 "src/monitor/sdb/expr.y"
+#line 99 "src/cxx/monitor/sdb/expr.y"
 
 
 word_t expr_eval(const char *expr_str, bool *success) {
