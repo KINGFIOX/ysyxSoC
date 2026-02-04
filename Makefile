@@ -69,14 +69,15 @@ VERILATOR_DEFINES += $(if $(CONFIG_VERILATOR_TRACE),+define+CONFIG_VERILATOR_TRA
 VERILATOR_SRCS := $(V_SIM_FINAL)
 VERILATOR_SRCS += $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.sv" 2>/dev/null)
 VERILATOR_SRCS += $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.v" ! -name "NPCSoC.v" ! -name "ysyxSoCFull.v" 2>/dev/null)
-VERILATOR_SRCS += $(shell find perip -name "*.v" 2>/dev/null)
+VERILATOR_PERIP_SRCS := $(shell find perip -name "*.v" 2>/dev/null)
+VERILATOR_SRCS += $(VERILATOR_PERIP_SRCS)
 
 # Include 路径 (用于 perip 中的 `include)
 VERILATOR_INCS := -I$(NPC_HOME)/perip/spi/rtl
 VERILATOR_INCS += -I$(NPC_HOME)/perip/uart16550/rtl
 
-# 生成 Verilator Makefile
-$(VERILATOR_MK): $(V_SIM_FINAL)
+# 生成 Verilator Makefile (依赖 Chisel 输出 + perip 中的 Verilog)
+$(VERILATOR_MK): $(V_SIM_FINAL) $(VERILATOR_PERIP_SRCS)
 	@echo "=== Verilating $(VERILATOR_TOP) ==="
 	@mkdir -p $(VERILATOR_MDIR)
 	$(VERILATOR) --cc $(VERILATOR_SRCS) \

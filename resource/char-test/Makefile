@@ -3,7 +3,11 @@ CC = $(CROSS_COMPILE)gcc
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJDUMP = $(CROSS_COMPILE)objdump
 
+# UART 时钟频率 (Hz)，仿真用 50M，流片可用 100M~1G
+UART_CLOCK_FREQ ?= 1000000000
+
 CFLAGS = -nostdlib -nostartfiles -march=rv32i -mabi=ilp32 -ffreestanding
+CFLAGS += -DUART_CLOCK_FREQ=$(UART_CLOCK_FREQ)
 LDFLAGS = -T mrom.ld
 
 APP = char-test
