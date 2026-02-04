@@ -14,9 +14,20 @@ NPC_HOME  := $(abspath .)
 BUILD_DIR := $(NPC_HOME)/build
 MILL      := mill
 
+# =============================== Kconfig -> Scala Config ===============================
+
+# SoC 配置文件 (从 Kconfig .config 生成)
+SOC_CONFIG_SCALA := $(NPC_HOME)/src/scala/SoCConfig.scala
+GEN_SCALA_CONFIG := $(NPC_HOME)/scripts/gen-scala-config.sh
+
+# 从 .config 生成 SoCConfig.scala (在 Chisel 编译前)
+$(SOC_CONFIG_SCALA): .config $(GEN_SCALA_CONFIG)
+	@echo "=== Generating SoCConfig.scala from Kconfig ==="
+	@$(GEN_SCALA_CONFIG) .config $@
+
 # =============================== Chisel -> Verilog ===============================
 
-SCALA_FILES := $(shell find src/scala -name "*.scala" 2>/dev/null)
+SCALA_FILES := $(shell find src/scala -name "*.scala" ! -name "SoCConfig.scala" 2>/dev/null)
 
 # 综合用: ysyxSoCFull.v (ysyxSoCTop 顶层, 无 step/debug 接口)
 V_SYNTH_GEN   := $(BUILD_DIR)/ysyxSoCTop.sv
@@ -27,14 +38,14 @@ V_SIM_GEN   := $(BUILD_DIR)/NPCSoC.sv
 V_SIM_FINAL := $(BUILD_DIR)/NPCSoC.v
 
 # 生成 ysyxSoCFull.v (用于综合)
-$(V_SYNTH_FINAL): $(SCALA_FILES)
+$(V_SYNTH_FINAL): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
 	$(MILL) -i ysyxsoc.runMain ysyx.Elaborate --target-dir $(@D)
 	mv $(V_SYNTH_GEN) $@
 	sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g' $@
 	sed -i '/firrtl_black_box_resource_files.f/, $$d' $@
 
 # 生成 NPCSoC.v (用于仿真)
-$(V_SIM_FINAL): $(SCALA_FILES)
+$(V_SIM_FINAL): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
 	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(@D)
 	mv $(V_SIM_GEN) $@
 	sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g' $@
@@ -142,6 +153,7 @@ clean-tools:
 
 distclean: clean
 	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) distclean
+	-rm -f $(SOC_CONFIG_SCALA)
 
 clean-all: distclean clean-tools
 

@@ -33,19 +33,19 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val chipMaster = if (Config.hasChipLink) Some(LazyModule(new ChipLinkMaster)) else None
   val chiplinkNode = if (Config.hasChipLink) Some(AXI4SlaveNodeGenerator(p(ExtBus), ChipLinkParam.allSpace)) else None
 
-  val luart = LazyModule(new APBUart16550(AddressSet.misaligned(0x10000000, 0x1000)))
-  val lgpio = LazyModule(new APBGPIO(AddressSet.misaligned(0x10002000, 0x10)))
-  val lkeyboard = LazyModule(new APBKeyboard(AddressSet.misaligned(0x10011000, 0x8)))
-  val lvga = LazyModule(new APBVGA(AddressSet.misaligned(0x21000000, 0x200000)))
+  val luart = LazyModule(new APBUart16550(AddressSet.misaligned(SoCConfig.uartBase, SoCConfig.uartSize)))
+  val lgpio = LazyModule(new APBGPIO(AddressSet.misaligned(SoCConfig.gpioBase, SoCConfig.gpioSize)))
+  val lkeyboard = LazyModule(new APBKeyboard(AddressSet.misaligned(SoCConfig.keyboardBase, SoCConfig.keyboardSize)))
+  val lvga = LazyModule(new APBVGA(AddressSet.misaligned(SoCConfig.vgaBase, SoCConfig.vgaSize)))
   val lspi  = LazyModule(new APBSPI(
-    AddressSet.misaligned(0x10001000, 0x1000) ++    // SPI controller
-    AddressSet.misaligned(0x30000000, 0x10000000)   // XIP flash
+    AddressSet.misaligned(SoCConfig.spiCtrlBase, SoCConfig.spiCtrlSize) ++    // SPI controller
+    AddressSet.misaligned(SoCConfig.xipFlashBase, SoCConfig.xipFlashSize)   // XIP flash
   ))
-  val lpsram = LazyModule(new APBPSRAM(AddressSet.misaligned(0x80000000L, 0x400000)))
-  val lmrom = LazyModule(new AXI4MROM(AddressSet.misaligned(0x20000000, 0x1000)))
-  val sramNode = AXI4RAM(AddressSet.misaligned(0x0f000000, 0x2000).head, false, true, 4, None, Nil, false)
+  val lpsram = LazyModule(new APBPSRAM(AddressSet.misaligned(SoCConfig.psramBase, SoCConfig.psramSize)))
+  val lmrom = LazyModule(new AXI4MROM(AddressSet.misaligned(SoCConfig.mromBase, SoCConfig.mromSize)))
+  val sramNode = AXI4RAM(AddressSet.misaligned(SoCConfig.sramBase, SoCConfig.sramSize).head, false, true, 4, None, Nil, false)
 
-  val sdramAddressSet = AddressSet.misaligned(0xa0000000L, 0x2000000)
+  val sdramAddressSet = AddressSet.misaligned(SoCConfig.sdramBase, SoCConfig.sdramSize)
   val lsdram_apb = if (!Config.sdramUseAXI) Some(LazyModule(new APBSDRAM (sdramAddressSet))) else None
   val lsdram_axi = if ( Config.sdramUseAXI) Some(LazyModule(new AXI4SDRAM(sdramAddressSet))) else None
 

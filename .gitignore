@@ -43,3 +43,6 @@ include/generated
 src/cxx/monitor/sdb/expr.tab.c
 src/cxx/monitor/sdb/expr.lex.c
 src/cxx/monitor/sdb/expr.tab.h
+
+# Kconfig 生成的 Scala 配置文件（不跟踪）
+src/scala/SoCConfig.scala
