@@ -71,7 +71,7 @@ $(VERILATOR_MK): $(V_SIM_FINAL)
 	$(VERILATOR) --cc $(VERILATOR_SRCS) \
 		--Mdir $(VERILATOR_MDIR) \
 		--top-module $(VERILATOR_TOP) \
-		--trace --no-timing \
+		--trace --no-timing --autoflush \
 		-O2 -Wall -Wno-fatal \
 		$(VERILATOR_INCS) \
 		$(VERILATOR_DEFINES) \
@@ -87,7 +87,7 @@ verilate: $(VERILATOR_LIB)
 # =============================== 仿真程序构建 ===============================
 
 # 构建完整的仿真程序
-build-sim: verilate
+build: verilate
 	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME)
 
 # =============================== 开发工具 ===============================
@@ -123,10 +123,10 @@ savedefconfig:
 
 IMG ?=
 
-run: build-sim
+run: build
 	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) run IMG=$(IMG)
 
-gdb: build-sim
+gdb: build
 	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME) gdb IMG=$(IMG)
 
 sim:
@@ -155,7 +155,7 @@ help:
 	@echo ""
 	@echo "Verilator:"
 	@echo "  verilate      - 编译 Verilator 库 (使用 NPCSoC)"
-	@echo "  build-sim     - 构建仿真程序"
+	@echo "  build         - 构建仿真程序"
 	@echo ""
 	@echo "运行与调试:"
 	@echo "  run IMG=<bin> - 运行仿真"
@@ -176,7 +176,7 @@ help:
 	@echo "  distclean     - 清理所有生成文件"
 	@echo "  clean-all     - 清理所有 (包括工具)"
 
-.PHONY: verilog verilate build-sim
+.PHONY: verilog verilate build
 .PHONY: dev-init bsp idea reformat checkformat
 .PHONY: menuconfig savedefconfig
 .PHONY: run gdb sim

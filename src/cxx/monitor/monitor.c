@@ -17,6 +17,7 @@
 #include <ftrace.h>
 #include <isa.h>
 #include <memory/paddr.h>
+#include <stddef.h>
 
 void init_rand();
 void init_log(const char *log_file);
@@ -124,6 +125,8 @@ void init_monitor(int argc, char *argv[]) {
   /* Load the image to memory. This will overwrite the built-in image. */
   /* 必须在 npc_core_init 之前加载，否则 NPC 会执行内置镜像 */
   long img_size = load_img(); // 先有了 init_mem, 才能有 load_img
+  extern void mrom_load_image(const void *data, size_t size);
+  mrom_load_image(guest_to_host(RESET_VECTOR), (size_t)img_size);
 
   /* Initialize NPC core after loading the image */
   extern bool npc_core_init(int argc, char *argv[]);

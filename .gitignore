@@ -29,6 +29,10 @@
 !rocket-chip/
 !rocket-chip/**
 
+# 头文件（include 跟踪，但 config/generated 不跟踪）
+!include/
+!include/**
+
 # Kconfig 生成的文件（不跟踪）
 include/config
 include/generated

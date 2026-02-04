@@ -50,7 +50,7 @@ class IFU extends Module with HasCoreParameter {
   io.icache.w.bits.last := true.B
   io.icache.w.valid := false.B
 
-  private val pc_reg = RegInit("h80000000".U(XLEN.W))
+  private val pc_reg = RegInit("h2000_0000".U(XLEN.W))
   private val inst_reg = RegInit(0.U(InstLen.W))
   private val exception_reg = Reg(IFUExceptionType())
   private val exceptionEn_reg = RegInit(false.B)
