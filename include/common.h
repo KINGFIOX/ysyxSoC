@@ -27,7 +27,9 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#if CONFIG_MBASE + CONFIG_MSIZE > 0x100000000ul
+// 检查是否需要 64 位物理地址
+#if CONFIG_SOC_MROM_BASE + CONFIG_SOC_MROM_SIZE > 0x100000000ul || \
+    CONFIG_SOC_SRAM_BASE + CONFIG_SOC_SRAM_SIZE > 0x100000000ul
 #define PMEM64 1
 #endif
 

@@ -1,32 +1,8 @@
 #include "cpu/difftest.h"
 #include <cpu/cpu.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
 
-#define MROM_BASE  0x20000000
-#define MROM_SIZE  0x1000
-
-static uint8_t mrom_content[MROM_SIZE];
-static size_t mrom_content_size = 0;
-
-void mrom_load_image(const void *data, size_t size) {
-  if (size > MROM_SIZE) size = MROM_SIZE;
-  memcpy(mrom_content, data, size);
-  mrom_content_size = size;
-}
-
-void mrom_read(int addr, int *data) {
-  uint32_t offset = (uint32_t)addr - MROM_BASE;
-  if (offset < mrom_content_size && offset + 4 <= MROM_SIZE) {
-    *data = (int)(mrom_content[offset] |
-                  (mrom_content[offset + 1] << 8) |
-                  (mrom_content[offset + 2] << 16) |
-                  (mrom_content[offset + 3] << 24));
-  } else {
-    *data = 0x00100073;  // ebreak 作为默认值
-  }
-}
+// mrom_read 已在 memory/mrom.c 中定义，此处只需声明
+// DPI 接口直接使用 mrom_read
 
 void flash_read(int addr, int* data) {
   assert(0);

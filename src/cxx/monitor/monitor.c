@@ -22,6 +22,7 @@
 void init_rand();
 void init_log(const char *log_file);
 void init_mem();
+long init_mrom(const char *img_file);  // MROM 初始化并加载镜像
 void init_difftest(char *ref_so_file, long img_size, int port);
 void init_device();
 void init_sdb();
@@ -49,27 +50,6 @@ static char *diff_so_file = NULL;
 static char *img_file = NULL;
 static int difftest_port = 1234;
 
-static long load_img() {
-  if (img_file == NULL) {
-    Log("No image is given. Use the default build-in image.");
-    return 4096; // built-in image size
-  }
-
-  FILE *fp = fopen(img_file, "rb");
-  Assert(fp, "Can not open '%s'", img_file);
-
-  fseek(fp, 0, SEEK_END);
-  long size = ftell(fp);
-
-  Log("The image is %s, size = %ld", img_file, size);
-
-  fseek(fp, 0, SEEK_SET);
-  int ret = fread(guest_to_host(RESET_VECTOR), size, 1, fp);
-  assert(ret == 1);
-
-  fclose(fp);
-  return size;
-}
 
 static int parse_args(int argc, char *argv[]) {
   const struct option table[] = {
@@ -113,20 +93,18 @@ void init_monitor(int argc, char *argv[]) {
   /* Open the log file. */
   init_log(log_file);
 
-  /* Initialize memory. */
+  /* Initialize MROM and load image (MROM 初始化即加载，符合只读语义) */
+  /* 必须在 npc_core_init 之前加载，否则 NPC 会执行内置镜像 */
+  long img_size = init_mrom(img_file);
+
+  /* Initialize SRAM */
   init_mem();
 
-  /* Initialize deviceabout:blanks. */
+  /* Initialize devices. */
   IFDEF(CONFIG_DEVICE, init_device());
 
   /* Perform ISA dependent initialization. */
   init_isa();
-
-  /* Load the image to memory. This will overwrite the built-in image. */
-  /* 必须在 npc_core_init 之前加载，否则 NPC 会执行内置镜像 */
-  long img_size = load_img(); // 先有了 init_mem, 才能有 load_img
-  extern void mrom_load_image(const void *data, size_t size);
-  mrom_load_image(guest_to_host(RESET_VECTOR), (size_t)img_size);
 
   /* Initialize NPC core after loading the image */
   extern bool npc_core_init(int argc, char *argv[]);

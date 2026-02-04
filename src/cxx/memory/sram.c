@@ -13,23 +13,32 @@
  * See the Mulan PSL v2 for more details.
  ***************************************************************************************/
 
-#ifndef __MEMORY_PADDR_H__
-#define __MEMORY_PADDR_H__
-
 #include <common.h>
+#include <memory/host.h>
 
-// MROM 地址范围
-#define MROM_LEFT  ((paddr_t)CONFIG_SOC_MROM_BASE)
-#define MROM_RIGHT ((paddr_t)CONFIG_SOC_MROM_BASE + CONFIG_SOC_MROM_SIZE - 1)
+#define SRAM_BASE CONFIG_SOC_SRAM_BASE
+#define SRAM_SIZE CONFIG_SOC_SRAM_SIZE
 
-// SRAM 地址范围
-#define SRAM_LEFT  ((paddr_t)CONFIG_SOC_SRAM_BASE)
-#define SRAM_RIGHT ((paddr_t)CONFIG_SOC_SRAM_BASE + CONFIG_SOC_SRAM_SIZE - 1)
+static uint8_t sram[SRAM_SIZE] PG_ALIGN = {};
 
-// 复位向量：从 MROM 开始
-#define RESET_VECTOR (MROM_LEFT + CONFIG_PC_RESET_OFFSET)
+static uint8_t *sram_guest_to_host(paddr_t paddr) { 
+  return sram + paddr - SRAM_BASE; 
+}
 
-word_t paddr_read(paddr_t addr, int len);
-void paddr_write(paddr_t addr, int len, word_t data);
+bool in_sram(paddr_t addr) {
+  return addr >= SRAM_BASE && addr < SRAM_BASE + SRAM_SIZE;
+}
 
-#endif
+void init_sram() {
+  IFDEF(CONFIG_MEM_RANDOM, memset(sram, rand(), SRAM_SIZE));
+  Log("sram area [" FMT_PADDR ", " FMT_PADDR "]",
+      (paddr_t)SRAM_BASE, (paddr_t)(SRAM_BASE + SRAM_SIZE - 1));
+}
+
+word_t sram_read(paddr_t addr, int len) {
+  return host_read(sram_guest_to_host(addr), len);
+}
+
+void sram_write(paddr_t addr, int len, word_t data) {
+  host_write(sram_guest_to_host(addr), len, data);
+}
