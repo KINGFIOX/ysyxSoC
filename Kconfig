@@ -25,7 +25,7 @@ endif
 
 config VERILATOR_TRACE
   bool "Enable Verilator VCD waveform trace"
-  default y
+  default n
   help
     Generate VCD waveform file for debugging.
     Output: build/npc_core.vcd
