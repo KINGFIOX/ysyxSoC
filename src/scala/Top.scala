@@ -35,7 +35,7 @@ class ysyxSoCTop extends Module {
 }
 
 /** NPCSoC - Top module for Verilator simulation
-  * 
+  *
   * This module wraps ysyxSoCFull and exposes step/debug interfaces
   * for difftest and tracing.
   */
@@ -46,12 +46,12 @@ class NPCSoC extends Module {
     val step  = Input(Bool())
     val debug = Output(new DebugBundle)
   })
-  
+
   val dut = LazyModule(new ysyxSoCFull)
   val mdut = Module(dut.module)
   mdut.dontTouchPorts()
   mdut.externalPins := DontCare
-  
+
   // Connect step and debug signals
   mdut.step := io.step
   io.debug := mdut.debug
