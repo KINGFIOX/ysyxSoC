@@ -77,7 +77,7 @@ module uart_top_apb (
       .clk         (clock),
       .wb_rst_i    (reset),
       .wb_addr_i   (reg_adr),
-      .wb_dat_i    (in_pwrite ? reg_dat8_w : reg_dat8_w_reg),
+      .wb_dat_i    (in_pwrite ? reg_dat8_w : reg_dat8_w_reg), // 这里做了一次 bypass, 防止延迟一拍
       .wb_dat_o    (reg_dat8_r),
       .wb_we_i     (reg_we),
       .wb_re_i     (reg_re),
