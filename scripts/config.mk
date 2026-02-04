@@ -13,8 +13,9 @@
 # See the Mulan PSL v2 for more details.
 #**************************************************************************************/
 
-COLOR_RED := $(shell echo "\033[1;31m")
-COLOR_END := $(shell echo "\033[0m")
+# 使用 printf 才能正确输出 ANSI 转义序列（echo 默认不解析 \033）
+COLOR_RED := $(shell printf "\033[1;31m")
+COLOR_END := $(shell printf "\033[0m")
 
 ifeq ($(wildcard .config),) # 项目目录下没有 .config
 $(warning $(COLOR_RED)Warning: .config does not exist!$(COLOR_END))

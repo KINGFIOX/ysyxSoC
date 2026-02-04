@@ -20,7 +20,7 @@ config ISA64
 
 
 if ISA_riscv
-source "src/isa/riscv32/Kconfig"
+source "src/cxx/isa/riscv32/Kconfig"
 endif
 
 config VERILATOR_TRACE
@@ -182,8 +182,8 @@ config DIFFTEST
 
 endmenu
 
-source "src/memory/Kconfig"
-source "src/device/Kconfig"
+source "src/cxx/memory/Kconfig"
+source "src/cxx/device/Kconfig"
 
 config RT_CHECK
   bool "Enable runtime checking"
