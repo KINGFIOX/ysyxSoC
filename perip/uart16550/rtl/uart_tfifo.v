@@ -213,11 +213,15 @@ module uart_tfifo (
         push, pop
       })
         2'b10:
-        if (count<fifo_depth)  // overrun condition
-                    begin
-          top   <= #1 top_plus_1;
-          count <= #1 count + 1'b1;
+        begin
+          // TODO: 这里可能会因为: push 太快而丢数据
+          // 如果是 os 的话, 会有缓冲区的
+          // 但是暂时是 bare-metal, 把 $write 提前
           $write("%c", data_in);
+          if (count<fifo_depth) begin // overrun condition
+            top   <= #1 top_plus_1;
+            count <= #1 count + 1'b1;
+          end
         end
         2'b01:
         if (count > 0) begin

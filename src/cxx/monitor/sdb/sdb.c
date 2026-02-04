@@ -128,6 +128,24 @@ static int cmd_w(char *args) {
   return 0;
 }
 
+static int cmd_b(char *args) {
+  if (args == NULL) {
+    printf("usage: w EXPR\n");
+    return 0;
+  }
+
+  int n = strlen(args);
+  args[n] = '=';
+  args[n + 1] = '=';
+  args[n + 2] = '$';
+  args[n + 3] = 'p';
+  args[n + 4] = 'c';
+  args[n + 5] = '\0';
+
+  add_watchpoint(args);
+  return 0;
+}
+
 static int cmd_d(char *args) {
   if (args == NULL) {
     printf("usage: d N\n");
@@ -151,6 +169,7 @@ enum {
   CMD_P,
   CMD_W,
   CMD_D,
+  CMD_B,
   NR_CMD,
 };
 
@@ -168,6 +187,7 @@ static struct {
     [CMD_P] = {"p", "print expression", cmd_p},      // p EXPR
     [CMD_W] = {"w", "watchpoint expression", cmd_w}, // w EXPR
     [CMD_D] = {"d", "delete watchpoint", cmd_d},     // d N
+    [CMD_B] = {"b", "breakpoint", cmd_b},             // b N EXPR
 };
 
 static int cmd_help(char *args) {
