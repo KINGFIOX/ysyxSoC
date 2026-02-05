@@ -12,7 +12,7 @@ class TriStateInBuf(bits: Int) extends BlackBox(Map("width" -> bits)) with HasBl
     val din = Output(UInt(bits.W))
   })
 
-  setInline("TriStateInBuf.v",
+  setInline("TriStateInBuf.sv",
     """module TriStateInBuf #(
       |  parameter width = 1
       |)(

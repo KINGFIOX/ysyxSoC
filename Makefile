@@ -25,33 +25,20 @@ $(SOC_CONFIG_SCALA): .config $(GEN_SCALA_CONFIG)
 	@echo "=== Generating SoCConfig.scala from Kconfig ==="
 	@$(GEN_SCALA_CONFIG) .config $@
 
-# =============================== Chisel -> Verilog ===============================
+# =============================== Chisel -> SystemVerilog ===============================
 
 SCALA_FILES := $(shell find src/scala -name "*.scala" ! -name "SoCConfig.scala" 2>/dev/null)
 
-# 综合用: ysyxSoCFull.v (ysyxSoCTop 顶层, 无 step/debug 接口)
-V_SYNTH_GEN   := $(BUILD_DIR)/ysyxSoCTop.sv
-V_SYNTH_FINAL := $(BUILD_DIR)/ysyxSoCFull.v
+# 仿真用: NPCSoC.sv (NPCSoC 顶层, 暴露 step/debug 接口)
+V_SIM := $(BUILD_DIR)/NPCSoC.sv
 
-# 仿真用: NPCSoC.v (NPCSoC 顶层, 暴露 step/debug 接口)
-V_SIM_GEN   := $(BUILD_DIR)/NPCSoC.sv
-V_SIM_FINAL := $(BUILD_DIR)/NPCSoC.v
-
-# 生成 ysyxSoCFull.v (用于综合)
-$(V_SYNTH_FINAL): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
-	$(MILL) -i ysyxsoc.runMain ysyx.Elaborate --target-dir $(@D)
-	mv $(V_SYNTH_GEN) $@
-	sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g' $@
-	sed -i '/firrtl_black_box_resource_files.f/, $$d' $@
-
-# 生成 NPCSoC.v (用于仿真)
-$(V_SIM_FINAL): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
+# 生成 NPCSoC.sv (用于仿真)
+$(V_SIM): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
 	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(@D)
-	mv $(V_SIM_GEN) $@
 	sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g' $@
 	sed -i '/firrtl_black_box_resource_files.f/, $$d' $@
 
-verilog: $(V_SYNTH_FINAL)
+verilog: $(V_SIM)
 
 # =============================== Verilator 编译 ===============================
 
@@ -66,18 +53,21 @@ VERILATOR_DEFINES := $(if $(CONFIG_DIFFTEST),+define+CONFIG_DIFFTEST,)
 VERILATOR_DEFINES += $(if $(CONFIG_VERILATOR_TRACE),+define+CONFIG_VERILATOR_TRACE,)
 
 # SV 文件列表 (仿真用)
-VERILATOR_SRCS := $(V_SIM_FINAL)
-VERILATOR_SRCS += $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.sv" 2>/dev/null)
-VERILATOR_SRCS += $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.v" ! -name "NPCSoC.v" ! -name "ysyxSoCFull.v" 2>/dev/null)
+VERILATOR_SRCS := $(V_SIM)
+VERILATOR_SRCS += $(shell find $(BUILD_DIR) -name "*.sv" 2>/dev/null)
 VERILATOR_PERIP_SRCS := $(shell find perip -name "*.v" 2>/dev/null)
 VERILATOR_SRCS += $(VERILATOR_PERIP_SRCS)
 
 # Include 路径 (用于 perip 中的 `include)
 VERILATOR_INCS := -I$(NPC_HOME)/perip/spi/rtl
 VERILATOR_INCS += -I$(NPC_HOME)/perip/uart16550/rtl
+VERILATOR_INCS += -I$(BUILD_DIR)/verification
+VERILATOR_INCS += -I$(BUILD_DIR)/verification/assert
+VERILATOR_INCS += -I$(BUILD_DIR)/verification/assume
+VERILATOR_INCS += -I$(BUILD_DIR)/verification/cover
 
 # 生成 Verilator Makefile (依赖 Chisel 输出 + perip 中的 Verilog)
-$(VERILATOR_MK): $(V_SIM_FINAL) $(VERILATOR_PERIP_SRCS)
+$(VERILATOR_MK): $(V_SIM) $(VERILATOR_PERIP_SRCS)
 	@echo "=== Verilating $(VERILATOR_TOP) ==="
 	@mkdir -p $(VERILATOR_MDIR)
 	$(VERILATOR) --cc $(VERILATOR_SRCS) \
@@ -163,8 +153,8 @@ clean-all: distclean clean-tools
 help:
 	@echo "ysyxSoC Makefile"
 	@echo ""
-	@echo "Chisel -> Verilog:"
-	@echo "  verilog       - 生成 ysyxSoCFull.v (综合用)"
+	@echo "Chisel -> SystemVerilog:"
+	@echo "  verilog       - 生成 NPCSoC.sv"
 	@echo ""
 	@echo "Verilator:"
 	@echo "  verilate      - 编译 Verilator 库 (使用 NPCSoC)"

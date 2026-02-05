@@ -14,7 +14,7 @@ class MROMHelper extends BlackBox with HasBlackBoxInline {
     val ren = Input(Bool())
     val rdata = Output(UInt(32.W))
   })
-  setInline("MROMHelper.v",
+  setInline("MROMHelper.sv",
     """module MROMHelper(
       |  input [31:0] raddr,
       |  input ren,
