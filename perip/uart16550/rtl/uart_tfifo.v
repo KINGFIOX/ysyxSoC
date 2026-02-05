@@ -213,25 +213,20 @@ module uart_tfifo (
         push, pop
       })
         2'b10:
-        begin
-          // TODO: 这里可能会因为: push 太快而丢数据
-          // 如果是 os 的话, 会有缓冲区的
-          // 但是暂时是 bare-metal, 把 $write 提前
-          $write("%c", data_in);
           if (count<fifo_depth) begin // overrun condition
             top   <= #1 top_plus_1;
             count <= #1 count + 1'b1;
           end
-        end
         2'b01:
         if (count > 0) begin
           bottom <= #1 bottom + 1'b1;
           count  <= #1 count - 1'b1;
+          $write("%c", data_out);
         end
         2'b11: begin
           bottom <= #1 bottom + 1'b1;
           top    <= #1 top_plus_1;
-          $write("%c", data_in);
+          $write("%c", data_out);
         end
         default: ;
       endcase
