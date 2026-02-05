@@ -182,7 +182,6 @@ config DIFFTEST
 
 endmenu
 
-source "src/cxx/memory/Kconfig"
 source "src/cxx/device/Kconfig"
 
 config RT_CHECK

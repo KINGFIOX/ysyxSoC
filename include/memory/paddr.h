@@ -27,7 +27,7 @@
 #define SRAM_RIGHT ((paddr_t)CONFIG_SOC_SRAM_BASE + CONFIG_SOC_SRAM_SIZE - 1)
 
 // 复位向量：从 MROM 开始
-#define RESET_VECTOR (MROM_LEFT + CONFIG_PC_RESET_OFFSET)
+#define RESET_VECTOR (MROM_LEFT)
 
 word_t paddr_read(paddr_t addr, int len);
 void paddr_write(paddr_t addr, int len, word_t data);

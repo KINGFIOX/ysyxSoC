@@ -30,7 +30,6 @@ bool in_sram(paddr_t addr) {
 }
 
 void init_sram() {
-  IFDEF(CONFIG_MEM_RANDOM, memset(sram, rand(), SRAM_SIZE));
   Log("sram area [" FMT_PADDR ", " FMT_PADDR "]",
       (paddr_t)SRAM_BASE, (paddr_t)(SRAM_BASE + SRAM_SIZE - 1));
 }
