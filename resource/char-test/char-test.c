@@ -11,18 +11,18 @@
 #define UART_LSR (UART_BASE + 5) // Line Status Register
 
 // LCR 位定义
-#define LCR_DLAB 0x80 // Divisor Latch Access Bit
-#define LCR_8N1  0x03 // 8 data bits, no parity, 1 stop bit
+#define LCR_DLAB 0x83u // Divisor Latch Access Bit
+#define LCR_8N1  0x03u // 8 data bits, no parity, 1 stop bit
 
 // FCR 位定义
-#define FCR_FIFO_ENABLE 0x01 // FIFO Enable
-#define FCR_RX_RESET    0x02 // Receiver FIFO Reset
-#define FCR_TX_RESET    0x04 // Transmitter FIFO Reset
+#define FCR_FIFO_ENABLE 0x01u // FIFO Enable (ignored)
+#define FCR_RX_RESET    0x02u // Receiver FIFO Reset
+#define FCR_TX_RESET    0x04u // Transmitter FIFO Reset
 
 // LSR 位定义
-#define LSR_DR   0x01 // Data Ready
-#define LSR_THRE 0x20 // Transmitter Holding Register Empty
-#define LSR_TEMT 0x40 // Transmitter Empty
+#define LSR_DR   0x01u // Data Ready
+#define LSR_THRE 0x20u // Transmitter Holding Register Empty
+#define LSR_TEMT 0x40u // Transmitter Empty
 
 static void uart_init(void) {
   volatile char *lcr = (volatile char *)UART_LCR;
@@ -36,15 +36,13 @@ static void uart_init(void) {
 
   // 2. 使能 DLAB 以设置波特率
   *lcr = LCR_DLAB;
-
-  // 3. 设置除数为1 (最快波特率: clk / 16)
-  *dll = 0x00; // Divisor Latch Low
+  *dll = 0x01; // Divisor Latch Low
   *dlm = 0x00; // Divisor Latch High
 
-  // 4. 禁用 DLAB，设置数据格式: 8N1 (8数据位, 无奇偶校验, 1停止位)
-  *lcr = LCR_8N1;
+  // 3. 禁用 DLAB，设置数据格式: 8N1 (8数据位, 无奇偶校验, 1停止位)
+  *lcr = LCR_8N1; // 8bit, no parity, 1 stop bit, disable setting BAUD rate
 
-  // 5. 使能并复位 FIFO
+  // 4. 使能并复位 FIFO
   *fcr = FCR_FIFO_ENABLE | FCR_RX_RESET | FCR_TX_RESET;
 }
 

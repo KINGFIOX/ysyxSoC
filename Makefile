@@ -73,6 +73,7 @@ $(VERILATOR_MK): $(V_SIM) $(VERILATOR_PERIP_SRCS)
 	$(VERILATOR) --cc $(VERILATOR_SRCS) \
 		--Mdir $(VERILATOR_MDIR) \
 		--top-module $(VERILATOR_TOP) \
+		--timescale "1ns/1ns" \
 		--trace --no-timing --autoflush --assert \
 		-O2 -Wall -Wno-fatal \
 		$(VERILATOR_INCS) \
@@ -89,7 +90,8 @@ verilate: $(VERILATOR_LIB)
 # =============================== 仿真程序构建 ===============================
 
 # 构建完整的仿真程序
-build: verilate
+# 显式依赖 VERILATOR_LIB，确保 Verilog 修改后 verilate 会先执行，再调用 native.mk 链接
+build: verilate $(VERILATOR_LIB)
 	$(MAKE) -f scripts/native.mk NPC_HOME=$(NPC_HOME)
 
 # =============================== 开发工具 ===============================

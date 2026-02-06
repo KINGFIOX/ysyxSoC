@@ -173,14 +173,30 @@ class LSU extends Module with HasCoreParameter {
   // AR channel
   io.dcache.ar.valid     := (read_state === ReadState.ar_wait)
   io.dcache.ar.bits.id   := 0.U
-  io.dcache.ar.bits.addr := Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
-  io.dcache.ar.bits.len  := 0.U
-  io.dcache.ar.bits.size := 2.U
   io.dcache.ar.bits.burst := 1.U
   io.dcache.ar.bits.lock := 0.U
   io.dcache.ar.bits.cache := 0.U
-  io.dcache.ar.bits.prot := Cat(false.B, false.B, true.B)
+  io.dcache.ar.bits.prot := 0.U
   io.dcache.ar.bits.qos := 0.U
+
+  private val ar_size = MuxLookup(op_reg.asUInt, 2.U)(Seq(
+    MemUOpType.mem_LB.asUInt  -> 0.U,
+    MemUOpType.mem_LBU.asUInt -> 0.U,
+    MemUOpType.mem_LH.asUInt  -> 1.U,
+    MemUOpType.mem_LHU.asUInt -> 1.U,
+    MemUOpType.mem_LW.asUInt  -> 2.U
+  ))
+  private val ar_addr = MuxLookup(op_reg.asUInt, Cat(addr_reg(XLEN - 1, 2), 0.U(2.W)))(Seq(
+    MemUOpType.mem_LB.asUInt  -> addr_reg,
+    MemUOpType.mem_LBU.asUInt -> addr_reg,
+    MemUOpType.mem_LH.asUInt  -> Cat(addr_reg(XLEN - 1, 1), 0.U(1.W)), // 其实, 如果不对齐的话, 那么就会抛出异常, 而不会落到总线上
+    MemUOpType.mem_LHU.asUInt -> Cat(addr_reg(XLEN - 1, 1), 0.U(1.W)),
+    MemUOpType.mem_LW.asUInt  -> Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
+  ))
+
+  io.dcache.ar.bits.addr := ar_addr
+  io.dcache.ar.bits.len  := 0.U // 2^0=1
+  io.dcache.ar.bits.size := ar_size
 
   io.dcache.r.ready := (read_state === ReadState.r_wait)
 
