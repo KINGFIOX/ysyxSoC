@@ -19,7 +19,7 @@
 #include <common.h>
 
 // MROM 地址范围
-#define MROM_LEFT  ((paddr_t)CONFIG_SOC_MROM_BASE)
+#define MROM_LEFT  ((paddr_t)CONFIG_SOC_MROM_BASE) /*0x2000_0000*/
 #define MROM_RIGHT ((paddr_t)CONFIG_SOC_MROM_BASE + CONFIG_SOC_MROM_SIZE - 1)
 
 // SRAM 地址范围

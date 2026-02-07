@@ -154,7 +154,7 @@ static void sdcard_io_handler(uint32_t offset, int len, bool is_write) {
       if (addr == 512 - 4)
         read_ext_csd = false;
     } else if (fp) {
-      UNUSED int ret;
+      int ret;
       if (!write_cmd) {
         ret = fread(&base[SDDATA], 4, 1, fp);
       } else {

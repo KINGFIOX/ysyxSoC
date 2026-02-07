@@ -15,9 +15,13 @@
 
 ifdef CONFIG_DIFFTEST
 
-# DIFF_REF_SO = $(NEMU_HOME)/build/$(GUEST_ISA)-nemu-interpreter-so
-DIFF_REF_SO = $(NEMU_HOME)/tools/spike-diff/build/riscv32-spike-so
+DIFF_REF_PATH = $(NPC_HOME)/$(call remove_quote,$(CONFIG_DIFFTEST_REF_PATH))
+DIFF_REF_SO = $(DIFF_REF_PATH)/build/$(GUEST_ISA)-$(call remove_quote,$(CONFIG_DIFFTEST_REF_NAME))-so
+MKFLAGS = GUEST_ISA=$(GUEST_ISA) NPC_HOME=$(NPC_HOME)
 ARGS_DIFF = --diff=$(DIFF_REF_SO)
+
+$(DIFF_REF_SO):
+	$(MAKE) -s -C $(DIFF_REF_PATH) $(MKFLAGS)
 
 .PHONY: $(DIFF_REF_SO)
 

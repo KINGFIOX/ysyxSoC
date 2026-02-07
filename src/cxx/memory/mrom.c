@@ -85,3 +85,8 @@ void mrom_read(int addr, int *data) {
 void mrom_write(paddr_t addr, int len, word_t data) {
   panic("MROM is read-only, cannot write to address " FMT_PADDR, addr);
 }
+
+// 获取 mrom 指针，供 difftest 使用
+uint8_t *get_mrom_ptr(void) {
+  return mrom;
+}
