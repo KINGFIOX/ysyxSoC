@@ -39,8 +39,10 @@ class IFU extends Module with HasCoreParameter {
     val step = Input(Bool())
     val icache = AXI4Bundle(CPUAXI4BundleParameters())
   })
-  private val in = io.icache
-  private val (ar, r, aw, w, b) = (in.ar, in.r, in.aw, in.w, in.b)
+  private val (ar, r, aw, w, b) = {
+    val in = io.icache
+    (in.ar, in.r, in.aw, in.w, in.b)
+  }
 
   b.ready := true.B
   aw.bits := DontCare

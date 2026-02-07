@@ -50,6 +50,10 @@ class LSU extends Module with HasCoreParameter {
     val out    = DecoupledIO(new MEMUOutputBundle)
     val dcache = AXI4Bundle(CPUAXI4BundleParameters())
   })
+  private val (ar, r, aw, w, b) = {
+    val in = io.dcache
+    (in.ar, in.r, in.aw, in.w, in.b)
+  }
 
   private val isLoad  = io.in.bits.op.isOneOf(MemUOpType.mem_LB, MemUOpType.mem_LH, MemUOpType.mem_LW, MemUOpType.mem_LBU, MemUOpType.mem_LHU)
   private val isStore = io.in.bits.op.isOneOf(MemUOpType.mem_SB, MemUOpType.mem_SH, MemUOpType.mem_SW)
@@ -103,13 +107,11 @@ class LSU extends Module with HasCoreParameter {
       }
     }
     is(ReadState.ar_wait) {
-      when(io.dcache.ar.fire) {
-        read_state := ReadState.r_wait
-      }
+      when(ar.fire) { read_state := ReadState.r_wait }
     }
     is(ReadState.r_wait) {
-      when(io.dcache.r.fire) {
-        when(io.dcache.r.bits.resp =/= AXI4Resp.OKAY) {
+      when(r.fire) {
+        when(r.bits.resp =/= AXI4Resp.OKAY) {
           exception_reg := MemUExceptionType.mem_LOAD_ACCESS_FAULT
           exceptionEn_reg := true.B
         }
@@ -142,21 +144,15 @@ class LSU extends Module with HasCoreParameter {
       }
     }
     is(WriteState.aw_w_wait) {
-      when(io.dcache.aw.fire) {
-        aw_sent := true.B
-      }
-      when(io.dcache.w.fire) {
-        w_sent := true.B
-      }
-      val aw_done = aw_sent || io.dcache.aw.fire
-      val w_done  = w_sent || io.dcache.w.fire
-      when(aw_done && w_done) {
-        write_state := WriteState.b_wait
-      }
+      when(aw.fire) { aw_sent := true.B }
+      when(w.fire) { w_sent := true.B }
+      val aw_done = aw_sent || aw.fire
+      val w_done  = w_sent || w.fire
+      when(aw_done && w_done) { write_state := WriteState.b_wait }
     }
     is(WriteState.b_wait) {
-      when(io.dcache.b.fire) {
-        when(io.dcache.b.bits.resp =/= AXI4Resp.OKAY) {
+      when(b.fire) {
+        when(b.bits.resp =/= AXI4Resp.OKAY) {
           exception_reg := MemUExceptionType.mem_STORE_ACCESS_FAULT
           exceptionEn_reg := true.B
         }
@@ -164,50 +160,37 @@ class LSU extends Module with HasCoreParameter {
       }
     }
     is(WriteState.done) {
-      when(io.out.fire) {
-        write_state := WriteState.idle
-      }
+      when(io.out.fire) { write_state := WriteState.idle }
     }
   }
 
   // AR channel
-  io.dcache.ar.valid     := (read_state === ReadState.ar_wait)
-  io.dcache.ar.bits.id   := 0.U
-  io.dcache.ar.bits.burst := 1.U
-  io.dcache.ar.bits.lock := 0.U
-  io.dcache.ar.bits.cache := 0.U
-  io.dcache.ar.bits.prot := 0.U
-  io.dcache.ar.bits.qos := 0.U
+  ar.valid      := (read_state === ReadState.ar_wait) && !loadMisaligned /*需要!loadMisaligned, 因为不能拉低valid信号*/
+  ar.bits.id    := 0.U
+  ar.bits.burst := 1.U
+  ar.bits.lock  := 0.U
+  ar.bits.cache := 0.U
+  ar.bits.prot  := 0.U
+  ar.bits.qos   := 0.U
 
-  private val ar_size = MuxLookup(op_reg.asUInt, 2.U)(Seq(
-    MemUOpType.mem_LB.asUInt  -> 0.U,
-    MemUOpType.mem_LBU.asUInt -> 0.U,
-    MemUOpType.mem_LH.asUInt  -> 1.U,
-    MemUOpType.mem_LHU.asUInt -> 1.U,
-    MemUOpType.mem_LW.asUInt  -> 2.U
-  ))
-  private val ar_addr = MuxLookup(op_reg.asUInt, Cat(addr_reg(XLEN - 1, 2), 0.U(2.W)))(Seq(
-    MemUOpType.mem_LB.asUInt  -> addr_reg,
-    MemUOpType.mem_LBU.asUInt -> addr_reg,
-    MemUOpType.mem_LH.asUInt  -> Cat(addr_reg(XLEN - 1, 1), 0.U(1.W)), // 其实, 如果不对齐的话, 那么就会抛出异常, 而不会落到总线上
-    MemUOpType.mem_LHU.asUInt -> Cat(addr_reg(XLEN - 1, 1), 0.U(1.W)),
-    MemUOpType.mem_LW.asUInt  -> Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
-  ))
+  // 统一使用 32 位读取
+  private val ar_size = 2.U
+  // 统一使用对齐地址，从返回的 word 中按 byte_offset 提取数据
+  private val ar_addr = Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
 
-  io.dcache.ar.bits.addr := ar_addr
-  io.dcache.ar.bits.len  := 0.U // 2^0=1
-  io.dcache.ar.bits.size := ar_size
+  ar.bits.addr := ar_addr
+  ar.bits.len  := 0.U // 2^0=1
+  ar.bits.size := ar_size
 
-  io.dcache.r.ready := (read_state === ReadState.r_wait)
+  r.ready := (read_state === ReadState.r_wait)
 
-  private val rdata_raw = io.dcache.r.bits.data
+  private val rdata_raw = r.bits.data
   private val rdata_reg = RegInit(0.U(XLEN.W))
 
   private val byte_offset = addr_reg(1, 0)
   private val rdata_byte = (rdata_raw >> (byte_offset << 3.U))(7, 0)
   private val rdata_half = Mux(addr_reg(1), rdata_raw(31, 16), rdata_raw(15, 0))
-
-  when(io.dcache.r.fire) {
+  when(r.fire) {
     rdata_reg := MuxLookup(op_reg.asUInt, rdata_raw)(Seq(
       MemUOpType.mem_LB.asUInt  -> SignExt(rdata_byte, XLEN),
       MemUOpType.mem_LBU.asUInt -> ZeroExt(rdata_byte, XLEN),
@@ -218,19 +201,19 @@ class LSU extends Module with HasCoreParameter {
   }
 
   // AW channel
-  io.dcache.aw.valid     := (write_state === WriteState.aw_w_wait) && !aw_sent
-  io.dcache.aw.bits.id   := 0.U
-  io.dcache.aw.bits.addr := Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
-  io.dcache.aw.bits.len  := 0.U
-  io.dcache.aw.bits.size := 2.U
-  io.dcache.aw.bits.burst := 1.U
-  io.dcache.aw.bits.lock := 0.U
-  io.dcache.aw.bits.cache := 0.U
-  io.dcache.aw.bits.prot := 0.U
-  io.dcache.aw.bits.qos := 0.U
+  aw.valid      := (write_state === WriteState.aw_w_wait) && !aw_sent && !storeMisaligned /*需要!storeMisaligned, 因为不能拉低valid信号*/
+  aw.bits.id    := 0.U
+  aw.bits.addr  := Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
+  aw.bits.len   := 0.U
+  aw.bits.size  := 2.U
+  aw.bits.burst := 1.U
+  aw.bits.lock  := 0.U
+  aw.bits.cache := 0.U
+  aw.bits.prot  := 0.U
+  aw.bits.qos   := 0.U
 
   // W channel
-  io.dcache.w.valid := (write_state === WriteState.aw_w_wait) && !w_sent
+  w.valid := (write_state === WriteState.aw_w_wait) && !w_sent
 
   private val wstrb = MuxLookup(op_reg.asUInt, "b1111".U(4.W))(Seq(
     MemUOpType.mem_SB.asUInt -> ("b0001".U << byte_offset),
@@ -244,11 +227,11 @@ class LSU extends Module with HasCoreParameter {
     MemUOpType.mem_SW.asUInt -> wdata_reg
   ))
 
-  io.dcache.w.bits.data := wdata_shifted
-  io.dcache.w.bits.strb := wstrb
-  io.dcache.w.bits.last := true.B
+  w.bits.data := wdata_shifted
+  w.bits.strb := wstrb
+  w.bits.last := true.B
 
-  io.dcache.b.ready := (write_state === WriteState.b_wait)
+  b.ready := (write_state === WriteState.b_wait)
 
   io.in.ready := (read_state === ReadState.idle) && (write_state === WriteState.idle)
 
