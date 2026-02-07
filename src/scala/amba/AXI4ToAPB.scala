@@ -44,20 +44,17 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
 
   lazy val module = new LazyModuleImp(this) {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
-      // in: AXI4Bundle(master), out: APBBundle(slave)
       val (ar, r, aw, w, b) = (in.ar, in.r, in.aw, in.w, in.b)
 
-      object State extends ChiselEnum {
-        val idle, inflight, wait_rready_bready = Value
-      }
-      val state = RegInit(State.idle)
-      val accept_read = (state === State.idle) && ar.valid /* valid 一旦拉高就不能撤下 */
-      val accept_write = !accept_read && (state === State.idle) && aw.valid && w.valid
-      val is_write = accept_write holdUnless (state === State.idle)
+      val s_idle :: s_inflight :: s_wait_rready_bready :: Nil = Enum(3)
+      val state = RegInit(s_idle)
+      val accept_read = (state === s_idle) && ar.valid
+      val accept_write = !accept_read && (state === s_idle) && aw.valid && w.valid
+      val is_write = accept_write holdUnless (state === s_idle)
       switch (state) {
-        is (State.idle)     { state := Mux(ar.valid || (aw.valid && w.valid), State.inflight, State.idle) }
-        is (State.inflight) { state := Mux(out.pready, Mux(r.fire || b.fire, State.idle, State.wait_rready_bready), State.inflight) }
-        is (State.wait_rready_bready) { state := Mux(r.fire || b.fire, State.idle, State.wait_rready_bready) }
+        is (s_idle)     { state := Mux(ar.valid || (aw.valid && w.valid), s_inflight, s_idle) }
+        is (s_inflight) { state := Mux(out.pready, Mux(r.fire || b.fire, s_idle, s_wait_rready_bready), s_inflight) }
+        is (s_wait_rready_bready) { state := Mux(r.fire || b.fire, s_idle, s_wait_rready_bready) }
       }
 
       // burst is not supported
@@ -70,41 +67,31 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
       val rid_reg    = RegEnable(ar.bits.id, accept_read)
       val bid_reg    = RegEnable(aw.bits.id, accept_write)
       val araddr_reg = ar.bits.addr holdUnless accept_read
-      val arsize_reg = ar.bits.size holdUnless accept_read
       val awaddr_reg = aw.bits.addr holdUnless accept_write
       val wdata_reg  =  w.bits.data holdUnless accept_write
       val wstrb_reg  =  w.bits.strb holdUnless accept_write
 
-      // 读地址始终对齐到4字节边界，用strb指示有效字节
-      val ar_byte_offset = araddr_reg(1, 0)
-      val ar_addr_masked = Cat(araddr_reg(araddr_reg.getWidth - 1, 2), 0.U(2.W))
-      val rstrb = MuxLookup(arsize_reg, "b0000".U(4.W) /*错误,禁止写入*/ )(Seq(
-        0.U -> ("b0001".U << ar_byte_offset),  // 1字节
-        1.U -> Mux(araddr_reg(1), "b1100".U(4.W), "b0011".U(4.W)),  // 2字节
-        2.U -> "b1111".U(4.W)  // 4字节
-      ))
-
       out.psel    := (accept_read || accept_write) || out.penable
-      out.penable := state === State.inflight
+      out.penable := state === s_inflight
       out.pwrite  := is_write
-      out.paddr   := Mux(is_write, awaddr_reg, ar_addr_masked)
+      out.paddr   := Mux(is_write, awaddr_reg, araddr_reg)
       out.pprot   := APBParameters.PROT_DEFAULT
       out.pwdata  := wdata_reg
-      out.pstrb   := Mux(is_write, wstrb_reg, rstrb)
+      out.pstrb   := Mux(is_write, wstrb_reg, 0.U)
 
       ar.ready := accept_read
       w.ready  := accept_write
       aw.ready := accept_write
 
       val resp = Mux(out.pslverr, AXI4Parameters.RESP_SLVERR, AXI4Parameters.RESP_OKAY)
-      val resp_hold = resp holdUnless (state === State.inflight)
-      r.valid  := !is_write && (((state === State.inflight) && out.pready) || (state === State.wait_rready_bready))
-      r.bits.data := Fill(2, out.prdata holdUnless (state === State.inflight))
+      val resp_hold = resp holdUnless (state === s_inflight)
+      r.valid  := !is_write && (((state === s_inflight) && out.pready) || (state === s_wait_rready_bready))
+      r.bits.data := Fill(2, out.prdata holdUnless (state === s_inflight))
       r.bits.id   := rid_reg
       r.bits.resp := resp_hold
       r.bits.last := true.B
 
-      b.valid  := is_write && (((state === State.inflight) && out.pready) || (state === State.wait_rready_bready))
+      b.valid  := is_write && (((state === s_inflight) && out.pready) || (state === s_wait_rready_bready))
       b.bits.resp := resp_hold
       b.bits.id   := bid_reg
     }
