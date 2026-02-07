@@ -39,16 +39,18 @@ class IFU extends Module with HasCoreParameter {
     val step = Input(Bool())
     val icache = AXI4Bundle(CPUAXI4BundleParameters())
   })
+  private val in = io.icache
+  private val (ar, r, aw, w, b) = (in.ar, in.r, in.aw, in.w, in.b)
 
-  io.icache.b.ready := true.B
-  io.icache.aw.bits := DontCare
-  io.icache.aw.bits.len := 0.U
-  io.icache.aw.bits.size := 2.U
-  io.icache.aw.bits.burst := 1.U
-  io.icache.aw.valid := false.B
-  io.icache.w.bits := DontCare
-  io.icache.w.bits.last := true.B
-  io.icache.w.valid := false.B
+  b.ready := true.B
+  aw.bits := DontCare
+  aw.bits.len := 0.U
+  aw.bits.size := 2.U
+  aw.bits.burst := 1.U
+  aw.valid := false.B
+  w.bits := DontCare
+  w.bits.last := true.B
+  w.valid := false.B
 
   private val pc_reg = RegInit("h2000_0000".U(XLEN.W))
   private val inst_reg = RegInit(0.U(InstLen.W))
@@ -62,18 +64,18 @@ class IFU extends Module with HasCoreParameter {
 
   private val pcMisaligned = pc_reg(1, 0) =/= 0.U
 
-  io.icache.ar.valid := (state === State.ar_wait) && !pcMisaligned
-  io.icache.ar.bits.id := 0.U
-  io.icache.ar.bits.addr := pc_reg
-  io.icache.ar.bits.len := 0.U
-  io.icache.ar.bits.size := 2.U
-  io.icache.ar.bits.burst := 1.U
-  io.icache.ar.bits.lock := 0.U
-  io.icache.ar.bits.cache := 0.U
-  io.icache.ar.bits.prot := Cat(true.B, false.B, true.B)
-  io.icache.ar.bits.qos := 0.U
+  ar.valid := (state === State.ar_wait) && !pcMisaligned
+  ar.bits.id := 0.U
+  ar.bits.addr := pc_reg
+  ar.bits.len := 0.U
+  ar.bits.size := 2.U
+  ar.bits.burst := 1.U
+  ar.bits.lock := 0.U
+  ar.bits.cache := 0.U
+  ar.bits.prot := Cat(true.B, false.B, true.B)
+  ar.bits.qos := 0.U
 
-  io.icache.r.ready := (state === State.r_wait)
+  r.ready := (state === State.r_wait)
 
   io.out.valid := (state === State.allowin_wait)
   io.out.bits.inst := inst_reg
@@ -98,15 +100,15 @@ class IFU extends Module with HasCoreParameter {
       }
     }
     is(State.ar_wait) {
-      when(io.icache.ar.fire) {
+      when(ar.fire) {
         state := State.r_wait
       }
     }
     is(State.r_wait) {
-      when(io.icache.r.fire) {
+      when(r.fire) {
         state := State.allowin_wait
-        inst_reg := io.icache.r.bits.data
-        when(io.icache.r.bits.resp =/= AXI4Resp.OKAY) {
+        inst_reg := r.bits.data
+        when(r.bits.resp =/= AXI4Resp.OKAY) {
           exception_reg := IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT
           exceptionEn_reg := true.B
         }

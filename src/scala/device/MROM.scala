@@ -7,6 +7,7 @@ import freechips.rocketchip.amba.axi4._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
+import scopt.Read
 
 class MROMHelper extends BlackBox with HasBlackBoxInline {
   val io = IO(new Bundle {
@@ -44,31 +45,54 @@ class AXI4MROM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
     val (in, _) = node.in(0)
-
+    val (ar, r, aw, w, b) = (in.ar, in.r, in.aw, in.w, in.b)
     val mrom = Module(new MROMHelper)
 
-    val (stateIdle, stateWaitRready) = (0.U, 1.U)
-    val state = RegInit(stateIdle)
-    state := Mux(state === stateIdle,
-               Mux(in.ar.fire, stateWaitRready, stateIdle),
-               Mux(in. r.fire, stateIdle, stateWaitRready))
+// -- read state machine --------------------------------------
+    object ReadState extends ChiselEnum {
+      val idle, waitReady = Value
+    }
+    val read_state = RegInit(ReadState.idle)
+    read_state := Mux(read_state === ReadState.idle,
+               Mux(ar.fire, ReadState.waitReady, ReadState.idle),
+               Mux(r.fire, ReadState.idle, ReadState.waitReady))
+    mrom.io.raddr := ar.bits.addr
+    mrom.io.ren := ar.fire
+    ar.ready := (read_state === ReadState.idle)
+    r.bits.data := RegEnable(mrom.io.rdata, ar.fire)
+    r.bits.id := RegEnable(ar.bits.id, ar.fire)
+    r.bits.resp := 0.U
+    r.bits.last := true.B
+    r.valid := (read_state === ReadState.waitReady)
+// -- write state machine -------------------------------------
+    object WriteState extends ChiselEnum {
+      val idle, done = Value
+    }
 
-    mrom.io.raddr := in.ar.bits.addr
-    mrom.io.ren := in.ar.fire
-    in.ar.ready := (state === stateIdle)
-//    assert(!(in.ar.fire && in.ar.bits.size === 3.U), "do not support 8 byte transfter")
+    private val write_state = RegInit(WriteState.idle)
+    private val aw_received = RegInit(false.B)
+    private val w_received = RegInit(false.B)
 
-    in.r.bits.data := RegEnable(mrom.io.rdata, in.ar.fire)
-    in.r.bits.id := RegEnable(in.ar.bits.id, in.ar.fire)
-    in.r.bits.resp := 0.U
-    in.r.bits.last := true.B
-    in.r.valid := (state === stateWaitRready)
+    aw.ready := (write_state === WriteState.idle) && !aw_received
+    w.ready := (write_state === WriteState.idle) && !w_received
+    b.valid := (write_state === WriteState.done)
+    b.bits.resp := AXI4Parameters.RESP_DECERR
 
-    in.aw.ready := false.B
-    in. w.ready := false.B
-    in. b.valid := false.B
-
-    assert(!in.aw.valid, "do not support write operations")
-    assert(!in. w.valid, "do not support write operations")
+    switch(write_state) {
+      is(WriteState.idle) {
+        when(aw.fire) { aw_received := true.B }
+        when(w.fire) { w_received := true.B }
+        val aw_done = aw_received || aw.fire
+        val w_done = w_received || w.fire
+        when(aw_done && w_done) {
+          write_state := WriteState.done
+          aw_received := false.B
+          w_received := false.B
+        }
+      }
+      is(WriteState.done) {
+        when(b.fire) { write_state := WriteState.idle }
+      }
+    }
   }
 }
