@@ -27,6 +27,10 @@ extern bool in_sram(paddr_t addr);
 extern word_t sram_read(paddr_t addr, int len);
 extern void sram_write(paddr_t addr, int len, word_t data);
 
+// Flash 接口
+extern bool in_flash(paddr_t addr);
+extern void flash_read(int addr, int *data);
+
 static void out_of_bound(paddr_t addr) {
   panic("address = " FMT_PADDR " is out of bound at pc = " FMT_WORD,
         addr, cpu.pc);
@@ -43,6 +47,12 @@ word_t paddr_read(paddr_t addr, int len) {
     word_t mask = (len == 4) ? 0xFFFFFFFF : ((1u << (len * 8)) - 1);
     return (word_t)data & mask;
   }
+  if (in_flash(addr)) {
+    int data;
+    flash_read((int)addr, &data);
+    word_t mask = (len == 4) ? 0xFFFFFFFF : ((1u << (len * 8)) - 1);
+    return (word_t)data & mask;
+  }
   if (in_sram(addr)) {
     return sram_read(addr, len);
   }
@@ -53,6 +63,7 @@ word_t paddr_read(paddr_t addr, int len) {
 
 void paddr_write(paddr_t addr, int len, word_t data) {
   if (in_mrom(addr)) { mrom_write(addr, len, data); return; }
+  if (in_flash(addr)) { panic("Flash is read-only, cannot write to " FMT_PADDR, addr); return; }
   if (in_sram(addr)) { sram_write(addr, len, data); return; }
   IFDEF(CONFIG_DEVICE, mmio_write(addr, len, data); return);
   out_of_bound(addr);

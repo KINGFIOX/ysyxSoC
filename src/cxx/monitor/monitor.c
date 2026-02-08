@@ -22,7 +22,8 @@
 void init_rand();
 void init_log(const char *log_file);
 void init_mem();
-long init_mrom(const char *img_file);  // MROM 初始化并加载镜像
+long init_mrom(const char *img_file);
+void init_flash(const char *flash_file);
 void init_difftest(char *ref_so_file, long img_size, int port);
 void init_device();
 void init_sdb();
@@ -48,6 +49,7 @@ void sdb_set_batch_mode();
 static char *log_file = NULL;
 static char *diff_so_file = NULL;
 static char *img_file = NULL;
+static char *flash_file = NULL;
 static int difftest_port = 1234;
 
 
@@ -57,16 +59,18 @@ static int parse_args(int argc, char *argv[]) {
       {"log", required_argument, NULL, 'l'},
       {"diff", required_argument, NULL, 'd'},
       {"port", required_argument, NULL, 'p'},
+      {"flash", required_argument, NULL, 'f'},
       {"help", no_argument, NULL, 'h'},
       {0, 0, NULL, 0},
   };
   int o;
-  while ((o = getopt_long(argc, argv, "-bhl:d:p:", table, NULL)) != -1) {
+  while ((o = getopt_long(argc, argv, "-bhl:d:p:f:", table, NULL)) != -1) {
     switch (o) {
     case 'b': sdb_set_batch_mode(); break;
     case 'p': sscanf(optarg, "%d", &difftest_port); break;
     case 'l': log_file = optarg; break;
     case 'd': diff_so_file = optarg; break;
+    case 'f': flash_file = optarg; break;
     case 1: img_file = optarg; return 0;
     default:
       printf("Usage: %s [OPTION...] IMAGE [args]\n\n", argv[0]);
@@ -74,6 +78,7 @@ static int parse_args(int argc, char *argv[]) {
       printf("\t-l,--log=FILE           output log to FILE\n");
       printf("\t-d,--diff=REF_SO        run DiffTest with reference REF_SO\n");
       printf("\t-p,--port=PORT          run DiffTest with port PORT\n");
+      printf("\t-f,--flash=FILE         load flash content from FILE\n");
       printf("\n");
       exit(0);
     }
@@ -96,6 +101,9 @@ void init_monitor(int argc, char *argv[]) {
   /* Initialize MROM and load image (MROM 初始化即加载，符合只读语义) */
   /* 必须在 npc_core_init 之前加载，否则 NPC 会执行内置镜像 */
   long img_size = init_mrom(img_file);
+
+  /* Initialize Flash (从文件加载，通过内存映射访问) */
+  init_flash(flash_file);
 
   /* Initialize SRAM */
   init_mem();

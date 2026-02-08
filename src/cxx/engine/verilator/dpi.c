@@ -1,13 +1,6 @@
 #include "cpu/difftest.h"
 #include <cpu/cpu.h>
 
-// mrom_read 已在 memory/mrom.c 中定义，此处只需声明
-// DPI 接口直接使用 mrom_read
-
-void flash_read(int addr, int* data) {
-  assert(0);
-}
-
 void exception_dpi(int en, int pc, int mcause, int a0, int tval) {
   if (!en) return;
   IFDEF(CONFIG_DIFFTEST, ref_difftest_raise_intr(a0, tval));
