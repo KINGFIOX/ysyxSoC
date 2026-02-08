@@ -26,6 +26,9 @@ $(APP).bin: $(APP).elf $(APP).txt
 run: $(APP).bin
 	$(MAKE) -C $(NPC_HOME) run IMG=$(CURDIR)/$(APP).bin
 
-.PHONY: clean run
+gdb: $(APP).bin
+	$(MAKE) -C $(NPC_HOME) gdb IMG=$(CURDIR)/$(APP).bin
+
+.PHONY: clean run gdb
 clean:
 	rm -f $(APP).elf $(APP).bin $(APP).txt

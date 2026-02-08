@@ -18,9 +18,13 @@ extern "C" {
 #include <isa.h>
 #include <memory/paddr.h>
 #include "../isa/riscv32/local-include/reg.h"
+
+// SRAM 初始化接口
+void init_sram(uint8_t *verilator_sram_ptr);
 }
 
 #include "VNPCSoC.h"
+#include "VNPCSoC___024root.h"  // 访问内部 Verilator 结构（包括 SRAM 内存）
 #include <verilated.h>
 
 #ifdef CONFIG_VERILATOR_TRACE
@@ -84,6 +88,14 @@ extern "C" bool npc_core_init(int argc, char *argv[]) {
 #endif
 
   reset(); // 执行复位
+
+  // 初始化 SRAM 访问指针（指向 Verilator 中 AXI4RAM 的内存数组）
+  // 路径由 Verilator 根据模块层次生成，如果 SoC 结构变化需要更新
+  // 可通过 grep "axi4ram.*Memory" build/obj-verilator/VNPCSoC___024root.h 查找正确路径
+#define VERILATOR_SRAM_MEMORY top->rootp->NPCSoC__DOT__dut__DOT__asic__DOT__axi4ram__DOT__mem_ext__DOT__Memory
+
+  init_sram(reinterpret_cast<uint8_t*>(VERILATOR_SRAM_MEMORY.data()));
+
   Log("Verilator core initialized, reset complete");
   return true;
 }
