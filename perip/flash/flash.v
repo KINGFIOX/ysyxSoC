@@ -5,7 +5,7 @@
 
 module flash (
   input  sck,
-  input  ss,
+  input  ss, // 高电平触发
   input  mosi,
   output miso
 );
@@ -47,6 +47,7 @@ module flash (
     end
   end
 
+  // 状态转移表
   always@(posedge sck or posedge reset) begin
     if (reset) counter <= 8'd0;
     else begin
@@ -58,11 +59,13 @@ module flash (
     end
   end
 
+  // receive command
   always@(posedge sck or posedge reset) begin
     if (reset)               cmd <= 8'd0;
     else if (state == cmd_t) cmd <= { cmd[6:0], mosi };
   end
 
+  // receive address
   always@(posedge sck or posedge reset) begin
     if (reset) addr <= 24'd0;
     else if (state == addr_t && counter < 8'd23)

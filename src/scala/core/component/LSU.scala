@@ -63,8 +63,8 @@ class LSU extends Module with HasCoreParameter {
   private val addrAlign2 = addr(0) === 0.U
   private val addrAlign4 = addr(1, 0) === 0.U
 
-  // 判断是否需要窄传输（UART等设备需要使用实际的size而非4字节对齐传输）
-  private val isNarrowDevice = (addr >= SoCConfig.uartBase.U) && (addr < (SoCConfig.uartBase + SoCConfig.uartSize).U)
+  private val isNarrowDevice = (SoCConfig.uartBase.U <= addr ) && (addr < (SoCConfig.uartBase + SoCConfig.uartSize).U) ||
+    (SoCConfig.spiCtrlBase.U <= addr ) && (addr < (SoCConfig.spiCtrlBase + SoCConfig.spiCtrlSize).U)
 
   private val loadMisaligned = MuxLookup(io.in.bits.op.asUInt, false.B)(Seq(
     MemUOpType.mem_LH.asUInt  -> !addrAlign2,
