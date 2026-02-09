@@ -1,6 +1,6 @@
 // define this macro to enable fast behavior simulation
 // for flash by skipping SPI transfers
-// `define FAST_FLASH
+//`define FAST_FLASH
 
 module spi_top_apb #(
     parameter flash_addr_start = 32'h30000000,
@@ -34,8 +34,8 @@ module spi_top_apb #(
   flash_cmd flash_cmd_i (
       .clock(clock),
       .valid(in_psel && !in_penable),
-      .cmd  (in_pwrite ? invalid_cmd : 8'h03), // 其实只支持 8'h03
-      .addr ({8'b0, in_paddr[23:2], 2'b0}), // 地址对齐到 4byte
+      .cmd  (in_pwrite ? invalid_cmd : 8'h03),
+      .addr ({8'b0, in_paddr[23:2], 2'b0}),
       .data (data)
   );
   assign spi_sck     = 1'b0;
