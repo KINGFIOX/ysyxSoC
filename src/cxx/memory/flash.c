@@ -73,6 +73,7 @@ void flash_read(int addr, int *data) {
 
   /* Combine bytes in little-endian order */
   *data = (int)(buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24));
+  // Log("Reading at %x, content: %c %c %c %c", addr, buf[0], buf[1], buf[2], buf[3]);
 }
 
 /* Check if address is in flash range */

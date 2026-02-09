@@ -48,6 +48,6 @@ class bitrev extends RawModule {
     }
     io.miso := data(0)
   }
-  io.miso := module.io.miso
+  io.miso := Mux(io.ss.asBool, true.B, module.io.miso)
   module.io.mosi := io.mosi
 }
