@@ -46,15 +46,17 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val (ar, r, aw, w, b) = (in.ar, in.r, in.aw, in.w, in.b)
 
-      val s_idle :: s_inflight :: s_wait_rready_bready :: Nil = Enum(3)
-      val state = RegInit(s_idle)
-      val accept_read = (state === s_idle) && ar.valid
-      val accept_write = !accept_read && (state === s_idle) && aw.valid && w.valid
-      val is_write = accept_write holdUnless (state === s_idle)
+      object State extends ChiselEnum {
+        val idle, inflight, wait_rready_bready = Value
+      }
+      val state = RegInit(State.idle)
+      val accept_read = (state === State.idle) && ar.valid
+      val accept_write = !accept_read && (state === State.idle) && aw.valid && w.valid
+      val is_write = accept_write holdUnless (state === State.idle)
       switch (state) {
-        is (s_idle)     { state := Mux(ar.valid || (aw.valid && w.valid), s_inflight, s_idle) }
-        is (s_inflight) { state := Mux(out.pready, Mux(r.fire || b.fire, s_idle, s_wait_rready_bready), s_inflight) }
-        is (s_wait_rready_bready) { state := Mux(r.fire || b.fire, s_idle, s_wait_rready_bready) }
+        is (State.idle)     { state := Mux(ar.valid || (aw.valid && w.valid), State.inflight, State.idle) }
+        is (State.inflight) { state := Mux(out.pready, Mux(r.fire || b.fire, State.idle, State.wait_rready_bready), State.inflight) }
+        is (State.wait_rready_bready) { state := Mux(r.fire || b.fire, State.idle, State.wait_rready_bready) }
       }
 
       // burst is not supported
@@ -72,7 +74,7 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
       val wstrb_reg  =  w.bits.strb holdUnless accept_write
 
       out.psel    := (accept_read || accept_write) || out.penable
-      out.penable := state === s_inflight
+      out.penable := state === State.inflight
       out.pwrite  := is_write
       out.paddr   := Mux(is_write, awaddr_reg, araddr_reg)
       out.pprot   := APBParameters.PROT_DEFAULT
@@ -84,14 +86,14 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
       aw.ready := accept_write
 
       val resp = Mux(out.pslverr, AXI4Parameters.RESP_SLVERR, AXI4Parameters.RESP_OKAY)
-      val resp_hold = resp holdUnless (state === s_inflight)
-      r.valid  := !is_write && (((state === s_inflight) && out.pready) || (state === s_wait_rready_bready))
-      r.bits.data := Fill(2, out.prdata holdUnless (state === s_inflight))
+      val resp_hold = resp holdUnless (state === State.inflight)
+      r.valid  := !is_write && (((state === State.inflight) && out.pready) || (state === State.wait_rready_bready))
+      r.bits.data := Fill(2, out.prdata holdUnless (state === State.inflight))
       r.bits.id   := rid_reg
       r.bits.resp := resp_hold
       r.bits.last := true.B
 
-      b.valid  := is_write && (((state === s_inflight) && out.pready) || (state === s_wait_rready_bready))
+      b.valid  := is_write && (((state === State.inflight) && out.pready) || (state === State.wait_rready_bready))
       b.bits.resp := resp_hold
       b.bits.id   := bid_reg
     }
