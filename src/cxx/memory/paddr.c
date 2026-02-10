@@ -17,11 +17,6 @@
 #include <isa.h>
 #include <memory/paddr.h>
 
-// MROM 接口
-extern bool in_mrom(paddr_t addr);
-extern void mrom_read(int addr, int *data);
-extern void mrom_write(paddr_t addr, int len, word_t data);
-
 // SRAM 接口（直接访问 Verilator 中的 AXI4RAM 内存）
 extern bool in_sram(paddr_t addr);
 extern word_t sram_read(paddr_t addr, int len);
@@ -37,19 +32,13 @@ static void out_of_bound(paddr_t addr) {
 }
 
 void init_mem() {
-  // MROM 在 monitor.c 中通过 init_mrom(img_file) 初始化
+  // Flash 在 monitor.c 中通过 init_flash(img_file) 初始化
 }
 
 word_t paddr_read(paddr_t addr, int len) {
-  if (in_mrom(addr)) {
-    int data;
-    mrom_read((int)addr, &data);
-    word_t mask = (len == 4) ? 0xFFFFFFFF : ((1u << (len * 8)) - 1);
-    return (word_t)data & mask;
-  }
   if (in_flash(addr)) {
     int data;
-    flash_read((int)addr, &data);
+    flash_read((int)(addr - FLASH_LEFT), &data);
     word_t mask = (len == 4) ? 0xFFFFFFFF : ((1u << (len * 8)) - 1);
     return (word_t)data & mask;
   }
@@ -62,8 +51,7 @@ word_t paddr_read(paddr_t addr, int len) {
 }
 
 void paddr_write(paddr_t addr, int len, word_t data) {
-  if (in_mrom(addr)) { mrom_write(addr, len, data); return; }
-  if (in_flash(addr)) { panic("Flash is read-only, cannot write to " FMT_PADDR, addr); return; }
+  if (in_flash(addr)) { panic("Flash is read-only, cannot write to address " FMT_PADDR, addr); }
   if (in_sram(addr)) { sram_write(addr, len, data); return; }
   IFDEF(CONFIG_DEVICE, mmio_write(addr, len, data); return);
   out_of_bound(addr);

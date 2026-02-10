@@ -63,9 +63,8 @@ static void tick() {
 #endif
 }
 
-static void reset(int cycles = 5) {
+static void reset(int cycles = 15) {
   top->reset = 1;
-  top->io_step = 0; // 拉低 step 信号
   for (int i = 0; i < cycles; i++) { tick(); }
   top->reset = 0;
 }
@@ -184,17 +183,6 @@ static void sync_csr_to_cpu() {
   cpu.csr[MVENDORID] = top->io_debug_csr_mvendorid;
   cpu.csr[MARCHID] = top->io_debug_csr_marchid;
 }
-
-// extern "C" bool npc_core_step(Decode *s) {
-//   top->io_step = 1; top->eval(); // 拉高 step 信号
-//   read_debug_to_decode(s); // 组合逻辑的求值
-//   cpu.pc = s->dnpc; //
-//   tick(); // 更新寄存器
-//   sync_gpr_to_cpu(); // 读出写入后的寄存器
-//   sync_csr_to_cpu(); // 读出写入后的 CSR
-//   top->io_step = 0; top->eval(); // 拉低 step 信号
-//   return true;
-// }
 
 extern "C" bool npc_core_step(Decode *s) {
   top->io_step = 1;

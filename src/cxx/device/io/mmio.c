@@ -44,9 +44,9 @@ void add_mmio_map(const char *name, paddr_t addr, void *space, uint32_t len,
   assert(nr_map < NR_MAP);                     // 表有限
   paddr_t left = addr, right = addr + len - 1; // 左闭 右闭
 
-  extern bool in_mrom(paddr_t addr); // mrom
-  if (in_mrom(left) || in_mrom(right)) {
-    report_mmio_overlap(name, left, right, "mrom", MROM_LEFT, MROM_RIGHT);
+  extern bool in_flash(paddr_t addr); // flash
+  if (in_flash(left) || in_flash(right)) {
+    report_mmio_overlap(name, left, right, "flash", FLASH_LEFT, FLASH_RIGHT);
   }
   for (int i = 0; i < nr_map; i++) { // 不该重映射了
     if (left <= maps[i].high &&

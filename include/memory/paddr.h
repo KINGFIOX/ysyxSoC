@@ -18,16 +18,16 @@
 
 #include <common.h>
 
-// MROM 地址范围
-#define MROM_LEFT  ((paddr_t)CONFIG_SOC_MROM_BASE) /*0x2000_0000*/
-#define MROM_RIGHT ((paddr_t)CONFIG_SOC_MROM_BASE + CONFIG_SOC_MROM_SIZE - 1)
+// Flash 地址范围
+#define FLASH_LEFT  ((paddr_t)CONFIG_SOC_XIP_FLASH_BASE) /*0x3000_0000*/
+#define FLASH_RIGHT ((paddr_t)CONFIG_SOC_XIP_FLASH_BASE + CONFIG_SOC_XIP_FLASH_SIZE - 1)
 
 // SRAM 地址范围
 #define SRAM_LEFT  ((paddr_t)CONFIG_SOC_SRAM_BASE)
 #define SRAM_RIGHT ((paddr_t)CONFIG_SOC_SRAM_BASE + CONFIG_SOC_SRAM_SIZE - 1)
 
-// 复位向量：从 MROM 开始
-#define RESET_VECTOR (MROM_LEFT)
+// 复位向量（从 Kconfig 配置）
+#define RESET_VECTOR ((paddr_t)CONFIG_SOC_RESET_VECTOR)
 
 word_t paddr_read(paddr_t addr, int len);
 void paddr_write(paddr_t addr, int len, word_t data);

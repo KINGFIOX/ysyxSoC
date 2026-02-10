@@ -30,23 +30,17 @@ class flash extends BlackBox {
   val io = IO(Flipped(new SPIIO(1)))
 }
 
-class APBSPI(address: Seq[AddressSet])(implicit p: Parameters)
-    extends LazyModule {
-  val spiNode = APBSlaveNode(
-    Seq(
-      APBSlavePortParameters(
-        Seq(
+class APBSPI(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
+  val spiNode = APBSlaveNode( Seq(
+      APBSlavePortParameters( Seq(
           APBSlaveParameters(
             address = address,
             executable = true,
             supportsRead = true,
             supportsWrite = true
-          )
-        ),
+          ) ),
         beatBytes = 4
-      )
-    )
-  )
+      ) ) )
 
   val xipBridge = LazyModule(new APBXIPBridge)
   spiNode := xipBridge.node
@@ -143,11 +137,12 @@ class APBXIPBridge(implicit p: Parameters) extends LazyModule {
             when(in.pwrite) {
               // XIP write not supported, return error
               state := State.XIPWriteError
-              assert(false, "XIP write not supported")
+              assert(false.B, "XIP write not supported")
             }.otherwise {
               // XIP read
               flashAddr := in.paddr(23, 0)
               state := State.SS_Setup
+              // printf("[XIP] Capture: in.paddr=0x%x, flashAddr=0x%x\n", in.paddr, in.paddr(23, 0))
             }
           }
         }
@@ -188,6 +183,7 @@ class APBXIPBridge(implicit p: Parameters) extends LazyModule {
           out.pwdata := tx1Val
           out.pstrb := "hf".U
           state := State.TX1_Access
+          // printf("[XIP] TX1_Setup: flashAddr=0x%x, tx1Val=0x%x\n", flashAddr, tx1Val)
         }
         is(State.TX1_Access) {
           out.psel := true.B

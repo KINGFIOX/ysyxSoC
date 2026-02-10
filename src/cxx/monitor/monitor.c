@@ -13,6 +13,7 @@
  * See the Mulan PSL v2 for more details.
  ***************************************************************************************/
 
+#include "cpu/difftest.h"
 #include "debug.h"
 #include <ftrace.h>
 #include <isa.h>
@@ -22,8 +23,7 @@
 void init_rand();
 void init_log(const char *log_file);
 void init_mem();
-long init_mrom(const char *img_file);
-void init_flash(const char *flash_file);
+long init_flash(const char *img_file);
 void init_difftest(char *ref_so_file, long img_size, int port);
 void init_device();
 void init_sdb();
@@ -49,7 +49,6 @@ void sdb_set_batch_mode();
 static char *log_file = NULL;
 static char *diff_so_file = NULL;
 static char *img_file = NULL;
-static char *flash_file = NULL;
 static int difftest_port = 1234;
 
 
@@ -70,7 +69,6 @@ static int parse_args(int argc, char *argv[]) {
     case 'p': sscanf(optarg, "%d", &difftest_port); break;
     case 'l': log_file = optarg; break;
     case 'd': diff_so_file = optarg; break;
-    case 'f': flash_file = optarg; break;
     case 1: img_file = optarg; return 0;
     default:
       printf("Usage: %s [OPTION...] IMAGE [args]\n\n", argv[0]);
@@ -98,12 +96,10 @@ void init_monitor(int argc, char *argv[]) {
   /* Open the log file. */
   init_log(log_file);
 
-  /* Initialize MROM and load image (MROM 初始化即加载，符合只读语义) */
+  /* Initialize Flash and load image (替代原来的 MROM) */
   /* 必须在 npc_core_init 之前加载，否则 NPC 会执行内置镜像 */
-  long img_size = init_mrom(img_file);
-
-  /* Initialize Flash (从文件加载，通过内存映射访问) */
-  init_flash(flash_file);
+  const char *image_file = img_file;
+  long img_size = init_flash(image_file);
 
   /* Initialize SRAM */
   init_mem();
@@ -119,7 +115,7 @@ void init_monitor(int argc, char *argv[]) {
   npc_core_init(argc, argv);
 
   /* Initialize function tracer. */
-  IFDEF(CONFIG_FTRACE, init_ftrace(img_file));
+  IFDEF(CONFIG_FTRACE, init_ftrace(image_file));
 
   /* Initialize differential testing. */
   init_difftest(diff_so_file, img_size, difftest_port);

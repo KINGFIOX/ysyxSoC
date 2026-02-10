@@ -80,8 +80,8 @@ static state_t *state = NULL;
 void sim_t::diff_init(int port) {
   p = get_core("0");
   state = p->get_state();
-  // 设置初始 PC 为 MROM 起始地址
-  state->pc = CONFIG_SOC_MROM_BASE;
+  // 设置初始 PC 为复位向量地址
+  state->pc = CONFIG_SOC_RESET_VECTOR;
 }
 
 void sim_t::diff_step(uint64_t n) {

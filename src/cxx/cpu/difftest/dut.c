@@ -87,8 +87,8 @@ void init_difftest(char *ref_so_file, long img_size, int port) {
       "If it is not necessary, you can turn it off in menuconfig.", ref_so_file);
 
   ref_difftest_init(port);
-  extern uint8_t *get_mrom_ptr(void);
-  ref_difftest_memcpy(RESET_VECTOR, get_mrom_ptr(), img_size, DIFFTEST_TO_REF);
+  extern uint8_t *get_flash_ptr(void);
+  ref_difftest_memcpy(RESET_VECTOR, get_flash_ptr(), img_size, DIFFTEST_TO_REF);
   ref_difftest_regcpy(&cpu, DIFFTEST_TO_REF);
 }
 
@@ -96,8 +96,8 @@ void init_difftest(char *ref_so_file, long img_size, int port) {
 /// @return false: 不一致
 static bool checkregs(const CPU_state *ref, vaddr_t pc) {
   if (!isa_difftest_checkregs(ref, pc)) {
-    npc_state.state = NPC_ABORT;
-    // npc_state.state = NPC_STOP;
+    // npc_state.state = NPC_ABORT;
+    npc_state.state = NPC_STOP;
     npc_state.halt_pc = pc;
     return false;
   }

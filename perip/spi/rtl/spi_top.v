@@ -272,4 +272,3 @@ module spi_top (
       .s_out(mosi_pad_o)
   );
 endmodule
-

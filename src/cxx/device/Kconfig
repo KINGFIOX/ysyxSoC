@@ -4,6 +4,10 @@
 
 menu "SoC Address Map"
 
+config SOC_RESET_VECTOR
+  hex "CPU reset vector address"
+  default 0x30000000
+
 config SOC_UART_BASE
   hex "UART base address"
   default 0x10000000
