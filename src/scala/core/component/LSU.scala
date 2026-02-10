@@ -6,6 +6,7 @@ import ysyx.core.common.HasCoreParameter
 import freechips.rocketchip.amba.axi4._
 import ysyx.CPUAXI4BundleParameters
 import ysyx.SoCConfig
+import ysyx.core.dpi.DifftestSkipRef
 
 object MemUOpType extends ChiselEnum {
   val mem_LB, mem_LH, mem_LW, mem_LBU, mem_LHU, mem_SB, mem_SH, mem_SW = Value
@@ -392,11 +393,17 @@ class LSU extends Module with HasCoreParameter {
   private val exceptionEn_reg = RegInit(false.B)
   private val addr_reg        = RegInit(0.U(XLEN.W))
 
+  // Register to track if current operation is MMIO (for difftest skip)
+  // 暂且认为: 所有的窄设备都是 MMIO 设备
+  private val isMMIO_reg = RegInit(false.B)
+
   switch(state) {
     is(State.idle) {
       exceptionEn_reg := false.B // reset status
+      isMMIO_reg      := false.B
       when(io.in.fire && io.in.bits.en) {
-        addr_reg := io.in.bits.addr
+        addr_reg   := io.in.bits.addr
+        isMMIO_reg := isNarrowDevice // latch MMIO status for difftest skip
         when(isLoad) {
           when(loadMisaligned) {
             exception_reg   := MemUExceptionType.mem_LOAD_ADDRESS_MISALIGNED
@@ -473,4 +480,9 @@ class LSU extends Module with HasCoreParameter {
     isWriteDone -> writePort.io.exceptionEn
   ))
   io.out.bits.xtval       := addr_reg
+
+  // ---------- Difftest Skip for MMIO Access ----------
+  // Skip difftest reference when MMIO read/write completes,
+  // since reference (e.g., Spike) doesn't have these peripherals
+  DifftestSkipRef(io.out.fire && isMMIO_reg)
 }
