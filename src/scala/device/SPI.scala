@@ -26,9 +26,6 @@ class spi_top_apb extends BlackBox {
   })
 }
 
-class flash extends BlackBox {
-  val io = IO(Flipped(new SPIIO(1)))
-}
 
 class APBSPI(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
   val spiNode = APBSlaveNode( Seq(
