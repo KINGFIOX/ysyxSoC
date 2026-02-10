@@ -146,7 +146,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     bitrev.io.ss := masic.spi.ss(7)
     masic.spi.miso := List(bitrev.io, flash.io).map(_.miso).reduce(_ && _)
 
-    val psram = Module(new psramChisel)
+    val psram = Module(new psram)
     psram.io <> masic.psram
     val sdram = Module(new sdram)
     sdram.io <> masic.sdram

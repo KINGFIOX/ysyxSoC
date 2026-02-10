@@ -26,6 +26,10 @@
 #define SRAM_LEFT  ((paddr_t)CONFIG_SOC_SRAM_BASE)
 #define SRAM_RIGHT ((paddr_t)CONFIG_SOC_SRAM_BASE + CONFIG_SOC_SRAM_SIZE - 1)
 
+// PSRAM 地址范围
+#define PSRAM_LEFT  ((paddr_t)CONFIG_SOC_PSRAM_BASE)
+#define PSRAM_RIGHT ((paddr_t)CONFIG_SOC_PSRAM_BASE + CONFIG_SOC_PSRAM_SIZE - 1)
+
 // 复位向量（从 Kconfig 配置）
 #define RESET_VECTOR ((paddr_t)CONFIG_SOC_RESET_VECTOR)
 

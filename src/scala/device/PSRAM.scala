@@ -24,13 +24,35 @@ class psram_top_apb extends BlackBox {
   })
 }
 
-class psram extends BlackBox {
-  val io = IO(Flipped(new QSPIIO))
+class psram_cmd extends BlackBox {
+  val io = IO(new Bundle {
+    val clock = Input(Clock())
+    val valid = Input(Bool())
+    val cmd = Input(UInt(8.W))
+    val addr = Input(UInt(32.W))
+    val wdata = Input(UInt(32.W))
+    val rdata = Output(UInt(32.W))
+  })
 }
 
-class psramChisel extends RawModule {
+// eb: write (1, 4, 4)
+// 38: read (1, 4, 4)
+class psram extends RawModule {
   val io = IO(Flipped(new QSPIIO))
-  val di = TriStateInBuf(io.dio, 0.U, false.B) // change this if you need
+  val reset = io.ce_n.asAsyncReset
+  val clock = io.sck.asClock
+  val module = withClockAndReset(clock, reset) { Module(new Impl) }
+  module.io.mosi := TriStateInBuf(io.dio, module.io.miso, module.io.mosiEn)
+  class Impl extends Module with RequireAsyncReset {
+    val io = IO(new Bundle{
+      val miso = Output(UInt(4.W))
+      val mosi = Input(UInt(4.W))
+      val mosiEn = Output(Bool())
+    })
+    // TODO:
+    io.miso := 0.U
+    io.mosiEn := false.B
+  }
 }
 
 class APBPSRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {

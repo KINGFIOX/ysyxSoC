@@ -45,9 +45,11 @@ void add_mmio_map(const char *name, paddr_t addr, void *space, uint32_t len,
   paddr_t left = addr, right = addr + len - 1; // 左闭 右闭
 
   extern bool in_flash(paddr_t addr); // flash
-  if (in_flash(left) || in_flash(right)) {
-    report_mmio_overlap(name, left, right, "flash", FLASH_LEFT, FLASH_RIGHT);
-  }
+  if (in_flash(left) || in_flash(right)) { report_mmio_overlap(name, left, right, "flash", FLASH_LEFT, FLASH_RIGHT); }
+  extern bool in_sram(paddr_t addr); // sram
+  if (in_sram(left) || in_sram(right)) { report_mmio_overlap(name, left, right, "sram", SRAM_LEFT, SRAM_RIGHT); }
+  extern bool in_psram(paddr_t addr); // psram
+  if (in_psram(left) || in_psram(right)) { report_mmio_overlap(name, left, right, "psram", PSRAM_LEFT, PSRAM_RIGHT); }
   for (int i = 0; i < nr_map; i++) { // 不该重映射了
     if (left <= maps[i].high &&
         right >= maps[i].low) { // maps[i].low <= left <= right <= maps[i].high
