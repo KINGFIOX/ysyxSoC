@@ -73,17 +73,17 @@ long init_flash(const char *img_file) {
  */
 void flash_read(int addr, int *data) {
   if (flash_mem == NULL) {
-    *data = 0xFFFFFFFF;
+    *data = 0;
     return;
   }
   /* Check bounds */
   if (addr < 0 || addr >= FLASH_SIZE) {
     Log("Warning: Flash read out of bounds at offset 0x%08x", addr);
-    *data = 0xFFFFFFFF;
+    *data = 0;
     return;
   }
 
-  uint8_t buf[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+  uint8_t buf[4] = { };
   for (int i = 0; i < 4 && (addr + i) < flash_loaded_size; i++) {
     buf[i] = flash_mem[addr + i];
   }
