@@ -24,7 +24,7 @@ extern void sram_write(paddr_t addr, int len, word_t data);
 
 // Flash 接口
 extern bool in_flash(paddr_t addr);
-extern void flash_read(int addr, int *data);
+extern void flash_read(int addr, char *data);
 
 // PSRAM 接口
 extern bool in_psram(paddr_t addr);
@@ -42,10 +42,13 @@ void init_mem() {
 
 word_t paddr_read(paddr_t addr, int len) {
   if (in_flash(addr)) {
-    int data;
-    flash_read((int)(addr - FLASH_LEFT), &data);
-    word_t mask = (len == 4) ? 0xFFFFFFFF : ((1u << (len * 8)) - 1);
-    return (word_t)data & mask;
+    word_t result = 0;
+    for (int i = 0; i < len; i++) {
+      char byte;
+      flash_read((int)(addr - FLASH_LEFT + i), &byte);
+      result |= ((word_t)(uint8_t)byte) << (i * 8);  // 小端序
+    }
+    return result;
   }
   if (in_psram(addr)) {
     word_t result = 0;

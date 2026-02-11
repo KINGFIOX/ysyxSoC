@@ -69,9 +69,10 @@ long init_flash(const char *img_file) {
 }
 
 /**
- * @param addr: addr starts from 0, aligned to 4bytes (offset within flash)
+ * @param addr: byte address (offset within flash)
+ * @param data: output 1 byte
  */
-void flash_read(int addr, int *data) {
+void flash_read(int addr, char *data) {
   if (flash_mem == NULL) {
     *data = 0;
     return;
@@ -82,15 +83,7 @@ void flash_read(int addr, int *data) {
     *data = 0;
     return;
   }
-
-  uint8_t buf[4] = { };
-  for (int i = 0; i < 4 && (addr + i) < flash_loaded_size; i++) {
-    buf[i] = flash_mem[addr + i];
-  }
-
-  /* Combine bytes in little-endian order */
-  *data = (int)(buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24));
-  // Log("flash_read(addr=0x%08x) -> data=0x%08x", addr, *data);
+  *data = (addr < flash_loaded_size) ? flash_mem[addr] : 0;
 }
 
 /* Check if address is in flash range */

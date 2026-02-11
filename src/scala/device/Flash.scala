@@ -13,7 +13,7 @@ class flash_cmd extends BlackBox {
   })
 }
 
-// Flash 不用考虑 “窄传输” 问题, 因为指令都是 4Byte 的
+// 考虑了 “窄传输” 的 Flash
 // SPI:
 // 1. 地址: 大端字节序 大端位序
 // 2. 数据: 字节序随ISA(小端) 大端位序
@@ -33,17 +33,15 @@ class flash extends RawModule {
     val state = RegInit(State.cmd)
     val counter = RegInit(0.U(5.W))
     val cmd = RegInit(0.U(8.W))
-    val addr = RegInit(0.U(32.W)); val next_addr = Cat( 0.U(8.W), addr(22, 0), io.mosi )
-    val ren = WireDefault(false.B)
+    val addr = RegInit(0.U(24.W))
     val u0_flash_cmd = Module(new flash_cmd)
     u0_flash_cmd.io.clock := this.clock
-    u0_flash_cmd.io.valid := ren
-    u0_flash_cmd.io.addr := next_addr
+    u0_flash_cmd.io.valid := false.B
+    u0_flash_cmd.io.addr := addr
     u0_flash_cmd.io.cmd := cmd
     val rdata = u0_flash_cmd.io.data
-    val data_bswap = Cat( rdata(7, 0), rdata(15, 8), rdata(23, 16), rdata(31, 24) )
-    val data = RegInit(0.U(32.W))
-    io.miso := data(31)
+    val data = RegInit(0.U(8.W))
+    io.miso := true.B
     switch(state) {
       is(State.cmd) {
         counter := counter + 1.U
@@ -55,20 +53,28 @@ class flash extends RawModule {
       }
       is(State.addr) {
         counter := counter + 1.U
+        val next_addr = Cat( addr(22, 0), io.mosi )
         addr := next_addr
         when(counter === 23.U) {
-          counter := 0.U // suppress increment
-          ren := true.B
+          counter := 0.U
+          u0_flash_cmd.io.valid := true.B
+          u0_flash_cmd.io.addr := next_addr
           state := State.data
         }
       }
       is(State.data) {
         counter := counter + 1.U
+        data := Cat( data(6, 0), false.B )
+        io.miso := data(7)
         when(counter === 0.U) {
-          io.miso := data_bswap(31)
-          data := Cat( data_bswap(30, 0), false.B )
-        } .otherwise {
-          data := Cat( data(30, 0), false.B )
+          io.miso := rdata(7)
+          data := Cat( rdata(6, 0), false.B )
+        } .elsewhen( counter === 7.U ) {
+          val next_addr = addr + 1.U
+          addr := next_addr
+          u0_flash_cmd.io.valid := true.B
+          u0_flash_cmd.io.addr := next_addr
+          counter := 0.U // reset
         }
       }
     }
