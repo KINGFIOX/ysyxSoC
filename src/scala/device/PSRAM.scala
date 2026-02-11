@@ -40,9 +40,12 @@ class psram_cmd extends BlackBox {
 class psram extends RawModule {
   val io = IO(Flipped(new QSPIIO))
   val reset = io.ce_n.asAsyncReset
-  val clock = io.sck.asClock
-  val module = withClockAndReset(clock, reset) { Module(new Impl) }
-  module.io.mosi := TriStateInBuf(io.dio, module.io.miso, module.io.misoEn)
+  val sckRise = io.sck.asClock
+  val sckFall = (!io.sck).asClock
+  val module = withClockAndReset(sckRise, reset) { Module(new Impl) }
+  val misoOut = withClockAndReset(sckFall, reset) { RegNext(module.io.miso) }
+  val misoEnOut = withClockAndReset(sckFall, reset) { RegNext(module.io.misoEn) }
+  module.io.mosi := TriStateInBuf(io.dio, misoOut, misoEnOut)
   class Impl extends Module with RequireAsyncReset {
     val io = IO(new Bundle{
       val miso = Output(UInt(4.W))
