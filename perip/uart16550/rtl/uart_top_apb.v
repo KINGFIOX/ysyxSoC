@@ -15,7 +15,6 @@ module uart_top_apb (
     , output wire        uart_tx     // serial input
 );
   //--------------------------------------------------
-  wire       rtsn;
   wire       ctsn = 1'b0;
   wire       dtr_pad_o;
   wire       dsr_pad_i = 1'b0;
@@ -23,20 +22,16 @@ module uart_top_apb (
   wire       dcd_pad_i = 1'b0;
   wire       interrupt;
   //--------------------------------------------------------
-  wire       reg_we;  // Write enable for registers
-  wire       reg_re;  // Read enable for registers
-  reg  [1:0] byte_offset;  // 根据 pstrb 恢复的字节偏移
-  wire [2:0] reg_adr;
-  reg  [7:0] reg_dat8_w;  // write to reg
+  reg  [1:0] byte_offset; // FIXME: this should be wire, not reg,
+  // however, it can not be compiled with verilator. `wire assigned with always-procedure`
+  reg  [7:0] reg_dat8_w; // write to reg
   reg  [7:0] reg_dat8_w_reg;
-  wire [7:0] reg_dat8_r;  // read from reg
-  wire       rts_internal;
-  assign rtsn       = ~rts_internal;
+  wire [7:0] reg_dat8_r; // read from reg
   //--------------------------------------------------------
   assign in_pready  = in_psel && in_penable;
   assign in_pslverr = 1'b0;
-  assign reg_we     = ~reset & in_psel & ~in_penable & in_pwrite;
-  assign reg_re     = ~reset & in_psel & ~in_penable & ~in_pwrite;
+  wire reg_we     = ~reset & in_psel & ~in_penable & in_pwrite;
+  wire reg_re     = ~reset & in_psel & ~in_penable & ~in_pwrite;
   assign in_prdata  = (in_psel) ? {4{reg_dat8_r}} : 'h0;
   // 由于地址4字节对齐，in_paddr[1:0] 始终是 0，需要根据 pstrb 恢复原始偏移
   // 同时根据 pstrb 选择正确的字节（数据已移位到正确位置）
@@ -51,7 +46,7 @@ module uart_top_apb (
   end
   // 写操作：地址4字节对齐，需要根据 pstrb 恢复偏移
   // 读操作：地址不需要对齐，直接使用原始地址
-  assign reg_adr = in_pwrite ? {in_paddr[2], byte_offset} : in_paddr[2:0];
+  wire [2:0] reg_adr = in_pwrite ? {in_paddr[2], byte_offset} : in_paddr[2:0];
   always @(posedge clock) begin
     reg_dat8_w_reg <= reg_dat8_w;
   end
@@ -83,7 +78,7 @@ module uart_top_apb (
       .modem_inputs({~ctsn, dsr_pad_i, ri_pad_i, dcd_pad_i}),
       .stx_pad_o   (uart_tx),
       .srx_pad_i   (uart_rx),
-      .rts_pad_o   (rts_internal),
+      .rts_pad_o   ( ),
       .dtr_pad_o   (dtr_pad_o),
       .int_o       (interrupt)
   );

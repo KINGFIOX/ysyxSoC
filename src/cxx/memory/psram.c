@@ -33,7 +33,7 @@ void psram_read(int addr, char *data) {
     return;
   }
   char byte = psram_mem[addr];
-  Log("psram_read(addr=0x%08x) -> data=0x%02x", addr, byte);
+  // Log("psram_read(addr=0x%08x) -> data=0x%02x", addr, byte);
   *data = byte;
 }
 
@@ -43,7 +43,7 @@ void psram_write(int addr, char data) {
     Log("Warning: PSRAM read out of bounds at offset 0x%08x", addr);
     return;
   }
-  Log("psram_write(addr=0x%08x) -> data=0x%02x", addr, data);
+  // Log("psram_write(addr=0x%08x) -> data=0x%02x", addr, data);
   psram_mem[addr] = data;
 }
 

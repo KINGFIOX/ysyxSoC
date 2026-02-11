@@ -17,12 +17,26 @@ module psram_top_apb (
   inout  [3:0] qspi_dio
 );
 
+  reg [31:0] addr; // FIXME: this should be wire, not reg.
+  always @(*) begin
+    case (in_pstrb)
+      4'b0001: begin addr = in_paddr + 0; end
+      4'b0010: begin addr = in_paddr + 1; end
+      4'b0100: begin addr = in_paddr + 2; end
+      4'b1000: begin addr = in_paddr + 3; end
+      4'b0011: begin addr = in_paddr + 0; end
+      4'b1100: begin addr = in_paddr + 2; end
+      4'b1111: begin addr = in_paddr + 0; end
+      default: begin addr = in_paddr; end
+    endcase
+  end
+
   wire [3:0] din, dout, douten;
   wire ack;
   EF_PSRAM_CTRL_wb u0 (
     .clk_i(clock),
     .rst_i(reset),
-    .adr_i(in_paddr),
+    .adr_i(addr),
     .dat_i(in_pwdata),
     .dat_o(in_prdata),
     .sel_i(in_pstrb),
@@ -30,14 +44,14 @@ module psram_top_apb (
     .stb_i(in_psel),
     .ack_o(ack),
     .we_i(in_pwrite),
-  
+
     .sck(qspi_sck),
     .ce_n(qspi_ce_n),
     .din(din),
     .dout(dout),
     .douten(douten)
   );
-  
+
   assign in_pready = ack && in_psel;
   assign in_pslverr = 1'b0;
   assign qspi_dio[0] = douten[0] ? dout[0] : 1'bz;

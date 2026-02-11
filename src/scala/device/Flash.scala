@@ -17,8 +17,10 @@ class flash_cmd extends BlackBox {
 class flash extends RawModule {
   val io = IO(Flipped(new SPIIO(1)))
   val reset = io.ss.asBool.asAsyncReset
-  val clock = io.sck.asClock
-  val module = withClockAndReset(clock, reset) { Module(new Impl) }
+  val sckRise = io.sck.asClock
+  val sckFall = (!io.sck).asClock
+  val module = withClockAndReset(sckRise, reset) { Module(new Impl) }
+  val misoOut = withClockAndReset(sckFall, reset) { RegNext(module.io.miso) }
   class Impl extends Module with RequireAsyncReset {
     val io = IO(new Bundle {
       val miso = Output(Bool())
@@ -76,6 +78,6 @@ class flash extends RawModule {
       }
     }
   }
-  io.miso := Mux(io.ss.asBool, true.B, module.io.miso)
+  io.miso := Mux(io.ss.asBool, true.B, misoOut)
   module.io.mosi := io.mosi
 }

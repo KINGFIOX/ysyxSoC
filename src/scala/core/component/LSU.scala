@@ -273,17 +273,6 @@ class AXI4WritePort extends Module with HasCoreParameter {
   // ---------- AW Channel: Address/Size Generation ----------
   private val byte_offset = addr_reg(1, 0)
 
-  // 窄传输：使用实际的size和地址
-  private val aw_size_narrow = MuxLookup(op_reg, 2.U)(Seq(
-    MemUOpType.mem_SB -> 0.U,
-    MemUOpType.mem_SH -> 1.U,
-    MemUOpType.mem_SW -> 2.U
-  ))
-  private val aw_addr_narrow = MuxLookup(op_reg, addr_reg)(Seq(
-    MemUOpType.mem_SB -> addr_reg,
-    MemUOpType.mem_SH -> Cat(addr_reg(XLEN - 1, 1), 0.U(1.W)),
-    MemUOpType.mem_SW -> Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
-  ))
   // 宽传输：统一使用32位写入，用strb选择要写的字节
   private val aw_size_wide = 2.U
   private val aw_addr_wide = Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
@@ -315,25 +304,10 @@ class AXI4WritePort extends Module with HasCoreParameter {
     MemUOpType.mem_SH -> Mux(addr_reg(1), wdata_reg(15, 0) << 16.U, wdata_reg(15, 0)),
     MemUOpType.mem_SW -> wdata_reg
   ))
-  // 窄传输：数据在低位，strb直接设置
-  private val wstrb_narrow = MuxLookup(op_reg, "b1111".U(4.W))(Seq(
-    MemUOpType.mem_SB -> "b0001".U(4.W),
-    MemUOpType.mem_SH -> "b0011".U(4.W),
-    MemUOpType.mem_SW -> "b1111".U(4.W)
-  ))
-  private val wdata_narrow = MuxLookup(op_reg, wdata_reg)(Seq(
-    MemUOpType.mem_SB -> wdata_reg(7, 0),
-    MemUOpType.mem_SH -> wdata_reg(15, 0),
-    MemUOpType.mem_SW -> wdata_reg
-  ))
-
-  // 写数据和strb统一使用宽设备的处理方式（数据移位到正确位置，strb选择正确字节）
-  private val wstrb = wstrb_wide
-  private val wdata_shifted = wdata_wide
 
   io.w.valid     := (state === State.aw_w_wait) && !w_sent
-  io.w.bits.data := wdata_shifted
-  io.w.bits.strb := wstrb
+  io.w.bits.data := wdata_wide
+  io.w.bits.strb := wstrb_wide
   io.w.bits.last := true.B
 
   // ---------- B Channel ----------
@@ -370,9 +344,7 @@ class LSU extends Module with HasCoreParameter {
   // ---------- Narrow Device Detection ----------
   private val addr = io.in.bits.addr
   private val isNarrowDevice = (SoCConfig.uartBase.U <= addr) && (addr < (SoCConfig.uartBase + SoCConfig.uartSize).U) ||
-    (SoCConfig.spiCtrlBase.U <= addr) && (addr < (SoCConfig.spiCtrlBase + SoCConfig.spiCtrlSize).U) ||
-    (SoCConfig.xipFlashBase.U <= addr) && (addr < (SoCConfig.xipFlashBase + SoCConfig.xipFlashSize).U) ||
-    (SoCConfig.psramBase.U <= addr) && (addr < (SoCConfig.psramBase + SoCConfig.psramSize).U)
+    (SoCConfig.spiCtrlBase.U <= addr) && (addr < (SoCConfig.spiCtrlBase + SoCConfig.spiCtrlSize).U)
 
   // ---------- Alignment Check ----------
   // 窄传输设备使用实际 size/addr，不需要对齐检查
@@ -486,7 +458,7 @@ class LSU extends Module with HasCoreParameter {
     isReadDone  -> readPort.io.exceptionEn,
     isWriteDone -> writePort.io.exceptionEn
   ))
-  io.out.bits.xtval       := addr_reg
+  io.out.bits.xtval := addr_reg
 
   // ---------- Difftest Skip for MMIO Access ----------
   // Skip difftest reference when MMIO read/write completes,
