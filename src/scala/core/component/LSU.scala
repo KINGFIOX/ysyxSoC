@@ -8,6 +8,9 @@ import ysyx.CPUAXI4BundleParameters
 import ysyx.SoCConfig
 import ysyx.core.dpi.DifftestSkipRef
 
+// - read: 自然对齐即可 (符合 riscv 规范)
+// - write: 强制对齐到 4byte, 通过 waddr + wstrb 恢复原先的地址
+
 object MemUOpType extends ChiselEnum {
   val mem_LB, mem_LH, mem_LW, mem_LBU, mem_LHU, mem_SB, mem_SH, mem_SW = Value
 }
@@ -285,8 +288,9 @@ class AXI4WritePort extends Module with HasCoreParameter {
   private val aw_size_wide = 2.U
   private val aw_addr_wide = Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
 
-  private val aw_size = Mux(isNarrow_reg, aw_size_narrow, aw_size_wide)
-  private val aw_addr = Mux(isNarrow_reg, aw_addr_narrow, aw_addr_wide)
+  // 写地址统一使用4字节对齐（AXI4ToAPB 要求写地址必须4字节对齐）
+  private val aw_size = aw_size_wide
+  private val aw_addr = aw_addr_wide
 
   io.aw.valid      := (state === State.aw_w_wait) && !aw_sent
   io.aw.bits.id    := 0.U
@@ -323,8 +327,9 @@ class AXI4WritePort extends Module with HasCoreParameter {
     MemUOpType.mem_SW -> wdata_reg
   ))
 
-  private val wstrb = Mux(isNarrow_reg, wstrb_narrow, wstrb_wide)
-  private val wdata_shifted = Mux(isNarrow_reg, wdata_narrow, wdata_wide)
+  // 写数据和strb统一使用宽设备的处理方式（数据移位到正确位置，strb选择正确字节）
+  private val wstrb = wstrb_wide
+  private val wdata_shifted = wdata_wide
 
   io.w.valid     := (state === State.aw_w_wait) && !w_sent
   io.w.bits.data := wdata_shifted

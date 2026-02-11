@@ -10,6 +10,15 @@ import freechips.rocketchip.amba.apb._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
+// ============================================================================
+// AXI4full to APB Converter
+// ============================================================================
+//
+// 需要注意的是:
+// - 对于读取来说: ar.size 语义丢失
+// - 对于写入来说: aw.wstrb 语义 -> pstrb 保留, 因此我这里对我自己写的代码做一个约束: 写地址一定要对齐
+
+
 case class AXI4ToAPBNode()(implicit valName: ValName) extends MixedAdapterNode(AXI4Imp, APBImp)(
   dFn = { mp =>
     APBMasterPortParameters(
@@ -65,6 +74,8 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
       // size > 4 is not supported
       assert(!(ar.valid && ar.bits.size > "b10".U))
       assert(!(aw.valid && aw.bits.size > "b10".U))
+      // NOTE:
+      assert( (aw.bits.addr(1, 0) === 0.U), "write address must be aligned" )
 
       val rid_reg    = RegEnable(ar.bits.id, accept_read)
       val bid_reg    = RegEnable(aw.bits.id, accept_write)

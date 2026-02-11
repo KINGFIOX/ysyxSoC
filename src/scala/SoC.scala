@@ -33,26 +33,23 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val chipMaster = if (Config.hasChipLink) Some(LazyModule(new ChipLinkMaster)) else None
   val chiplinkNode = if (Config.hasChipLink) Some(AXI4SlaveNodeGenerator(p(ExtBus), ChipLinkParam.allSpace)) else None
 
+  val lspi = LazyModule(new APBSPI(AddressSet.misaligned(SoCConfig.spiCtrlBase, SoCConfig.spiCtrlSize)))
+  val lxipflash = LazyModule(new APBXIPFlash(AddressSet.misaligned(SoCConfig.xipFlashBase, SoCConfig.xipFlashSize)))
   val luart = LazyModule(new APBUart16550(AddressSet.misaligned(SoCConfig.uartBase, SoCConfig.uartSize)))
+  val lpsram = LazyModule(new APBPSRAM(AddressSet.misaligned(SoCConfig.psramBase, SoCConfig.psramSize)))
   val lgpio = LazyModule(new APBGPIO(AddressSet.misaligned(SoCConfig.gpioBase, SoCConfig.gpioSize)))
   val lkeyboard = LazyModule(new APBKeyboard(AddressSet.misaligned(SoCConfig.keyboardBase, SoCConfig.keyboardSize)))
   val lvga = LazyModule(new APBVGA(AddressSet.misaligned(SoCConfig.vgaBase, SoCConfig.vgaSize)))
-  // SPI controller (generic, device-agnostic)
-  val lspi = LazyModule(new APBSPI(AddressSet.misaligned(SoCConfig.spiCtrlBase, SoCConfig.spiCtrlSize)))
-  // XIP Flash controller (flash-specific, knows the read protocol)
-  val lxipflash = LazyModule(new APBXIPFlash(AddressSet.misaligned(SoCConfig.xipFlashBase, SoCConfig.xipFlashSize)))
-  val lpsram = LazyModule(new APBPSRAM(AddressSet.misaligned(SoCConfig.psramBase, SoCConfig.psramSize)))
+  List(lspi.node, lxipflash.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
+
   val lmrom = LazyModule(new AXI4MROM(AddressSet.misaligned(SoCConfig.mromBase, SoCConfig.mromSize)))
   val sramNode = AXI4RAM(AddressSet.misaligned(SoCConfig.sramBase, SoCConfig.sramSize).head, false, true, 4, None, Nil, false)
+  List(apbxbar := APBDelayer() := AXI4ToAPB() := AXI4Buffer(), lmrom.node, sramNode).map(_ := xbar2)
 
   val sdramAddressSet = AddressSet.misaligned(SoCConfig.sdramBase, SoCConfig.sdramSize)
   val lsdram_apb = if (!Config.sdramUseAXI) Some(LazyModule(new APBSDRAM (sdramAddressSet))) else None
   val lsdram_axi = if ( Config.sdramUseAXI) Some(LazyModule(new AXI4SDRAM(sdramAddressSet))) else None
 
-  // APB devices connected to APB crossbar
-  // Note: lxipflash is the XIP Flash controller (separate from SPI controller)
-  List(lspi.node, lxipflash.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
-  List(apbxbar := APBDelayer() := AXI4ToAPB() := AXI4Buffer(), lmrom.node, sramNode).map(_ := xbar2)
   xbar2 := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := xbar
   if (Config.sdramUseAXI) lsdram_axi.get.node := ysyx.AXI4Delayer() := xbar
   else                    lsdram_apb.get.node := apbxbar

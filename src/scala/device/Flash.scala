@@ -14,9 +14,6 @@ class flash_cmd extends BlackBox {
 }
 
 // 考虑了 “窄传输” 的 Flash
-// SPI:
-// 1. 地址: 大端字节序 大端位序
-// 2. 数据: 字节序随ISA(小端) 大端位序
 class flash extends RawModule {
   val io = IO(Flipped(new SPIIO(1)))
   val reset = io.ss.asBool.asAsyncReset

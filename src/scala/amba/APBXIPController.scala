@@ -57,10 +57,8 @@ case class XIPConfig(
   // SS register value
   def ssValue: Int = 1 << ssIndex
 
-  // Calculate which TX registers are needed based on total TX bits
-  // TX bits = command + address + dummy (data placeholder is in lower bits)
-  def txBits: Int = 8 + addrBits + dummyBits + dataBits
-  def numTxRegs: Int = (txBits + 31) / 32 // Round up to 32-bit registers
+  // Calculate which TX registers are needed based on charLen
+  def numTxRegs: Int = (charLen + 31) / 32 // Round up to 32-bit registers
 
   // Calculate which RX registers contain valid data
   // RX data is in the lower bits after transmission
@@ -75,8 +73,7 @@ object XIPConfig {
     */
   val SPIFlash = XIPConfig(
     readCmd = 0x03,
-    writeCmd =
-      None, // Flash requires special erase/program sequence, no direct write
+    writeCmd = None, // Flash requires special erase/program sequence, no direct write
     addrBits = 24,
     dummyBits = 0,
     dataBits = 32,
@@ -164,10 +161,11 @@ class APBXIPController(address: Seq[AddressSet], config: XIPConfig)(implicit
     }
     val state = RegInit(State.Idle)
 
-    // Captured address, write data, and received data
+    // Captured address, write data, strobe, and received data
     val flashAddr = Reg(UInt(config.addrBits.W))
     val isWrite = Reg(Bool())
     val writeData = Reg(UInt(config.dataBits.W))
+    val writeStrb = Reg(UInt(4.W))  // Byte strobe for write operations
     val rxData = Reg(Vec(config.numRxRegs, UInt(32.W)))
 
     // Build TX data based on operation type:
@@ -283,6 +281,7 @@ class APBXIPController(address: Seq[AddressSet], config: XIPConfig)(implicit
             // Device supports both read and write
             when(in.pwrite) {
               writeData := in.pwdata
+              writeStrb := in.pstrb
             }
             state := State.SS_Setup
           } else {

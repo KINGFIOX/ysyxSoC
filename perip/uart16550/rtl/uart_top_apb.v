@@ -25,6 +25,7 @@ module uart_top_apb (
   //--------------------------------------------------------
   wire       reg_we;  // Write enable for registers
   wire       reg_re;  // Read enable for registers
+  reg  [1:0] byte_offset;  // 根据 pstrb 恢复的字节偏移
   wire [2:0] reg_adr;
   reg  [7:0] reg_dat8_w;  // write to reg
   reg  [7:0] reg_dat8_w_reg;
@@ -36,17 +37,21 @@ module uart_top_apb (
   assign in_pslverr = 1'b0;
   assign reg_we     = ~reset & in_psel & ~in_penable & in_pwrite;
   assign reg_re     = ~reset & in_psel & ~in_penable & ~in_pwrite;
-  assign reg_adr    = in_paddr[2:0];  //assign adr_o   = in_paddr[2:0];
   assign in_prdata  = (in_psel) ? {4{reg_dat8_r}} : 'h0;
-  assign reg_dat8_w = in_pwdata[7:0];
-  // always @(in_paddr[1:0] or in_pwdata) begin
-  //   case (in_paddr[1:0])
-  //     2'b00: reg_dat8_w = #1 in_pwdata[7:0];
-  //     2'b01: reg_dat8_w = #1 in_pwdata[15:8];
-  //     2'b10: reg_dat8_w = #1 in_pwdata[23:16];
-  //     2'b11: reg_dat8_w = #1 in_pwdata[31:24];
-  //   endcase
-  // end
+  // 由于地址4字节对齐，in_paddr[1:0] 始终是 0，需要根据 pstrb 恢复原始偏移
+  // 同时根据 pstrb 选择正确的字节（数据已移位到正确位置）
+  always @(*) begin
+    case (in_pstrb)
+      4'b0001: begin byte_offset = 2'b00; reg_dat8_w = in_pwdata[7:0];   end
+      4'b0010: begin byte_offset = 2'b01; reg_dat8_w = in_pwdata[15:8];  end
+      4'b0100: begin byte_offset = 2'b10; reg_dat8_w = in_pwdata[23:16]; end
+      4'b1000: begin byte_offset = 2'b11; reg_dat8_w = in_pwdata[31:24]; end
+      default: begin byte_offset = 2'b00; reg_dat8_w = in_pwdata[7:0];   end
+    endcase
+  end
+  // 写操作：地址4字节对齐，需要根据 pstrb 恢复偏移
+  // 读操作：地址不需要对齐，直接使用原始地址
+  assign reg_adr = in_pwrite ? {in_paddr[2], byte_offset} : in_paddr[2:0];
   always @(posedge clock) begin
     reg_dat8_w_reg <= reg_dat8_w;
   end
