@@ -37,10 +37,10 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val lgpio = LazyModule(new APBGPIO(AddressSet.misaligned(SoCConfig.gpioBase, SoCConfig.gpioSize)))
   val lkeyboard = LazyModule(new APBKeyboard(AddressSet.misaligned(SoCConfig.keyboardBase, SoCConfig.keyboardSize)))
   val lvga = LazyModule(new APBVGA(AddressSet.misaligned(SoCConfig.vgaBase, SoCConfig.vgaSize)))
-  val lspi  = LazyModule(new APBSPI(
-    AddressSet.misaligned(SoCConfig.spiCtrlBase, SoCConfig.spiCtrlSize) ++    // SPI controller
-    AddressSet.misaligned(SoCConfig.xipFlashBase, SoCConfig.xipFlashSize)   // XIP flash
-  ))
+  // SPI controller (generic, device-agnostic)
+  val lspi = LazyModule(new APBSPI(AddressSet.misaligned(SoCConfig.spiCtrlBase, SoCConfig.spiCtrlSize)))
+  // XIP Flash controller (flash-specific, knows the read protocol)
+  val lxipflash = LazyModule(new APBXIPFlash(AddressSet.misaligned(SoCConfig.xipFlashBase, SoCConfig.xipFlashSize)))
   val lpsram = LazyModule(new APBPSRAM(AddressSet.misaligned(SoCConfig.psramBase, SoCConfig.psramSize)))
   val lmrom = LazyModule(new AXI4MROM(AddressSet.misaligned(SoCConfig.mromBase, SoCConfig.mromSize)))
   val sramNode = AXI4RAM(AddressSet.misaligned(SoCConfig.sramBase, SoCConfig.sramSize).head, false, true, 4, None, Nil, false)
@@ -49,7 +49,9 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val lsdram_apb = if (!Config.sdramUseAXI) Some(LazyModule(new APBSDRAM (sdramAddressSet))) else None
   val lsdram_axi = if ( Config.sdramUseAXI) Some(LazyModule(new AXI4SDRAM(sdramAddressSet))) else None
 
-  List(lspi.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
+  // APB devices connected to APB crossbar
+  // Note: lxipflash is the XIP Flash controller (separate from SPI controller)
+  List(lspi.node, lxipflash.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
   List(apbxbar := APBDelayer() := AXI4ToAPB() := AXI4Buffer(), lmrom.node, sramNode).map(_ := xbar2)
   xbar2 := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := xbar
   if (Config.sdramUseAXI) lsdram_axi.get.node := ysyx.AXI4Delayer() := xbar
@@ -98,6 +100,8 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val vga = IO(chiselTypeOf(lvga.module.vga_bundle))
     uart <> luart.module.uart
     spi <> lspi.module.spi_bundle
+    // Connect XIP Flash controller's APB master to SPI controller's XIP slave port
+    lspi.module.xip_apb <> lxipflash.module.spi_apb
     psram <> lpsram.module.qspi_bundle
     sdram <> sdramBundle
     gpio <> lgpio.module.gpio_bundle
