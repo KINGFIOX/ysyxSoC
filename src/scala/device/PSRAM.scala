@@ -57,11 +57,10 @@ class psram extends RawModule {
     val cmd = RegInit(0.U(8.W))
     val addr = RegInit(0.U(32.W));
     val base = RegInit(0.U(24.W)); val offset = RegInit(0.U(10.W)) // wrapping
-    val valid = WireDefault(false.B)
     val wdataH = RegInit(0.U(4.W))
     val u0_psram_cmd = Module(new psram_cmd)
     u0_psram_cmd.io.clock := this.clock
-    u0_psram_cmd.io.valid := valid
+    u0_psram_cmd.io.valid := false.B
     u0_psram_cmd.io.cmd := cmd
     u0_psram_cmd.io.addr := Cat( base, offset )
     u0_psram_cmd.io.wdata := Cat( wdataH, io.mosi )
@@ -97,7 +96,7 @@ class psram extends RawModule {
         counter := counter + 1.U
         when( counter === 5.U ) {
           counter := 0.U
-          valid := true.B // pulse
+          u0_psram_cmd.io.valid := true.B // pulse
           state := State.data
         }
       }
@@ -108,20 +107,22 @@ class psram extends RawModule {
           when( counter === 0.U ) {
             counter := 1.U
             io.miso := rdata(7, 4)
-            offset := offset + 1.U  // 准备下一个地址
           } .otherwise {  // counter === 1
-            counter := 0.U  // 重置 counter
+            counter := 0.U
             io.miso := rdata(3, 0)
-            valid := true.B  // 触发读取下一个字节
+            u0_psram_cmd.io.valid := true.B
+            val next_offset = offset + 1.U
+            u0_psram_cmd.io.addr := Cat( base, next_offset )
+            offset := next_offset
           }
         } .elsewhen( cmd === "h38".U ) { // write
           when( counter === 0.U ) {
             counter := 1.U
             wdataH := io.mosi
           } .otherwise {  // counter === 1
-            counter := 0.U  // 重置 counter
+            counter := 0.U
             offset := offset + 1.U
-            valid := true.B  // 触发写入
+            u0_psram_cmd.io.valid := true.B
           }
         }
       }
