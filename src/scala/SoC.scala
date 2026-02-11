@@ -33,14 +33,26 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val chipMaster = if (Config.hasChipLink) Some(LazyModule(new ChipLinkMaster)) else None
   val chiplinkNode = if (Config.hasChipLink) Some(AXI4SlaveNodeGenerator(p(ExtBus), ChipLinkParam.allSpace)) else None
 
+  // SPI controller with explicit arbiter for multi-master access
   val lspi = LazyModule(new APBSPI(AddressSet.misaligned(SoCConfig.spiCtrlBase, SoCConfig.spiCtrlSize)))
   val lxipflash = LazyModule(new APBXIPFlash(AddressSet.misaligned(SoCConfig.xipFlashBase, SoCConfig.xipFlashSize)))
+  val spiArbiter = LazyModule(new APBArbiter)
+
+  // Explicit arbiter connection:
+  //   XIP addr -> XIP Controller ─┐
+  //                               ├─> APBArbiter -> spi_top_apb
+  //   SPI addr (from apbxbar) ────┘
+  // XIP controller has higher priority (index 0)
+  lspi.node := spiArbiter.node
+  spiArbiter.node := lxipflash.masterNode  // Higher priority (index 0)
+  spiArbiter.node := apbxbar               // Lower priority (index 1)
+
   val luart = LazyModule(new APBUart16550(AddressSet.misaligned(SoCConfig.uartBase, SoCConfig.uartSize)))
   val lpsram = LazyModule(new APBPSRAM(AddressSet.misaligned(SoCConfig.psramBase, SoCConfig.psramSize)))
   val lgpio = LazyModule(new APBGPIO(AddressSet.misaligned(SoCConfig.gpioBase, SoCConfig.gpioSize)))
   val lkeyboard = LazyModule(new APBKeyboard(AddressSet.misaligned(SoCConfig.keyboardBase, SoCConfig.keyboardSize)))
   val lvga = LazyModule(new APBVGA(AddressSet.misaligned(SoCConfig.vgaBase, SoCConfig.vgaSize)))
-  List(lspi.node, lxipflash.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
+  List(lxipflash.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
 
   val lmrom = LazyModule(new AXI4MROM(AddressSet.misaligned(SoCConfig.mromBase, SoCConfig.mromSize)))
   val sramNode = AXI4RAM(AddressSet.misaligned(SoCConfig.sramBase, SoCConfig.sramSize).head, false, true, 4, None, Nil, false)
@@ -97,8 +109,6 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val vga = IO(chiselTypeOf(lvga.module.vga_bundle))
     uart <> luart.module.uart
     spi <> lspi.module.spi_bundle
-    // Connect XIP Flash controller's APB master to SPI controller's XIP slave port
-    lspi.module.xip_apb <> lxipflash.module.spi_apb
     psram <> lpsram.module.qspi_bundle
     sdram <> sdramBundle
     gpio <> lgpio.module.gpio_bundle

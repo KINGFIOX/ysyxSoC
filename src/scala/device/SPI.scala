@@ -36,11 +36,10 @@ class spi_top_apb extends BlackBox {
   * This is a pure SPI controller without any device-specific knowledge.
   * It wraps the spi_top_apb BlackBox and provides:
   *   - APB slave interface for register access (via Diplomacy node)
-  *   - Additional APB slave port for XIP Flash controller (direct bundle)
   *   - SPI physical interface (sck, ss, mosi, miso)
   *
-  * The XIP slave port allows the XIP Flash controller to access SPI registers
-  * without going through the APB crossbar, enabling clean architectural separation.
+  * For multi-master access (e.g., XIP controller + CPU), use an external
+  * APBArbiter to arbitrate between multiple masters before connecting to this node.
   */
 class APBSPI(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
   val node = APBSlaveNode(Seq(
@@ -58,33 +57,14 @@ class APBSPI(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModul
   class Impl extends LazyModuleImp(this) {
     val (apbIn, _) = node.in(0)
     val spi_bundle = IO(new SPIIO)
-    // Additional APB slave port for XIP Flash controller (directly connected, not via Diplomacy)
-    val xip_apb = IO(Flipped(new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32))))
 
     val mspi = Module(new spi_top_apb)
     mspi.io.clock := clock
     mspi.io.reset := reset
     spi_bundle <> mspi.io.spi
 
-    // Arbiter: XIP has priority over normal APB access
-    // When XIP is active (xip_apb.psel), it takes control of SPI
-    val xipActive = xip_apb.psel
-
-    when(xipActive) {
-      // XIP Flash controller has control
-      mspi.io.in <> xip_apb
-      // Block normal APB - not ready, no response
-      apbIn.pready := false.B
-      apbIn.prdata := 0.U
-      apbIn.pslverr := false.B
-    }.otherwise {
-      // Normal APB access
-      mspi.io.in <> apbIn
-      // XIP port idle response
-      xip_apb.pready := false.B
-      xip_apb.prdata := 0.U
-      xip_apb.pslverr := false.B
-    }
+    // Direct connection - no internal arbitration
+    mspi.io.in <> apbIn
   }
 }
 

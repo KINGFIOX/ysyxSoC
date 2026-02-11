@@ -114,6 +114,7 @@ object XIPConfig {
 class APBXIPController(address: Seq[AddressSet], config: XIPConfig)(implicit
     p: Parameters
 ) extends LazyModule {
+  // APB Slave node - receives XIP read requests from CPU
   val node = APBSlaveNode(
     Seq(
       APBSlavePortParameters(
@@ -130,13 +131,23 @@ class APBXIPController(address: Seq[AddressSet], config: XIPConfig)(implicit
     )
   )
 
+  // APB Master node - sends SPI register accesses to SPI controller (via arbiter)
+  val masterNode = APBMasterNode(
+    Seq(
+      APBMasterPortParameters(
+        masters = Seq(
+          APBMasterParameters(
+            name = "xip-controller"
+          )
+        )
+      )
+    )
+  )
+
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
     val (in, _) = node.in(0)
-    // APB Master port to SPI/QSPI controller
-    val spi_apb = IO(
-      new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32))
-    )
+    val (spi_apb, _) = masterNode.out(0)
 
     // SPI register offsets (standard for both SPI and QSPI controllers)
     val ADDR_TX0 = 0x00.U(32.W)
