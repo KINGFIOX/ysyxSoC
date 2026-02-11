@@ -13,6 +13,7 @@ class flash_cmd extends BlackBox {
   })
 }
 
+// Flash 不用考虑 “窄传输” 问题, 因为指令都是 4Byte 的
 // SPI:
 // 1. 地址: 大端字节序 大端位序
 // 2. 数据: 字节序随ISA(小端) 大端位序
@@ -46,8 +47,7 @@ class flash extends RawModule {
     switch(state) {
       is(State.cmd) {
         counter := counter + 1.U
-        val next_cmd = Cat( cmd(6, 0), io.mosi )
-        cmd := next_cmd
+        cmd := Cat( cmd(6, 0), io.mosi )
         when(counter === 7.U) {
           counter := 0.U // suppress increment
           state := State.addr

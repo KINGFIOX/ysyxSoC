@@ -30,8 +30,8 @@ class psram_cmd extends BlackBox {
     val valid = Input(Bool())
     val cmd = Input(UInt(8.W))
     val addr = Input(UInt(32.W))
-    val wdata = Input(UInt(32.W))
-    val rdata = Output(UInt(32.W))
+    val wdata = Input(UInt(8.W))
+    val rdata = Output(UInt(8.W))
   })
 }
 
@@ -42,16 +42,90 @@ class psram extends RawModule {
   val reset = io.ce_n.asAsyncReset
   val clock = io.sck.asClock
   val module = withClockAndReset(clock, reset) { Module(new Impl) }
-  module.io.mosi := TriStateInBuf(io.dio, module.io.miso, module.io.mosiEn)
+  module.io.mosi := TriStateInBuf(io.dio, module.io.miso, module.io.misoEn)
   class Impl extends Module with RequireAsyncReset {
     val io = IO(new Bundle{
       val miso = Output(UInt(4.W))
       val mosi = Input(UInt(4.W))
-      val mosiEn = Output(Bool())
+      val misoEn = Output(Bool())
     })
-    // TODO:
+    object State extends ChiselEnum {
+      val cmd, addr, wait_read, data = Value
+    }
+    val counter = RegInit(0.U(5.W))
+    val state = RegInit(State.cmd)
+    val cmd = RegInit(0.U(8.W))
+    val addr = RegInit(0.U(32.W));
+    val base = RegInit(0.U(24.W)); val offset = RegInit(0.U(10.W)) // wrapping
+    val valid = WireDefault(false.B)
+    val wdataH = RegInit(0.U(4.W))
+    val u0_psram_cmd = Module(new psram_cmd)
+    u0_psram_cmd.io.clock := this.clock
+    u0_psram_cmd.io.valid := valid
+    u0_psram_cmd.io.cmd := cmd
+    u0_psram_cmd.io.addr := Cat( base, offset )
+    u0_psram_cmd.io.wdata := Cat( wdataH, io.mosi )
+    val rdata = u0_psram_cmd.io.rdata
+
     io.miso := 0.U
-    io.mosiEn := false.B
+    io.misoEn := false.B // default
+
+    switch(state) {
+      is(State.cmd) {
+        counter := counter + 1.U
+        cmd := Cat( cmd(6, 0), io.mosi(0) )
+        when(counter === 7.U) {
+          counter := 0.U
+          state := State.addr
+        }
+      }
+      is(State.addr) {
+        counter := counter + 1.U
+        val next_addr = Cat( 0.U(8.W), addr(19, 0), io.mosi )
+        addr := next_addr; base := next_addr(23, 10); offset := next_addr(9, 0)
+        when( counter === 5.U ) {
+          counter := 0.U
+          assert( cmd === "heb".U || cmd === "h38".U, cf"Assert failed: Unsupportted command `${cmd}%x`" )
+          when( cmd === "heb".U ) {
+            state := State.wait_read
+          } .elsewhen( cmd === "h38".U ) {
+            state := State.data
+          }
+        }
+      }
+      is(State.wait_read) {
+        counter := counter + 1.U
+        when( counter === 5.U ) {
+          counter := 0.U
+          valid := true.B // pulse
+          state := State.data
+        }
+      }
+      is(State.data) {
+        assert( cmd === "heb".U || cmd === "h38".U, "impossible" )
+        when( cmd === "heb".U ) { // read
+          io.misoEn := true.B
+          when( counter === 0.U ) {
+            counter := 1.U
+            io.miso := rdata(7, 4)
+            offset := offset + 1.U  // 准备下一个地址
+          } .otherwise {  // counter === 1
+            counter := 0.U  // 重置 counter
+            io.miso := rdata(3, 0)
+            valid := true.B  // 触发读取下一个字节
+          }
+        } .elsewhen( cmd === "h38".U ) { // write
+          when( counter === 0.U ) {
+            counter := 1.U
+            wdataH := io.mosi
+          } .otherwise {  // counter === 1
+            counter := 0.U  // 重置 counter
+            offset := offset + 1.U
+            valid := true.B  // 触发写入
+          }
+        }
+      }
+    }
   }
 }
 
@@ -69,7 +143,7 @@ class APBPSRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
     val (in, _) = node.in(0)
     val qspi_bundle = IO(new QSPIIO)
 
-    val mpsram = Module(new psram_top_apb)
+    val mpsram = Module(new psram_top_apb) // instantiate the psram_top_apb module ( including qspi controller )
     mpsram.io.clock := clock
     mpsram.io.reset := reset
     mpsram.io.in <> in

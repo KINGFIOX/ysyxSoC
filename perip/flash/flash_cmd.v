@@ -7,7 +7,7 @@ module flash_cmd(
   input      [31:0] addr,
   output reg [31:0] data
 );
-  always@(negedge clock) begin
+  always@(posedge clock) begin
     if (valid)
       if (cmd == 8'h03) begin
         flash_read(addr, data);

@@ -25,34 +25,23 @@ static uint8_t psram_mem[CONFIG_SOC_PSRAM_SIZE];
 /**
  * @param addr: addr starts from 0, aligned to 4bytes (offset within psram)
  */
-void psram_read(int addr, int *data) {
+void psram_read(int addr, char *data) {
   /* Check bounds */
   if (addr < 0 || addr >= PSRAM_SIZE) {
     Log("Warning: PSRAM read out of bounds at offset 0x%08x", addr);
     *data = 0;
     return;
   }
-
-  uint8_t buf[4] = { };
-  for (int i = 0; i < 4 && (addr + i) < PSRAM_SIZE; i++) {
-    buf[i] = psram_mem[addr + i];
-  }
-
-  /* Combine bytes in little-endian order */
-  *data = (int)(buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24));
-  // Log("flash_read(addr=0x%08x) -> data=0x%08x", addr, *data);
+  *data = psram_mem[addr];
 }
 
-void psram_write(int addr, int data) {
+void psram_write(int addr, char data) {
   /* Check bounds */
   if (addr < 0 || addr >= PSRAM_SIZE) {
     Log("Warning: PSRAM read out of bounds at offset 0x%08x", addr);
     return;
   }
-
-  for (int i = 0; i < 4 && (addr + i) < PSRAM_SIZE; i++, data >>= 8) {
-    psram_mem[addr + i] = data & 0x0ff;
-  }
+  psram_mem[addr] = data;
 }
 
 /* Check if address is in PSRAM range */

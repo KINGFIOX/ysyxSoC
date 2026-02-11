@@ -28,8 +28,8 @@ extern void flash_read(int addr, int *data);
 
 // PSRAM 接口
 extern bool in_psram(paddr_t addr);
-extern void psram_read(int addr, int *data);
-extern void psram_write(int addr, int data);
+extern void psram_read(int addr, char *data);
+extern void psram_write(int addr, char data);
 
 static void out_of_bound(paddr_t addr) {
   panic("address = " FMT_PADDR " is out of bound at pc = " FMT_WORD,
@@ -48,10 +48,13 @@ word_t paddr_read(paddr_t addr, int len) {
     return (word_t)data & mask;
   }
   if (in_psram(addr)) {
-    int data;
-    psram_read((int)(addr - PSRAM_LEFT), &data);
-    word_t mask = (len == 4) ? 0xFFFFFFFF : ((1u << (len * 8)) - 1);
-    return (word_t)data & mask;
+    word_t result = 0;
+    for (int i = 0; i < len; i++) {
+      char byte;
+      psram_read((int)(addr - PSRAM_LEFT + i), &byte);
+      result |= ((word_t)(uint8_t)byte) << (i * 8);  // 小端序
+    }
+    return result;
   }
   if (in_sram(addr)) {
     return sram_read(addr, len);
@@ -63,7 +66,12 @@ word_t paddr_read(paddr_t addr, int len) {
 
 void paddr_write(paddr_t addr, int len, word_t data) {
   if (in_flash(addr)) { panic("Flash is read-only, cannot write to address " FMT_PADDR, addr); }
-  if (in_psram(addr)) { psram_write((int)(addr - PSRAM_LEFT), (int)data); return; }
+  if (in_psram(addr)) {
+    for (int i = 0; i < len; i++) {
+      psram_write((int)(addr - PSRAM_LEFT + i), (char)(data >> (i * 8)));  // 小端序
+    }
+    return;
+  }
   if (in_sram(addr)) { sram_write(addr, len, data); return; }
   IFDEF(CONFIG_DEVICE, mmio_write(addr, len, data); return);
   out_of_bound(addr);
