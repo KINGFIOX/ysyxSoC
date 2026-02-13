@@ -33,8 +33,10 @@ module uart_top_apb (
   wire reg_we     = ~reset & in_psel & ~in_penable & in_pwrite;
   wire reg_re     = ~reset & in_psel & ~in_penable & ~in_pwrite;
   assign in_prdata  = (in_psel) ? {4{reg_dat8_r}} : 'h0;
-  // 由于地址4字节对齐，in_paddr[1:0] 始终是 0，需要根据 pstrb 恢复原始偏移
-  // 同时根据 pstrb 选择正确的字节（数据已移位到正确位置）
+  // because of the waddr from axi4 and from cpu's LSU,
+  // in_paddr should always be aligned to 4bytes, with in_paddr[1:0] always in 0.
+  // we need to restore the original offset based on pstrb
+  // and select the correct byte (data has been shifted to the correct position)
   always @(*) begin
     case (in_pstrb)
       4'b0001: begin byte_offset = 2'b00; reg_dat8_w = in_pwdata[7:0];   end
@@ -44,8 +46,8 @@ module uart_top_apb (
       default: begin byte_offset = 2'b00; reg_dat8_w = in_pwdata[7:0];   end
     endcase
   end
-  // 写操作：地址4字节对齐，需要根据 pstrb 恢复偏移
-  // 读操作：地址不需要对齐，直接使用原始地址
+  // write: address is aligned to 4bytes, need to restore the original offset based on pstrb
+  // read: address is not aligned, for narrow transfer, use the original address
   wire [2:0] reg_adr = in_pwrite ? {in_paddr[2], byte_offset} : in_paddr[2:0];
   always @(posedge clock) begin
     reg_dat8_w_reg <= reg_dat8_w;
