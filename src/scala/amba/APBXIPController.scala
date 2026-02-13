@@ -52,6 +52,7 @@ case class XIPConfig(
   def charLen: Int = 8 + addrBits + dummyBits + dataBits
 
   // CTRL register value: ASS(bit13) | GO(bit8) | CHAR_LEN(bits 6:0)
+  // tx_neg=1, rx_neg=1
   def ctrlValue: Int = (1 << 13) | (1 << 8) | charLen
 
   // SS register value
