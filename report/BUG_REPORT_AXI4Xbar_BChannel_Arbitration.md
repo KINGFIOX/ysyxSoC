@@ -1,7 +1,5 @@
 # BUG REPORT: AXI4Xbar B Channel 仲裁器与只读端口冲突
 
-**日期**: 2026-02-04  
-
 ## 问题描述
 
 UART 在输出两个字符后卡死，CPU 无法继续执行写操作。

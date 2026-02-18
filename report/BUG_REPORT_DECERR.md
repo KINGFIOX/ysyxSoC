@@ -1,4 +1,4 @@
-# DECERR Bug 报告：一个由总线桥的默认行为隐藏的 BUG
+# BUG REPORT：一个由总线桥的默认行为隐藏的 BUG
 
 ## 问题描述
 

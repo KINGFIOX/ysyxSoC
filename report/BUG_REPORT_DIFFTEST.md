@@ -1,4 +1,4 @@
-# Difftest Bug 报告：NPC 与 QEMU 第一条指令不一致 （ 一次酣畅淋漓的 debug 过程 ）
+# BUG REPORT: NPC 与 QEMU 第一条指令不一致 （ 一次酣畅淋漓的 debug 过程 ）
 
 ## 问题描述
 
