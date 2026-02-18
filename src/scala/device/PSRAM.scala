@@ -22,8 +22,8 @@ class psram extends RawModule {
   val sckRise = io.sck.asClock
   val sckFall = (!io.sck).asClock
   val module = withClockAndReset(sckRise, reset) { Module(new Impl) }
-  val misoOut = withClockAndReset(sckFall, reset) { RegNext(module.io.miso) }
-  val misoEnOut = withClockAndReset(sckFall, reset) { RegNext(module.io.misoEn) }
+  val misoOut = withClockAndReset(sckFall, reset) { RegNext(module.io.miso, 0.U(4.W)) }
+  val misoEnOut = withClockAndReset(sckFall, reset) { RegNext(module.io.misoEn, false.B) }
   module.io.mosi := TriStateInBuf(io.dio, misoOut, misoEnOut)
   class Impl extends Module with RequireAsyncReset {
     val io = IO(new Bundle{

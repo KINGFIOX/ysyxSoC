@@ -96,6 +96,9 @@ build: verilate $(VERILATOR_LIB)
 
 # =============================== 开发工具 ===============================
 
+wave:
+	@gtkwave $(BUILD_DIR)/npc_core.vcd
+
 dev-init:
 	git submodule update --init --recursive
 	cd rocket-chip && git apply ../patch/rocket-chip.patch
