@@ -218,8 +218,10 @@ class QSPI extends Module {
     }
     result
   }
-  private val qspiWriteCmdExp = expandCmd(0x38).U(32.W)
-  private val qspiReadCmdExp  = expandCmd(0xEB).U(32.W)
+  // private val qspiWriteCmdExp = expandCmd(0x38).U(32.W)
+  // private val qspiReadCmdExp  = expandCmd(0xEB).U(32.W)
+  private val qspiWriteCmdExp = (0x38).U(8.W)
+  private val qspiReadCmdExp  = (0xEB).U(8.W)
 
   assert(io.in.paddr(1, 0) === 0.U, "QSPI: unaligned address")
 
@@ -258,8 +260,7 @@ class QSPI extends Module {
 
   // ─── QSPI outputs ────────────────────────────────────────
   io.sck := clgen.io.clkOut
-
-  private val isWriteReg = RegInit(false.B)
+  io.ce_n := true.B
 
   // ─── Write data calculation (little-endian byte swap) ─────
   private val wdata     = WireDefault(0.U(maxChar.W))
@@ -268,34 +269,34 @@ class QSPI extends Module {
   switch(io.in.pstrb) {
     is("b0001".U) {
       wdata     := Cat(qspiWriteCmdExp, io.in.paddr(23, 0), io.in.pwdata(7, 0))
-      wCharLen4 := ((32 + 24 + 8) >> 2).U
+      wCharLen4 := ((8 + 24 + 8) >> 2).U
     }
     is("b0010".U) {
       wdata     := Cat(qspiWriteCmdExp, io.in.paddr(23, 0) + 1.U, io.in.pwdata(15, 8))
-      wCharLen4 := ((32 + 24 + 8) >> 2).U
+      wCharLen4 := ((8 + 24 + 8) >> 2).U
     }
     is("b0100".U) {
       wdata     := Cat(qspiWriteCmdExp, io.in.paddr(23, 0) + 2.U, io.in.pwdata(23, 16))
-      wCharLen4 := ((32 + 24 + 8) >> 2).U
+      wCharLen4 := ((8 + 24 + 8) >> 2).U
     }
     is("b1000".U) {
       wdata     := Cat(qspiWriteCmdExp, io.in.paddr(23, 0) + 3.U, io.in.pwdata(31, 24))
-      wCharLen4 := ((32 + 24 + 8) >> 2).U
+      wCharLen4 := ((8 + 24 + 8) >> 2).U
     }
     is("b0011".U) {
       val swapped = Cat(io.in.pwdata(7, 0), io.in.pwdata(15, 8))
       wdata     := Cat(qspiWriteCmdExp, io.in.paddr(23, 0), swapped)
-      wCharLen4 := ((32 + 24 + 16) >> 2).U
+      wCharLen4 := ((8 + 24 + 16) >> 2).U
     }
     is("b1100".U) {
       val swapped = Cat(io.in.pwdata(23, 16), io.in.pwdata(31, 24))
       wdata     := Cat(qspiWriteCmdExp, io.in.paddr(23, 0) + 2.U, swapped)
-      wCharLen4 := ((32 + 24 + 16) >> 2).U
+      wCharLen4 := ((8 + 24 + 16) >> 2).U
     }
     is("b1111".U) {
       val swapped = Cat(io.in.pwdata(7, 0), io.in.pwdata(15, 8), io.in.pwdata(23, 16), io.in.pwdata(31, 24))
       wdata     := Cat(qspiWriteCmdExp, io.in.paddr(23, 0), swapped)
-      wCharLen4 := ((32 + 24 + 32) >> 2).U
+      wCharLen4 := ((8 + 24 + 32) >> 2).U
     }
   }
 
@@ -304,13 +305,29 @@ class QSPI extends Module {
 
   // ─── State machine ────────────────────────────────────────
   object State extends ChiselEnum {
-    val idle, setup, access, ready = Value
+    val initSetup, initAccess, idle, setup, access, ready = Value
   }
-  private val state = RegInit(State.idle)
+  private val state = RegInit(State.initSetup)
+  private val isWriteReg = RegInit(false.B)
 
   switch(state) {
+    is(State.initSetup) {
+      shift.io.wen := true.B
+      shift.io.len4 := ( (32) >> 2 ).U
+      shift.io.pIn := expandCmd(0x35).U(32.W)
+      shift.io.sOutLen := ( (32) >> 2 ).U
+      state := State.initAccess
+    }
+    is(State.initAccess) {
+      io.ce_n := false.B
+      shift.io.go := true.B
+      clgen.io.go := true.B
+      when(tipDone) {
+        state := State.idle
+      }
+    }
     is(State.idle) {
-      when(io.in.psel && !io.in.penable) {
+      when(io.in.psel) {
         state := State.setup
       }
     }
@@ -327,9 +344,9 @@ class QSPI extends Module {
         nextData     := wdata
         nextSOutLen4 := wCharLen4
       }.otherwise {
-        nextCharLen4 := ((32 + 24 + 24 + 32) >> 2).U
+        nextCharLen4 := ((8 + 24 + 24 + 32) >> 2).U
         nextData     := Cat(qspiReadCmdExp, io.in.paddr(23, 0), 0.U(24.W), 0.U(32.W))
-        nextSOutLen4 := ((32 + 24) >> 2).U
+        nextSOutLen4 := ((8 + 24) >> 2).U
       }
 
       when(nextCharLen4 === 0.U) {
@@ -346,6 +363,7 @@ class QSPI extends Module {
     is(State.access) {
       shift.io.go := true.B
       clgen.io.go := true.B
+      io.ce_n     := false.B
       when(tipDone) {
         state := State.ready
       }
@@ -365,5 +383,4 @@ class QSPI extends Module {
     }
   }
 
-  io.ce_n := !(state === State.access)
 }

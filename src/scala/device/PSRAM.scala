@@ -18,19 +18,26 @@ class psram_cmd extends BlackBox {
 // 38: read (1, 4, 4)
 class psram extends RawModule {
   val io = IO(Flipped(new QSPIIO))
-  val reset = io.ce_n.asAsyncReset
+  val systemReset = IO(Input(AsyncReset()))
+  val ce_n = io.ce_n.asAsyncReset
   val sckRise = io.sck.asClock
   val sckFall = (!io.sck).asClock
-  val module = withClockAndReset(sckRise, reset) { Module(new Impl) }
-  val misoOut = withClockAndReset(sckFall, reset) { RegNext(module.io.miso) }
-  val misoEnOut = withClockAndReset(sckFall, reset) { RegNext(module.io.misoEn, false.B) }
+  val module = withClockAndReset(sckRise, ce_n) { Module(new Impl) }
+  val misoOut = withClockAndReset(sckFall, ce_n) { RegNext(module.io.miso) }
+  val misoEnOut = withClockAndReset(sckFall, ce_n) { RegNext(module.io.misoEn, false.B) }
   module.io.mosi := TriStateInBuf(io.dio, misoOut, misoEnOut)
+  module.io.systemReset := systemReset
   class Impl extends Module with RequireAsyncReset {
     val io = IO(new Bundle{
       val miso = Output(UInt(4.W))
       val mosi = Input(UInt(4.W))
       val misoEn = Output(Bool())
+      val systemReset = Input(AsyncReset())
     })
+
+    // mode
+    val qpiMode = withClockAndReset( this.clock, io.systemReset ) { RegInit(false.B) }
+
     object State extends ChiselEnum {
       val cmd, addr, wait_read, data = Value
     }
@@ -54,10 +61,24 @@ class psram extends RawModule {
     switch(state) {
       is(State.cmd) {
         counter := counter + 1.U
-        cmd := Cat( cmd(6, 0), io.mosi(0) )
-        when(counter === 7.U) {
-          counter := 0.U
-          state := State.addr
+        when( qpiMode ) { // qpi mode
+          val next_cmd = Cat( cmd(3,0), io.mosi )
+          cmd := next_cmd
+          when(counter === 1.U) { // only allow: qspi -> qpi; not allow: qpi -> qspi
+            counter := 0.U
+            state := State.addr
+          }
+        } .otherwise { // qspi mode
+          val next_cmd = Cat( cmd(6, 0), io.mosi(0) )
+          cmd := next_cmd
+          when(counter === 7.U) {
+            counter := 0.U
+            state := State.addr // default
+            when(next_cmd === "h35".U) {
+              qpiMode := true.B
+              state := State.cmd // TODO: 一般设置完成以后, 总线事务就结束了
+            }
+          }
         }
       }
       is(State.addr) {
