@@ -41,11 +41,7 @@ class sdram_top_apb extends BlackBox {
   })
 }
 
-class sdram extends BlackBox {
-  val io = IO(Flipped(new SDRAMIO))
-}
-
-class sdramChisel extends RawModule {
+class sdram extends RawModule {
   val io = IO(Flipped(new SDRAMIO))
 }
 

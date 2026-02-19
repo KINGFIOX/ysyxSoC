@@ -257,8 +257,9 @@ class QSPI extends Module {
   io.in.pslverr := false.B
 
   // ─── QSPI outputs ────────────────────────────────────────
+  val ce = WireDefault(false.B)
   io.sck := clgen.io.clkOut
-  io.ce_n := true.B
+  io.ce_n := ! ce
 
   // ─── Write data calculation (little-endian byte swap) ─────
   private val wdata     = WireDefault(0.U(maxChar.W))
@@ -317,7 +318,7 @@ class QSPI extends Module {
       state := State.initAccess
     }
     is(State.initAccess) {
-      io.ce_n := false.B
+      ce := true.B
       shift.io.go := true.B
       clgen.io.go := true.B
       when(tipDone) {
@@ -362,7 +363,7 @@ class QSPI extends Module {
     is(State.access) {
       shift.io.go := true.B
       clgen.io.go := true.B
-      io.ce_n     := false.B
+      ce          := true.B
       when(tipDone) {
         state := State.ready
       }
