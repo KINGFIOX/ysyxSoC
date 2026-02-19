@@ -223,12 +223,10 @@ class QSPI extends Module {
   private val qspiWriteCmdExp = (0x38).U(8.W)
   private val qspiReadCmdExp  = (0xEB).U(8.W)
 
-  assert(io.in.paddr(1, 0) === 0.U, "QSPI: unaligned address")
-
   private val mosiEnOut = WireDefault(false.B)
   private val mosiOut   = WireDefault(0.U(4.W))
 
-  private val divider = RegInit(4.U(dividerLen.W))
+  private val divider = RegInit(0.U(dividerLen.W))
 
   // ─── Sub-modules ───────────────────────────────────────────
   private val clgen = Module(new QSPIClgen(dividerLen))
@@ -329,6 +327,7 @@ class QSPI extends Module {
     is(State.idle) {
       when(io.in.psel) {
         state := State.setup
+        assert(io.in.paddr(1, 0) === 0.U, cf"QSPI: unaligned address `${io.in.paddr}%x`")
       }
     }
 
