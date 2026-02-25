@@ -18,17 +18,21 @@
 
 #include <common.h>
 
-// Flash 地址范围
+// Flash
 #define FLASH_LEFT  ((paddr_t)CONFIG_SOC_XIP_FLASH_BASE) /*0x3000_0000*/
 #define FLASH_RIGHT ((paddr_t)CONFIG_SOC_XIP_FLASH_BASE + CONFIG_SOC_XIP_FLASH_SIZE - 1)
 
-// SRAM 地址范围
+// SRAM
 #define SRAM_LEFT  ((paddr_t)CONFIG_SOC_SRAM_BASE)
 #define SRAM_RIGHT ((paddr_t)CONFIG_SOC_SRAM_BASE + CONFIG_SOC_SRAM_SIZE - 1)
 
-// PSRAM 地址范围
+// PSRAM
 #define PSRAM_LEFT  ((paddr_t)CONFIG_SOC_PSRAM_BASE)
 #define PSRAM_RIGHT ((paddr_t)CONFIG_SOC_PSRAM_BASE + CONFIG_SOC_PSRAM_SIZE - 1)
+
+// SDRAM
+#define SDRAM_LEFT ((paddr_t)CONFIG_SOC_SDRAM_BASE)
+#define SDRAM_RIGHT ((paddr_t)CONFIG_SOC_SDRAM_BASE + CONFIG_SOC_SDRAM_SIZE - 1)
 
 // 复位向量（从 Kconfig 配置）
 #define RESET_VECTOR ((paddr_t)CONFIG_SOC_RESET_VECTOR)

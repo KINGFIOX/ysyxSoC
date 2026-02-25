@@ -87,7 +87,10 @@ factor:
 unary:
   primary { $$ = $1; }
   | '-' unary %prec UMINUS { $$ = (word_t)(-((sword_t)$2)); }
-  | '*' unary %prec DEREF { extern bool in_flash(paddr_t); extern bool in_sram(paddr_t); extern bool in_psram(paddr_t); if (in_flash($2) || in_sram($2) || in_psram($2)) { $$ = vaddr_read($2, sizeof(word_t)); } else { $$ = 0xdeadbeef; runtime_error = true; sdb_exprerror("invalid memory access"); } } /* 解引用 */
+  | '*' unary %prec DEREF {
+    extern bool in_flash(paddr_t); extern bool in_sram(paddr_t); extern bool in_psram(paddr_t); extern bool in_sdram(paddr_t);
+    if (in_flash($2) || in_sram($2) || in_psram($2) || in_sdram($2)) { $$ = vaddr_read($2, sizeof(word_t)); }
+    else { $$ = 0xdeadbeef; runtime_error = true; sdb_exprerror("invalid memory access"); } } /* 解引用 */
   ;
 
 primary:

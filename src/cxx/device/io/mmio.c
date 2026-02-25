@@ -13,6 +13,7 @@
  * See the Mulan PSL v2 for more details.
  ***************************************************************************************/
 
+#include "common.h"
 #include <device/map.h>
 #include <isa.h>
 #include <memory/paddr.h>
@@ -44,17 +45,20 @@ void add_mmio_map(const char *name, paddr_t addr, void *space, uint32_t len,
   assert(nr_map < NR_MAP);                     // 表有限
   paddr_t left = addr, right = addr + len - 1; // 左闭 右闭
 
-  extern bool in_flash(paddr_t addr); // flash
+  // --- check memory overlay ---
+  extern bool in_flash(paddr_t); // flash
   if (in_flash(left) || in_flash(right)) { report_mmio_overlap(name, left, right, "flash", FLASH_LEFT, FLASH_RIGHT); }
-  extern bool in_sram(paddr_t addr); // sram
+  extern bool in_sram(paddr_t); // sram
   if (in_sram(left) || in_sram(right)) { report_mmio_overlap(name, left, right, "sram", SRAM_LEFT, SRAM_RIGHT); }
-  extern bool in_psram(paddr_t addr); // psram
+  extern bool in_psram(paddr_t); // psram
   if (in_psram(left) || in_psram(right)) { report_mmio_overlap(name, left, right, "psram", PSRAM_LEFT, PSRAM_RIGHT); }
-  for (int i = 0; i < nr_map; i++) { // 不该重映射了
-    if (left <= maps[i].high &&
-        right >= maps[i].low) { // maps[i].low <= left <= right <= maps[i].high
-      report_mmio_overlap(name, left, right, maps[i].name, maps[i].low,
-                          maps[i].high);
+  extern bool in_sdram(paddr_t);
+  if (in_sdram(left) || in_sdram(right)) { report_mmio_overlap(name, left, right, "psram", SDRAM_LEFT, SDRAM_RIGHT); }
+
+  // --- check device overlay ---
+  for (int i = 0; i < nr_map; i++) {
+    if (left <= maps[i].high && right >= maps[i].low) { // maps[i].low <= left <= right <= maps[i].high
+      report_mmio_overlap(name, left, right, maps[i].name, maps[i].low, maps[i].high);
     }
   }
 

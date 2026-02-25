@@ -31,6 +31,11 @@ extern bool in_psram(paddr_t addr);
 extern void psram_read(int addr, char *data);
 extern void psram_write(int addr, char data);
 
+// SDRAM 接口
+extern bool in_sdram(paddr_t addr);
+extern void sdram_read(int addr, char *data);
+extern void sdram_write(int addr, char data);
+
 static void out_of_bound(paddr_t addr) {
   panic("address = " FMT_PADDR " is out of bound at pc = " FMT_WORD,
         addr, cpu.pc);
@@ -59,6 +64,15 @@ word_t paddr_read(paddr_t addr, int len) {
     }
     return result;
   }
+  if (in_sdram(addr)) {
+    word_t result = 0;
+    for (int i = 0; i < len; i++) {
+      char byte;
+      sdram_read((int)(addr - SDRAM_LEFT + i), &byte);
+      result |= ((word_t)(uint8_t)byte) << (i * 8);  // 小端序
+    }
+    return result;
+  }
   if (in_sram(addr)) {
     return sram_read(addr, len);
   }
@@ -72,6 +86,12 @@ void paddr_write(paddr_t addr, int len, word_t data) {
   if (in_psram(addr)) {
     for (int i = 0; i < len; i++) {
       psram_write((int)(addr - PSRAM_LEFT + i), (char)(data >> (i * 8)));  // 小端序
+    }
+    return;
+  }
+  if (in_sdram(addr)) {
+    for (int i = 0; i < len; i++) {
+      sdram_write((int)(addr - SDRAM_LEFT + i), (char)(data >> (i * 8)));  // 小端序
     }
     return;
   }
