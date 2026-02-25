@@ -97,9 +97,9 @@ class psram extends RawModule {
 2. **Verilator 二值仿真的局限性**: Verilator 使用二值逻辑仿真, 无法暴露信号竞争导致的不定态, 使得 bug 表现为偶发的数据错误而非明确的 X 传播, 大大增加了排查难度.
 3. **Fault 不等于 Failure**: 这个 bug 实际上影响所有的 write-after-read 场景 —— 每次 read 结束后 `misoEnOut` 都会残留为高电平. 然而此前的几次 write-after-read 并未触发异常, 原因是那几次恰好 `miso(0) = 0`, 与 Master 发送的命令字最低位一致, 掩盖了总线竞争的影响. 这正是软件工程中经典的 fault / error / failure 三层模型: **fault** (缺陷) 始终存在, 但只有在特定数据模式下才会引发 **error** (错误状态), 进而触发可观测的 **failure** (失效).
 
-这个 bug 前后排查了将近一周 (期间恰逢春节, 休息了几天). 在此过程中阅读了大量 SPI 协议相关资料, 收获颇丰. 同时也用 Chisel 重写了一份基于 APB 总线的 [QSPI Master](https://github.com/KINGFIOX/spi-master) (参考 `./perip/spi`). 
+这个 bug 前后排查了将近一周 (期间恰逢春节, 休息了几天). 在此过程中阅读了大量 SPI 协议相关资料, 收获颇丰. 同时也用 Chisel 重写了一份基于 APB 总线的 [QSPI Master](https://github.com/KINGFIOX/spi-master) (参考 `./src/verilog/spi`). 
 主要是一开始我认为是 eftables 的 qspi-master 有问题, 因为 mosi 就是从 master 传到 psram 的,
 并且 psram 经过一些简单的单元测试后, 并没有什么问题.
 并且考虑到后续还要升级为 qpi-master,
-所以我花了许多时间理解 ./perip/eftables 下的 qspi-master 代码
+所以我花了许多时间理解 ./src/verilog/eftables 下的 qspi-master 代码
 (已删除, 替换成了用 chisel 重写的 opencores 风格的版本).

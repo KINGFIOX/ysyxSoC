@@ -268,3 +268,5 @@ class sdram_cmd_io extends Bundle {
 }
 
 class sdram_cmd extends FixedIOExtModule(new sdram_cmd_io) { }
+
+

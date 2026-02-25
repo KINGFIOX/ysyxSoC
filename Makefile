@@ -55,18 +55,18 @@ VERILATOR_DEFINES += $(if $(CONFIG_VERILATOR_TRACE),+define+CONFIG_VERILATOR_TRA
 # SV 文件列表 (仿真用)
 VERILATOR_SRCS := $(V_SIM)
 VERILATOR_SRCS += $(shell find $(BUILD_DIR) -name "*.sv" 2>/dev/null)
-VERILATOR_PERIP_SRCS := $(shell find perip -name "*.v" 2>/dev/null)
+VERILATOR_PERIP_SRCS := $(shell find src/verilog -name "*.v" 2>/dev/null)
 VERILATOR_SRCS += $(VERILATOR_PERIP_SRCS)
 
-# Include 路径 (用于 perip 中的 `include)
-VERILATOR_INCS := -I$(NPC_HOME)/perip/spi/rtl
-VERILATOR_INCS += -I$(NPC_HOME)/perip/uart16550/rtl
+# Include 路径 (用于 src/verilog 中的 `include)
+VERILATOR_INCS := -I$(NPC_HOME)/src/verilog/spi/rtl
+VERILATOR_INCS += -I$(NPC_HOME)/src/verilog/uart16550/rtl
 VERILATOR_INCS += -I$(BUILD_DIR)/verification
 VERILATOR_INCS += -I$(BUILD_DIR)/verification/assert
 VERILATOR_INCS += -I$(BUILD_DIR)/verification/assume
 VERILATOR_INCS += -I$(BUILD_DIR)/verification/cover
 
-# 生成 Verilator Makefile (依赖 Chisel 输出 + perip 中的 Verilog)
+# 生成 Verilator Makefile (依赖 Chisel 输出 + src/verilog 中的 Verilog)
 $(VERILATOR_MK): $(V_SIM) $(VERILATOR_PERIP_SRCS)
 	@echo "=== Verilating $(VERILATOR_TOP) ==="
 	@mkdir -p $(VERILATOR_MDIR)
