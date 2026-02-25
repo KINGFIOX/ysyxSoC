@@ -43,7 +43,6 @@ class sdram_top_apb extends BlackBox {
 
 class sdram_mem extends RawModule {
   val io = IO(Flipped(new SDRAMIO))
-  val sdram_dq = IO(Analog(16.W))
   val clock = ( ~ io.clk.asBool ).asClock
   val reset = ( io.cs ).asAsyncReset
   val module = withClockAndReset(clock, reset) { Module(new SdramMemImpl) }
@@ -54,7 +53,7 @@ class sdram_mem extends RawModule {
   module.io.addr  := io.a
   module.io.ba    := io.ba
   module.io.dqm_n := io.dqm
-  module.io.data_input := TriStateInBuf( sdram_dq, module.io.data_output, module.io.data_out_en )
+  module.io.data_input := TriStateInBuf( io.dq, module.io.data_output, module.io.data_out_en )
 }
 
 class AXI4SDRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {

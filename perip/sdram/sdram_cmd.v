@@ -1,4 +1,4 @@
-import "DPI-C" function shortint sdram_read(int addr);
+import "DPI-C" function shortint sdram_read_dpic(int addr);
 import "DPI-C" function void sdram_write(int addr, byte data);
 
 module sdram_cmd(
@@ -21,7 +21,7 @@ module sdram_cmd(
           sdram_write(addr + 1, wdata[15:8]);
         end
       end else begin
-        rdata <= sdram_read(addr);
+        rdata <= sdram_read_dpic(addr);
       end
     end
   end

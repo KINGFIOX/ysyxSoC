@@ -188,7 +188,7 @@ extern "C" bool npc_core_step(Decode *s) {
   top->io_step = 1;
 
   // 运行直到 debug.valid 为真
-  const int MAX_CYCLES = 1000; // 防止死循环
+  const int MAX_CYCLES = 1000000; // 防止死循环
   int cycles = 0;
   do {
     tick();
