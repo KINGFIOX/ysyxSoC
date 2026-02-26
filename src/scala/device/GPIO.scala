@@ -9,9 +9,9 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
 class GPIOIO extends Bundle {
-  val out = Output(UInt(16.W))
-  val in = Input(UInt(16.W))
-  val seg = Output(Vec(8, UInt(8.W)))
+  val out = Output(UInt(16.W)) // led 灯
+  val in = Input(UInt(16.W)) // 拨码开关
+  val seg = Output(Vec(8, UInt(8.W))) // 数码管
 }
 
 class GPIOCtrlIO extends Bundle {
@@ -21,12 +21,87 @@ class GPIOCtrlIO extends Bundle {
   val gpio = new GPIOIO
 }
 
-class gpio_top_apb extends BlackBox {
+// IMPORTANT:
+// leds: 0, 1
+// switches: 4, 5
+// segs: 8, 9, 10, 11, 12, 13, 14, 15
+// which means: addr should be aligned to 4 bytes
+class gpio_top_apb extends Module {
   val io = IO(new GPIOCtrlIO)
-}
 
-class gpioChisel extends Module {
-  val io = IO(new GPIOCtrlIO)
+  // --- mmio register ---
+  val segsQ = RegInit(VecInit(Seq.fill(8)("hff".U(8.W))))
+  val ledsQ = RegInit("hffff".U(16.W))
+  
+  // --- outputs ---
+  io.gpio.out := ledsQ
+  io.gpio.seg := segsQ
+  
+  // --- alias ---
+  val addrW = io.in.paddr(3, 0)
+  val pstrbW = io.in.pstrb
+  val wdataW = io.in.pwdata
+
+  // --- state machine ---
+  object State extends ChiselEnum {
+    val idle, access, ready = Value
+  }
+  val stateQ = RegInit(State.idle)
+
+  // --- apb signals ---
+  val rdataQ = RegInit(0.U(32.W))
+  io.in.prdata := rdataQ
+  io.in.pslverr := false.B
+  io.in.pready := (stateQ === State.ready)
+
+  switch(stateQ) {
+
+    is(State.idle) {
+      when(io.in.psel) {
+        stateQ := State.access
+      }
+    }
+
+    is(State.access) {
+      when(io.in.pwrite) { // write
+        when( addrW === 0.U ) { // leds
+          when( pstrbW(0) ) { ledsQ(7, 0) := wdataW(7, 0) }
+          when( pstrbW(1) ) { ledsQ(15, 8) := wdataW(15, 8) }
+        } .elsewhen( addrW === 8.U ) { // segs
+          when( pstrbW(0) ) { segsQ(0) := wdataW(7, 0) }
+          when( pstrbW(1) ) { segsQ(1) := wdataW(15, 8) }
+          when( pstrbW(2) ) { segsQ(2) := wdataW(23, 16) }
+          when( pstrbW(3) ) { segsQ(3) := wdataW(31, 24) }
+        } .elsewhen( addrW === 12.U ) { // segs
+          when( pstrbW(0) ) { segsQ(4) := wdataW(7, 0) }
+          when( pstrbW(1) ) { segsQ(5) := wdataW(15, 8) }
+          when( pstrbW(2) ) { segsQ(6) := wdataW(23, 16) }
+          when( pstrbW(3) ) { segsQ(7) := wdataW(31, 24) }
+        }
+        // write, ignore switches
+      } .otherwise { // read
+        when( addrW === 0.U ) { // leds
+          rdataQ := ledsQ
+        } .elsewhen( addrW === 4.U ) { // switches
+          rdataQ := io.gpio.in
+        } .elsewhen( addrW === 8.U ) { // segs
+          rdataQ := Cat(segsQ(3), segsQ(2), segsQ(1), segsQ(0))
+        } .elsewhen( addrW === 12.U ) { // segs
+          rdataQ := Cat(segsQ(7), segsQ(6), segsQ(5), segsQ(4))
+        }
+      }
+
+      stateQ := State.ready
+    }
+
+    is(State.ready) {
+      when(io.in.penable) {
+        stateQ := State.idle
+      }
+    }
+
+  }
+
 }
 
 class APBGPIO(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
