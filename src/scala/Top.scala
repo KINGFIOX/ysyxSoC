@@ -1,6 +1,7 @@
 package ysyx
 
 import chisel3._
+import chisel3.probe.{Probe, read}
 import org.chipsalliance.cde.config.{Parameters, Config}
 import freechips.rocketchip.system._
 import freechips.rocketchip.diplomacy.LazyModule
@@ -34,27 +35,34 @@ class ysyxSoCTop extends Module {
   mdut.step := true.B  // always step
 }
 
+class NPCSoCInterface extends Bundle {
+  val clock = Input(Clock())
+  val reset = Input(Bool())
+  val step  = Input(Bool())
+  val debug = Output(new DebugBundle)
+}
+
 /** NPCSoC - Top module for Verilator simulation
   *
   * This module wraps ysyxSoCFull and exposes step/debug interfaces
   * for difftest and tracing.
   */
-class NPCSoC extends Module {
-  implicit val config: Parameters = new Config(new Edge32BitConfig ++ new DefaultRV32Config)
+class NPCSoC
+    extends FixedIORawModule(new NPCSoCInterface)
+    with ImplicitClock
+    with ImplicitReset {
+  override protected def implicitClock: Clock = io.clock
+  override protected def implicitReset: Reset = io.reset
 
-  val io = IO(new Bundle {
-    val step  = Input(Bool())
-    val debug = Output(new DebugBundle)
-  })
+  implicit val config: Parameters = new Config(new Edge32BitConfig ++ new DefaultRV32Config)
 
   val dut = LazyModule(new ysyxSoCFull)
   val mdut = Module(dut.module)
   mdut.dontTouchPorts()
   mdut.externalPins := DontCare
 
-  // Connect step and debug signals
   mdut.step := io.step
-  io.debug := mdut.debug
+  io.debug := read(mdut.probe)
 }
 
 object Elaborate extends App {

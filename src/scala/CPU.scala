@@ -2,6 +2,7 @@ package ysyx
 
 import chisel3._
 import chisel3.util._
+import chisel3.probe.{define, Probe}
 
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.subsystem._
@@ -146,16 +147,13 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     val interrupt = IO(Input(Bool()))
     val slave = IO(Flipped(AXI4Bundle(CPUAXI4BundleParameters())))
 
-    // Debug and step interfaces for simulation
     val step  = IO(Input(Bool()))
-    val debug = IO(Output(new DebugBundle))
+    val probe = IO(Output(Probe(new DebugBundle)))
 
-    // Instantiate NPCCore
     val cpu = Module(new NPCCore)
 
-    // Connect step and debug signals
     cpu.io.step := step
-    debug := cpu.io.debug
+    define(probe, cpu.io.probe)
 
     // Instantiate arbiter to merge icache and dcache
     val arbiter = Module(new AXI4Arbiter)

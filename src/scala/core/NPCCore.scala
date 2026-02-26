@@ -2,6 +2,7 @@ package ysyx.core
 
 import chisel3._
 import chisel3.util._
+import chisel3.probe.{define, Probe, ProbeValue}
 
 import ysyx.core.common.{HasCSRParameter, HasCoreParameter, HasRegFileParameter}
 import ysyx.core.component._
@@ -21,7 +22,7 @@ class DebugBundle extends Bundle with HasCoreParameter with HasRegFileParameter 
 class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with HasCSRParameter {
   val io = IO(new Bundle {
     val step   = Input(Bool())
-    val debug  = Output(new DebugBundle)
+    val probe  = Output(Probe(new DebugBundle))
     val icache = AXI4Bundle(CPUAXI4BundleParameters())
     val dcache = AXI4Bundle(CPUAXI4BundleParameters())
   })
@@ -232,11 +233,13 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   excpu.io.in.valid := (state === State.ifu_valid_wait) || (state === State.mem_valid_wait)
   excpu.io.out.ready := (state === State.ifu_valid_wait) || (state === State.mem_valid_wait)
 
-  /* ========== Debug Output ========== */
-  io.debug.valid := ifu.io.in.fire
-  io.debug.pc    := pc_reg
-  io.debug.dnpc  := dnpc_reg
-  io.debug.inst  := inst_reg
-  io.debug.gpr   := rfu.io.out.debug.gpr
-  io.debug.csr   := csru.io.debug
+  /* ========== Debug Output (Probe) ========== */
+  val debugWire = Wire(new DebugBundle)
+  debugWire.valid := ifu.io.in.fire
+  debugWire.pc    := pc_reg
+  debugWire.dnpc  := dnpc_reg
+  debugWire.inst  := inst_reg
+  debugWire.gpr   := rfu.io.out.debug.gpr
+  debugWire.csr   := csru.io.debug
+  define(io.probe, ProbeValue(debugWire))
 }

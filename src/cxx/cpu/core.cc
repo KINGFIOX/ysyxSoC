@@ -43,7 +43,7 @@ static uint64_t ncycles = 0;
 
 // Helper macro to access nested gpr array
 // Chisel generates: io_debug_gpr_0, io_debug_gpr_1, etc.
-#define DEBUG_GPR(n) top->io_debug_gpr_##n
+#define DEBUG_GPR(n) top->debug_gpr_##n
 
 /// @brief 打一拍(寄存器更新)
 static void tick() {
@@ -132,10 +132,10 @@ extern "C" void npc_core_fini(void) {
 
 /// @brief 读取 debug 信息, 写入 Decode 结构体
 static void read_debug_to_decode(Decode *s) {
-  s->pc = top->io_debug_pc;
-  s->dnpc = top->io_debug_dnpc;
+  s->pc = top->debug_pc;
+  s->dnpc = top->debug_dnpc;
   s->snpc = s->pc + 4; // 对于 RV32, 静态下一条指令地址
-  s->isa.inst = top->io_debug_inst;
+  s->isa.inst = top->debug_inst;
 }
 
 /// @brief 软件维护了硬件的状态, 主要是为了方便 difftest and trace
@@ -175,17 +175,17 @@ static void sync_gpr_to_cpu() {
 }
 
 static void sync_csr_to_cpu() {
-  cpu.csr[MSTATUS] = top->io_debug_csr_mstatus;
-  cpu.csr[MTVEC] = top->io_debug_csr_mtvec;
-  cpu.csr[MEPC] = top->io_debug_csr_mepc;
-  cpu.csr[MCAUSE] = top->io_debug_csr_mcause;
-  cpu.csr[MTVAL] = top->io_debug_csr_mtval;
-  cpu.csr[MVENDORID] = top->io_debug_csr_mvendorid;
-  cpu.csr[MARCHID] = top->io_debug_csr_marchid;
+  cpu.csr[MSTATUS] = top->debug_csr_mstatus;
+  cpu.csr[MTVEC] = top->debug_csr_mtvec;
+  cpu.csr[MEPC] = top->debug_csr_mepc;
+  cpu.csr[MCAUSE] = top->debug_csr_mcause;
+  cpu.csr[MTVAL] = top->debug_csr_mtval;
+  cpu.csr[MVENDORID] = top->debug_csr_mvendorid;
+  cpu.csr[MARCHID] = top->debug_csr_marchid;
 }
 
 extern "C" bool npc_core_step(Decode *s) {
-  top->io_step = 1;
+  top->step = 1;
 
   // 运行直到 debug.valid 为真
   const int MAX_CYCLES = 1000000; // 防止死循环
@@ -197,7 +197,7 @@ extern "C" bool npc_core_step(Decode *s) {
       Log("Warning: npc_core_step exceeded %d cycles without debug_commit", MAX_CYCLES);
       return false;
     }
-  } while (!top->io_debug_valid);
+  } while (!top->debug_valid);
 
   // 读取 commit 信息
   read_debug_to_decode(s);
@@ -205,7 +205,7 @@ extern "C" bool npc_core_step(Decode *s) {
   sync_gpr_to_cpu();
   sync_csr_to_cpu();
 
-  top->io_step = 0;
+  top->step = 0;
   top->eval();
   return true;
 }

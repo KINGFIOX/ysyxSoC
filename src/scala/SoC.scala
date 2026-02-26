@@ -2,6 +2,7 @@ package ysyx
 
 import chisel3._
 import chisel3.util._
+import chisel3.probe.{define, Probe}
 
 import freechips.rocketchip.diplomacy._
 import org.chipsalliance.cde.config.Parameters
@@ -90,11 +91,10 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val intr_from_chipSlave = IO(Input(Bool()))
     cpu.module.interrupt := intr_from_chipSlave
 
-    // expose step and debug signals for simulation
     val step = IO(Input(Bool()))
-    val debug = IO(Output(new DebugBundle))
+    val probe = IO(Output(Probe(new DebugBundle)))
     cpu.module.step := step
-    debug := cpu.module.debug
+    define(probe, cpu.module.probe)
 
     val sdramBundle = if (Config.sdramUseAXI) lsdram_axi.get.module.sdram_bundle
                       else                    lsdram_apb.get.module.sdram_bundle
@@ -176,8 +176,8 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
 
     // expose step and debug for simulation
     val step = IO(Input(Bool()))
-    val debug = IO(Output(new DebugBundle))
+    val probe = IO(Output(Probe(new DebugBundle)))
     masic.step := step
-    debug := masic.debug
+    define(probe, masic.probe)
   }
 }
