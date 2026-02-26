@@ -20,7 +20,6 @@
 #include <cpu/cpu.h>
 #include <cpu/decode.h>
 #include <cpu/difftest.h>
-#include <device/map.h>
 #include <memory/vaddr.h>
 #include <ftrace.h>
 #include "../isa/riscv32/local-include/reg.h" // etrace
@@ -40,8 +39,6 @@ CPU_state cpu = {};
 uint64_t g_nr_guest_inst = 0;
 static uint64_t g_timer = 0; // unit: us
 static bool g_print_step = false;
-
-void device_update();
 
 static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
 #ifdef CONFIG_ITRACE_COND
@@ -237,7 +234,6 @@ static void execute(uint64_t n) {
     g_nr_guest_inst++;
     trace_and_difftest(&s, cpu.pc);
     if (npc_state.state != NPC_RUNNING) break;
-    IFDEF(CONFIG_DEVICE, device_update());
   }
 }
 
@@ -259,9 +255,6 @@ static void dump_trace_msg(void) {
 #endif
 #ifdef CONFIG_MTRACE
   mtrace_dump();
-#endif
-#ifdef CONFIG_DTRACE
-  dtrace_dump();
 #endif
 #ifdef CONFIG_ETRACE
   etrace_dump();

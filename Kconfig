@@ -30,7 +30,6 @@ config VERILATOR_TRACE
     Generate VCD waveform file for debugging.
     Output: build/npc_core.vcd
 
-
 choice
   prompt "Build target"
   default TARGET_NATIVE_ELF
@@ -152,11 +151,6 @@ config MTRACE_COND
   string "Only trace memory when the condition is true"
   default "true"
 
-config DTRACE
-  depends on TRACE && TARGET_NATIVE_ELF
-  bool "Enable device tracer"
-  default y
-
 config ETRACE
   depends on TRACE && TARGET_NATIVE_ELF
   bool "Enable exception tracer"
@@ -200,7 +194,7 @@ config DIFFTEST_REF_NAME
 
 endmenu
 
-source "src/cxx/device/Kconfig"
+source "src/scala/device/Kconfig"
 
 config RT_CHECK
   bool "Enable runtime checking"

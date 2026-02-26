@@ -35,8 +35,6 @@ V_SIM := $(BUILD_DIR)/NPCSoC.sv
 # 生成 NPCSoC.sv (用于仿真)
 $(V_SIM): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
 	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(@D)
-	sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g' $@
-	sed -i '/firrtl_black_box_resource_files.f/, $$d' $@
 
 verilog: $(V_SIM)
 

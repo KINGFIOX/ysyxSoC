@@ -1,0 +1,91 @@
+# =============================== SoC Address Map ===============================
+# These addresses define the hardware memory map for the SoC.
+# Both Chisel (hardware) and C++ (simulation) use these values.
+
+menu "SoC Address Map"
+
+config SOC_RESET_VECTOR
+  hex "CPU reset vector address"
+  default 0x30000000
+
+config SOC_UART_BASE
+  hex "UART base address"
+  default 0x10000000
+
+config SOC_UART_SIZE
+  hex "UART address space size"
+  default 0x1000
+
+config SOC_GPIO_BASE
+  hex "GPIO base address"
+  default 0x10002000
+
+config SOC_GPIO_SIZE
+  hex "GPIO address space size"
+  default 0x10
+
+config SOC_KEYBOARD_BASE
+  hex "PS2 Keyboard base address"
+  default 0x10011000
+
+config SOC_KEYBOARD_SIZE
+  hex "PS2 Keyboard address space size"
+  default 0x8
+
+config SOC_VGA_BASE
+  hex "VGA frame buffer base address"
+  default 0x21000000
+
+config SOC_VGA_SIZE
+  hex "VGA frame buffer size"
+  default 0x200000
+
+config SOC_SPI_CTRL_BASE
+  hex "SPI controller base address"
+  default 0x10001000
+
+config SOC_SPI_CTRL_SIZE
+  hex "SPI controller address space size"
+  default 0x1000
+
+config SOC_XIP_FLASH_BASE
+  hex "XIP Flash base address"
+  default 0x30000000
+
+config SOC_XIP_FLASH_SIZE
+  hex "XIP Flash address space size"
+  default 0x10000000
+
+config SOC_PSRAM_BASE
+  hex "PSRAM base address"
+  default 0x80000000
+
+config SOC_PSRAM_SIZE
+  hex "PSRAM address space size"
+  default 0x400000
+
+config SOC_MROM_BASE
+  hex "MROM base address"
+  default 0x20000000
+
+config SOC_MROM_SIZE
+  hex "MROM address space size"
+  default 0x1000
+
+config SOC_SRAM_BASE
+  hex "SRAM base address"
+  default 0x0f000000
+
+config SOC_SRAM_SIZE
+  hex "SRAM address space size"
+  default 0x2000
+
+config SOC_SDRAM_BASE
+  hex "SDRAM base address"
+  default 0xa0000000
+
+config SOC_SDRAM_SIZE
+  hex "SDRAM address space size"
+  default 0x2000000
+
+endmenu # SoC Address Map

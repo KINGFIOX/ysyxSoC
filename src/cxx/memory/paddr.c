@@ -13,7 +13,6 @@
  * See the Mulan PSL v2 for more details.
  ***************************************************************************************/
 
-#include <device/mmio.h>
 #include <isa.h>
 #include <memory/paddr.h>
 
@@ -76,7 +75,6 @@ word_t paddr_read(paddr_t addr, int len) {
   if (in_sram(addr)) {
     return sram_read(addr, len);
   }
-  IFDEF(CONFIG_DEVICE, return mmio_read(addr, len));
   out_of_bound(addr);
   return 0;
 }
@@ -96,6 +94,5 @@ void paddr_write(paddr_t addr, int len, word_t data) {
     return;
   }
   if (in_sram(addr)) { sram_write(addr, len, data); return; }
-  IFDEF(CONFIG_DEVICE, mmio_write(addr, len, data); return);
   out_of_bound(addr);
 }

@@ -31,10 +31,10 @@ class gpio_top_apb extends Module {
 
   // --- mmio register ---
   val segsQ = RegInit(VecInit(Seq.fill(8)("hff".U(8.W))))
-  val ledsQ = RegInit("hffff".U(16.W))
+  val ledsQ = RegInit(VecInit(Seq.fill(2)("hff".U(8.W))))
   
   // --- outputs ---
-  io.gpio.out := ledsQ
+  io.gpio.out := ledsQ.asUInt
   io.gpio.seg := segsQ
   
   // --- alias ---
@@ -65,8 +65,8 @@ class gpio_top_apb extends Module {
     is(State.access) {
       when(io.in.pwrite) { // write
         when( addrW === 0.U ) { // leds
-          when( pstrbW(0) ) { ledsQ(7, 0) := wdataW(7, 0) }
-          when( pstrbW(1) ) { ledsQ(15, 8) := wdataW(15, 8) }
+          when( pstrbW(0) ) { ledsQ(0) := wdataW(7, 0) }
+          when( pstrbW(1) ) { ledsQ(1) := wdataW(15, 8) }
         } .elsewhen( addrW === 8.U ) { // segs
           when( pstrbW(0) ) { segsQ(0) := wdataW(7, 0) }
           when( pstrbW(1) ) { segsQ(1) := wdataW(15, 8) }
@@ -81,7 +81,7 @@ class gpio_top_apb extends Module {
         // write, ignore switches
       } .otherwise { // read
         when( addrW === 0.U ) { // leds
-          rdataQ := ledsQ
+          rdataQ := ledsQ.asUInt
         } .elsewhen( addrW === 4.U ) { // switches
           rdataQ := io.gpio.in
         } .elsewhen( addrW === 8.U ) { // segs
