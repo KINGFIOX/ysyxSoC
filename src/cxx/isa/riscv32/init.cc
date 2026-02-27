@@ -1,14 +1,18 @@
 #include <npc/isa.hh>
 
-static void restart() {
-  /* Set the initial program counter. */
-  cpu.pc = RESET_VECTOR;
+namespace npc {
 
-  /* The zero register is always 0. */
-  cpu.gpr[0] = 0;
+void Cpu::reset() {
+  set_pc(RESET_VECTOR);
+  set_gpr(0, 0);
 }
 
+void Cpu::init() {
+  reset();
+}
+
+} // namespace npc
+
 void init_isa() {
-  /* Initialize this virtual computer system. */
-  restart();
+  npc::cpu().init();
 }

@@ -16,6 +16,7 @@
 !meson.build
 !meson_options.txt
 !.clang-tidy
+!.clangd
 !scripts/**
 
 # =============================================================================

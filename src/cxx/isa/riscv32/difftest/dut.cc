@@ -31,12 +31,12 @@ static void print_diff_table(const CPU_state *ref_r, vaddr_t pc) {
 
   // 打印通用寄存器
   for (int i = 0; i < num_regs; i++) {
-    print_reg_row(reg_name(i), ref_r->gpr[i], cpu.gpr[i]);
+    print_reg_row(reg_name(i), ref_r->gpr[i], npc::cpu().gpr(i));
   }
 
   // 打印 PC
   printf("+------+------------+------------+----------+\n");
-  print_reg_row("pc", ref_r->pc, cpu.pc);
+  print_reg_row("pc", ref_r->pc, npc::cpu().pc());
 
   printf("+------+------------+------------+----------+\n");
   printf("\n");
@@ -48,13 +48,13 @@ bool isa_difftest_checkregs(const CPU_state *ref_r, vaddr_t pc) {
 
   // 先检查是否有差异
   for (int i = 0; i < num_regs; i++) {
-    if (ref_r->gpr[i] != cpu.gpr[i]) {
+    if (ref_r->gpr[i] != npc::cpu().gpr(i)) {
       all_match = false;
       break;
     }
   }
 
-  if (ref_r->pc != cpu.pc) {
+  if (ref_r->pc != npc::cpu().pc()) {
     all_match = false;
   }
 

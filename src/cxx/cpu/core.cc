@@ -106,48 +106,50 @@ static void read_debug_to_decode(Decode *s) {
 }
 
 static void sync_gpr_to_cpu() {
-  cpu.gpr[0]  = DEBUG_GPR(0);
-  cpu.gpr[1]  = DEBUG_GPR(1);
-  cpu.gpr[2]  = DEBUG_GPR(2);
-  cpu.gpr[3]  = DEBUG_GPR(3);
-  cpu.gpr[4]  = DEBUG_GPR(4);
-  cpu.gpr[5]  = DEBUG_GPR(5);
-  cpu.gpr[6]  = DEBUG_GPR(6);
-  cpu.gpr[7]  = DEBUG_GPR(7);
-  cpu.gpr[8]  = DEBUG_GPR(8);
-  cpu.gpr[9]  = DEBUG_GPR(9);
-  cpu.gpr[10] = DEBUG_GPR(10);
-  cpu.gpr[11] = DEBUG_GPR(11);
-  cpu.gpr[12] = DEBUG_GPR(12);
-  cpu.gpr[13] = DEBUG_GPR(13);
-  cpu.gpr[14] = DEBUG_GPR(14);
-  cpu.gpr[15] = DEBUG_GPR(15);
-  cpu.gpr[16] = DEBUG_GPR(16);
-  cpu.gpr[17] = DEBUG_GPR(17);
-  cpu.gpr[18] = DEBUG_GPR(18);
-  cpu.gpr[19] = DEBUG_GPR(19);
-  cpu.gpr[20] = DEBUG_GPR(20);
-  cpu.gpr[21] = DEBUG_GPR(21);
-  cpu.gpr[22] = DEBUG_GPR(22);
-  cpu.gpr[23] = DEBUG_GPR(23);
-  cpu.gpr[24] = DEBUG_GPR(24);
-  cpu.gpr[25] = DEBUG_GPR(25);
-  cpu.gpr[26] = DEBUG_GPR(26);
-  cpu.gpr[27] = DEBUG_GPR(27);
-  cpu.gpr[28] = DEBUG_GPR(28);
-  cpu.gpr[29] = DEBUG_GPR(29);
-  cpu.gpr[30] = DEBUG_GPR(30);
-  cpu.gpr[31] = DEBUG_GPR(31);
+  auto &c = npc::cpu();
+  c.set_gpr(0, DEBUG_GPR(0));
+  c.set_gpr(1, DEBUG_GPR(1));
+  c.set_gpr(2, DEBUG_GPR(2));
+  c.set_gpr(3, DEBUG_GPR(3));
+  c.set_gpr(4, DEBUG_GPR(4));
+  c.set_gpr(5, DEBUG_GPR(5));
+  c.set_gpr(6, DEBUG_GPR(6));
+  c.set_gpr(7, DEBUG_GPR(7));
+  c.set_gpr(8, DEBUG_GPR(8));
+  c.set_gpr(9, DEBUG_GPR(9));
+  c.set_gpr(10, DEBUG_GPR(10));
+  c.set_gpr(11, DEBUG_GPR(11));
+  c.set_gpr(12, DEBUG_GPR(12));
+  c.set_gpr(13, DEBUG_GPR(13));
+  c.set_gpr(14, DEBUG_GPR(14));
+  c.set_gpr(15, DEBUG_GPR(15));
+  c.set_gpr(16, DEBUG_GPR(16));
+  c.set_gpr(17, DEBUG_GPR(17));
+  c.set_gpr(18, DEBUG_GPR(18));
+  c.set_gpr(19, DEBUG_GPR(19));
+  c.set_gpr(20, DEBUG_GPR(20));
+  c.set_gpr(21, DEBUG_GPR(21));
+  c.set_gpr(22, DEBUG_GPR(22));
+  c.set_gpr(23, DEBUG_GPR(23));
+  c.set_gpr(24, DEBUG_GPR(24));
+  c.set_gpr(25, DEBUG_GPR(25));
+  c.set_gpr(26, DEBUG_GPR(26));
+  c.set_gpr(27, DEBUG_GPR(27));
+  c.set_gpr(28, DEBUG_GPR(28));
+  c.set_gpr(29, DEBUG_GPR(29));
+  c.set_gpr(30, DEBUG_GPR(30));
+  c.set_gpr(31, DEBUG_GPR(31));
 }
 
 static void sync_csr_to_cpu() {
-  cpu.csr[MSTATUS] = top->debug_csr_mstatus;
-  cpu.csr[MTVEC] = top->debug_csr_mtvec;
-  cpu.csr[MEPC] = top->debug_csr_mepc;
-  cpu.csr[MCAUSE] = top->debug_csr_mcause;
-  cpu.csr[MTVAL] = top->debug_csr_mtval;
-  cpu.csr[MVENDORID] = top->debug_csr_mvendorid;
-  cpu.csr[MARCHID] = top->debug_csr_marchid;
+  auto &c = npc::cpu();
+  c.write_csr(MSTATUS, top->debug_csr_mstatus);
+  c.write_csr(MTVEC, top->debug_csr_mtvec);
+  c.write_csr(MEPC, top->debug_csr_mepc);
+  c.write_csr(MCAUSE, top->debug_csr_mcause);
+  c.write_csr(MTVAL, top->debug_csr_mtval);
+  c.write_csr(MVENDORID, top->debug_csr_mvendorid);
+  c.write_csr(MARCHID, top->debug_csr_marchid);
 }
 
 bool npc_core_step(Decode *s) {
@@ -165,7 +167,7 @@ bool npc_core_step(Decode *s) {
   } while (!top->debug_valid);
 
   read_debug_to_decode(s);
-  cpu.pc = s->dnpc;
+  npc::cpu().set_pc(s->dnpc);
   sync_gpr_to_cpu();
   sync_csr_to_cpu();
 

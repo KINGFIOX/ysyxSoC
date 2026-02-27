@@ -29,10 +29,9 @@ inline uint32_t inst_fetch(vaddr_t *pc, int len) {
 
 // --- pattern matching mechanism ---
 
-__attribute__((always_inline))
-static inline void pattern_decode(const char *str, int len,
-                                  uint64_t *key, uint64_t *mask,
-                                  uint64_t *shift) {
+__attribute__((always_inline)) static inline void
+pattern_decode(const char *str, int len, uint64_t *key, uint64_t *mask,
+               uint64_t *shift) {
   uint64_t __key = 0, __mask = 0, __shift = 0;
 #define macro(i)                                                               \
   if ((i) >= len)                                                              \
@@ -48,12 +47,24 @@ static inline void pattern_decode(const char *str, int len,
     }                                                                          \
   }
 
-#define macro2(i)  macro(i); macro((i) + 1)
-#define macro4(i)  macro2(i); macro2((i) + 2)
-#define macro8(i)  macro4(i); macro4((i) + 4)
-#define macro16(i) macro8(i); macro8((i) + 8)
-#define macro32(i) macro16(i); macro16((i) + 16)
-#define macro64(i) macro32(i); macro32((i) + 32)
+#define macro2(i)                                                              \
+  macro(i);                                                                    \
+  macro((i) + 1)
+#define macro4(i)                                                              \
+  macro2(i);                                                                   \
+  macro2((i) + 2)
+#define macro8(i)                                                              \
+  macro4(i);                                                                   \
+  macro4((i) + 4)
+#define macro16(i)                                                             \
+  macro8(i);                                                                   \
+  macro8((i) + 8)
+#define macro32(i)                                                             \
+  macro16(i);                                                                  \
+  macro16((i) + 16)
+#define macro64(i)                                                             \
+  macro32(i);                                                                  \
+  macro32((i) + 32)
   macro64(0);
   panic("pattern too long");
 #undef macro
@@ -63,10 +74,9 @@ finish:
   *shift = __shift;
 }
 
-__attribute__((always_inline))
-static inline void pattern_decode_hex(const char *str, int len,
-                                      uint64_t *key, uint64_t *mask,
-                                      uint64_t *shift) {
+__attribute__((always_inline)) static inline void
+pattern_decode_hex(const char *str, int len, uint64_t *key, uint64_t *mask,
+                   uint64_t *shift) {
   uint64_t __key = 0, __mask = 0, __shift = 0;
 #define macro(i)                                                               \
   if ((i) >= len)                                                              \
@@ -105,8 +115,7 @@ finish:
 
 #define INSTPAT_START(name)                                                    \
   _Pragma("GCC diagnostic push")                                               \
-  _Pragma("GCC diagnostic ignored \"-Wpedantic\"")                             \
-  {                                                                            \
+      _Pragma("GCC diagnostic ignored \"-Wpedantic\"") {                       \
     const void *__instpat_end = &&concat(__instpat_end_, name);
 #define INSTPAT_END(name)                                                      \
   concat(__instpat_end_, name) :;                                              \

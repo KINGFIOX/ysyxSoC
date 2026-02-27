@@ -9,7 +9,6 @@ using Cfg = npc::trace::Config;
 
 #define MAX_INST_TO_PRINT 10
 
-CPU_state cpu = {};
 uint64_t g_nr_guest_inst = 0;
 npc::trace::TraceManager<> g_trace;
 
@@ -120,10 +119,10 @@ static void ftrace_log(const Decode *s) {
 static void etrace_log(const Decode *s) {
   INSTPAT_START();
   INSTPAT("0000000 00000 00000 000 00000 11100 11", ecall  , I, {
-    g_trace.etrace().push('E', 11, cpu.csr[MEPC], cpu.csr[MTVEC]);
+    g_trace.etrace().push('E', 11, npc::cpu().read_csr(MEPC), npc::cpu().read_csr(MTVEC));
   });
   INSTPAT("0011000 00010 00000 000 00000 11100 11", mret   , R, {
-    g_trace.etrace().push('R', csr(MCAUSE), cpu.csr[MEPC], 0);
+    g_trace.etrace().push('R', csr(MCAUSE), npc::cpu().read_csr(MEPC), 0);
   });
   INSTPAT_END();
 }
@@ -135,7 +134,7 @@ static void execute(uint64_t n) {
 
   for (; n > 0; n--) {
     if (!exec_once(&s)) {
-      set_npc_state(NPC_ABORT, cpu.pc, -1);
+      set_npc_state(NPC_ABORT, npc::cpu().pc(), -1);
       break;
     }
 
@@ -152,7 +151,7 @@ static void execute(uint64_t n) {
 #endif
 
     g_nr_guest_inst++;
-    trace_and_difftest(&s, cpu.pc);
+    trace_and_difftest(&s, npc::cpu().pc());
     if (npc_state.state != NPC_RUNNING) break;
   }
 }

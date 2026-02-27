@@ -19,9 +19,10 @@ option('trace_end',   type: 'integer', value: 10000, description: 'When tracing 
 
 # Debugging
 option('watchpoint', type: 'boolean', value: true,  description: 'Enable watchpoints')
-option('difftest',   type: 'boolean', value: false, description: 'Enable differential testing')
-option('difftest_ref_path', type: 'string', value: 'none', description: 'Difftest reference path')
-option('difftest_ref_name', type: 'string', value: 'none', description: 'Difftest reference name')
+option('difftest',   type: 'boolean', value: true, description: 'Enable differential testing')
+option('difftest_ref_path', type: 'string', value: 'tools/spike-diff', description: 'Difftest reference path (relative to project root)')
+option('difftest_ref_name', type: 'string', value: 'spike', description: 'Difftest reference name (e.g. spike -> riscv32-spike-so)')
+option('spike_path', type: 'string', value: '../tools/spike', description: 'Path to riscv-isa-sim (spike) source, relative to project root')
 option('rt_check',   type: 'boolean', value: true,  description: 'Enable runtime checking')
 
 # SoC Address Map

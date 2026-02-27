@@ -71,7 +71,7 @@ void init_difftest(char *ref_so_file, long img_size, int port) {
   ref_difftest_init(port);
   uint8_t *get_flash_ptr();
   ref_difftest_memcpy(RESET_VECTOR, get_flash_ptr(), img_size, DIFFTEST_TO_REF);
-  ref_difftest_regcpy(&cpu, DIFFTEST_TO_REF);
+  ref_difftest_regcpy(npc::cpu().state_ptr(), DIFFTEST_TO_REF);
 }
 
 /// @return true: 一致
@@ -105,7 +105,7 @@ bool difftest_step(vaddr_t pc, vaddr_t npc) {
 
   if (is_skip_ref) { // mmio 会跳过检查
     // to skip the checking of an instruction, just copy the reg state to reference design
-    ref_difftest_regcpy(&cpu, DIFFTEST_TO_REF);
+    ref_difftest_regcpy(npc::cpu().state_ptr(), DIFFTEST_TO_REF);
     is_skip_ref = false; // 仅跳过一条指令的检查
     return true; // 因为这里直接将 qemu 的状态复制到了 npc, 所以一定是一致的
   }

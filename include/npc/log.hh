@@ -1,8 +1,8 @@
 #ifndef NPC_LOG_HH_
 #define NPC_LOG_HH_
 
-#include <npc/common.hh>
 #include <format>
+#include <npc/common.hh>
 #include <string>
 #include <string_view>
 

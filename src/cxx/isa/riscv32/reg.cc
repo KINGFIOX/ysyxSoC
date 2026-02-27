@@ -4,12 +4,7 @@
 #include <utility>
 
 void isa_reg_display() {
-  for (int i = 0; i < npc::num_gprs; i++) {
-    std::printf("%-4.*s\t" FMT_WORD "\n",
-                static_cast<int>(npc::gpr_names[i].size()),
-                npc::gpr_names[i].data(), cpu.gpr[i]);
-  }
-  std::printf("pc\t" FMT_WORD "\n", cpu.pc);
+  npc::cpu().display();
 }
 
 static constexpr std::pair<npc::Csr, uint16_t> csr_entries[] = {
@@ -20,12 +15,12 @@ static constexpr std::pair<npc::Csr, uint16_t> csr_entries[] = {
 };
 
 std::optional<word_t> isa_reg_str2val(const char *s) {
-  if (std::strcmp(s, "pc") == 0) return cpu.pc;
+  if (std::strcmp(s, "pc") == 0) return npc::cpu().pc();
   for (int i = 0; i < npc::num_gprs; i++) {
-    if (npc::gpr_names[i] == s) return cpu.gpr[i];
+    if (npc::gpr_names[i] == s) return npc::cpu().gpr(i);
   }
   for (auto &[csr_enum, csr_idx] : csr_entries) {
-    if (npc::csr_name(csr_enum) == s) return cpu.csr[csr_idx];
+    if (npc::csr_name(csr_enum) == s) return npc::cpu().read_csr(csr_idx);
   }
   return std::nullopt;
 }

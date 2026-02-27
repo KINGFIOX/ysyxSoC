@@ -52,12 +52,12 @@ inline constexpr uint64_t sext(uint64_t x, int len) {
   const uint64_t mask = (1ULL << len) - 1;
   x &= mask;
   return static_cast<uint64_t>(
-      static_cast<int64_t>(x << (64 - len)) >> (64 - len));
+      static_cast<int64_t>(x << (64 - len)) >> (64 - len)); // NOLINT
 }
 #define SEXT(x, len) sext((x), (len))
 
-#define ROUNDUP(a, sz) ((((uintptr_t)a) + (sz) - 1) & ~((sz) - 1))
-#define ROUNDDOWN(a, sz) ((((uintptr_t)a)) & ~((sz) - 1))
+#define ROUNDUP(a, sz) ((((uintptr_t)(a)) + (sz) - 1) & ~((sz) - 1))
+#define ROUNDDOWN(a, sz) ((((uintptr_t)(a))) & ~((sz) - 1))
 
 #define PG_ALIGN __attribute((aligned(4096)))
 

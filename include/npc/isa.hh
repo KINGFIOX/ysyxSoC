@@ -10,8 +10,6 @@ struct ISADecodeInfo {
   uint32_t inst;
 };
 
-extern CPU_state cpu;
-
 extern unsigned char isa_logo[];
 void init_isa();
 void isa_reg_display();
@@ -53,14 +51,18 @@ inline int check_csr_idx(int idx) {
   return idx;
 }
 
-#define csr(idx) (cpu.csr[check_csr_idx(idx)])
+inline word_t csr(int idx) {
+  return npc::cpu().read_csr(check_csr_idx(idx));
+}
 
 inline int check_reg_idx(int idx) {
   IFDEF(CONFIG_RT_CHECK, assert(idx >= 0 && idx < 32));
   return idx;
 }
 
-#define gpr(idx) (cpu.gpr[check_reg_idx(idx)])
+inline word_t gpr(int idx) {
+  return npc::cpu().gpr(check_reg_idx(idx));
+}
 
 inline const char *reg_name(int idx) {
   return npc::gpr_names[check_reg_idx(idx)].data();

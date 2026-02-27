@@ -1,7 +1,7 @@
 project('npc', 'cpp',
   version: '0.1.0',
   default_options: [
-    'cpp_std=c++20',
+    'cpp_std=c++23',
     'warning_level=1',
     'werror=true',
     'optimization=2',
@@ -61,6 +61,20 @@ conf.set_quoted('CONFIG_CC_OPT',      '-O2')
 if get_option('difftest')
   conf.set_quoted('CONFIG_DIFFTEST_REF_PATH', get_option('difftest_ref_path'))
   conf.set_quoted('CONFIG_DIFFTEST_REF_NAME', get_option('difftest_ref_name'))
+  # 生成 difftest_ref.txt 供 Makefile 在 run 时传入 --diff
+  # spike-diff 由 meson 构建，输出在 build/meson/riscv32-spike-so
+  _ref_path = get_option('difftest_ref_path')
+  _ref_name = get_option('difftest_ref_name')
+  if _ref_path != 'none' and _ref_name != 'none'
+    _diff_ref_so_rel = 'build/meson/tools/spike-diff/' + get_option('guest_isa') + '-' + _ref_name + '-so.so'
+    _diff_ref_conf = configuration_data()
+    _diff_ref_conf.set('DIFF_REF_SO_REL', _diff_ref_so_rel)
+    configure_file(
+      input: 'difftest_ref.txt.in',
+      output: 'difftest_ref.txt',
+      configuration: _diff_ref_conf,
+    )
+  endif
 endif
 
 # SoC address map — hex string values emitted as bare integer macros
@@ -231,3 +245,12 @@ npc_exe = executable(guest_isa + '-npc',
   dependencies: deps,
   install: false,
 )
+
+# spike-diff: difftest 参考 .so，需 spike 已构建
+if get_option('difftest')
+  _ref_path = get_option('difftest_ref_path')
+  _ref_name = get_option('difftest_ref_name')
+  if _ref_path != 'none' and _ref_name == 'spike'
+    subdir('tools/spike-diff')
+  endif
+endif

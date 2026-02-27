@@ -25,7 +25,7 @@ word_t AddressSpace::read(paddr_t addr, int len) {
   auto *dev = find(addr);
   if (dev) return dev->read(addr, len);
   panic("address = " FMT_PADDR " is out of bound at pc = " FMT_WORD, addr,
-        cpu.pc);
+        npc::cpu().pc());
   return 0;
 }
 
@@ -36,7 +36,7 @@ void AddressSpace::write(paddr_t addr, int len, word_t data) {
     return;
   }
   panic("address = " FMT_PADDR " is out of bound at pc = " FMT_WORD, addr,
-        cpu.pc);
+        npc::cpu().pc());
 }
 
 } // namespace npc::mem

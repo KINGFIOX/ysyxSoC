@@ -116,19 +116,15 @@ all: verilate build
 override ARGS ?= --log=$(BUILD_DIR)/npc-log.txt
 IMG ?=
 
-DIFFTEST       ?= false
-DIFFTEST_REF   ?= spike
-ifeq ($(DIFFTEST),true)
-DIFF_REF_PATH  := $(NPC_HOME)/tools/spike-diff
-DIFF_REF_SO    := $(DIFF_REF_PATH)/build/$(GUEST_ISA)-$(DIFFTEST_REF)-so
-override ARGS  += --diff=$(DIFF_REF_SO)
-
-$(DIFF_REF_SO):
-	$(MAKE) -s -C $(DIFF_REF_PATH) GUEST_ISA=$(GUEST_ISA) NPC_HOME=$(NPC_HOME)
-endif
+# difftest ref path 来自 meson_options.txt (difftest_ref_path, difftest_ref_name)
+# meson setup 时生成 $(MESON_BDIR)/difftest_ref.txt
+DIFF_REF_SO_REL = $(shell cat $(MESON_BDIR)/difftest_ref.txt 2>/dev/null | tr -d '\n')
+DIFF_REF_SO = $(if $(DIFF_REF_SO_REL),$(NPC_HOME)/$(DIFF_REF_SO_REL),)
+override ARGS += $(if $(DIFF_REF_SO),--diff=$(DIFF_REF_SO),)
 
 NPC_EXEC = $(BINARY) $(ARGS) $(IMG)
 
+# spike-diff .so 由 meson 在 build 时一并构建
 run: all
 	$(NPC_EXEC)
 
