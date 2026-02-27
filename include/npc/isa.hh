@@ -56,7 +56,7 @@ inline int check_csr_idx(int idx) {
 #define csr(idx) (cpu.csr[check_csr_idx(idx)])
 
 inline int check_reg_idx(int idx) {
-  IFDEF(CONFIG_RT_CHECK, assert(idx >= 0 && idx < MUXDEF(CONFIG_RVE, 16, 32)));
+  IFDEF(CONFIG_RT_CHECK, assert(idx >= 0 && idx < 32));
   return idx;
 }
 

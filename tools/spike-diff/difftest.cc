@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <difftest-def.h>
 
-#define NR_GPR MUXDEF(CONFIG_RVE, 16, 32)
+#define NR_GPR 32
 
 static std::vector<std::pair<reg_t, abstract_device_t*>> difftest_plugin_devices;
 static std::vector<std::string> difftest_htif_args;
@@ -69,7 +69,7 @@ static debug_module_config_t difftest_dm_config = {
 };
 
 struct diff_context_t {
-  word_t gpr[MUXDEF(CONFIG_RVE, 16, 32)];
+  word_t gpr[32];
   word_t pc;
 };
 
@@ -135,7 +135,7 @@ __EXPORT void difftest_exec(uint64_t n) {
 
 __EXPORT void difftest_init(int port) {
   difftest_htif_args.push_back("");
-  const char *isa = "RV32" MUXDEF(CONFIG_RVE, "E", "I") "MAFDC";
+  const char *isa = "RV32IMAFDC";
   cfg_t *cfg = new cfg_t(/*default_initrd_bounds=*/std::make_pair((reg_t)0, (reg_t)0),
             /*default_bootargs=*/nullptr,
             /*default_isa=*/isa,

@@ -17,12 +17,7 @@ static constexpr unsigned xlen = 32;
 static constexpr bool is_64bit = false;
 static constexpr const char *fmt_word = "0x%08" PRIx32;
 
-static constexpr int num_gprs =
-#ifdef CONFIG_RVE
-    16;
-#else
-    32;
-#endif
+static constexpr int num_gprs = 32;
 
 // RISC-V register names
 inline constexpr std::array<std::string_view, 32> gpr_names = {

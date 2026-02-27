@@ -7,7 +7,7 @@
 enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 
 #define RISCV_GPR_TYPE uint32_t
-#define RISCV_GPR_NUM  MUXDEF(CONFIG_RVE, 16, 32)
+#define RISCV_GPR_NUM  32
 #define DIFFTEST_REG_SIZE (sizeof(RISCV_GPR_TYPE) * (RISCV_GPR_NUM + 1))
 
 extern void (*ref_difftest_memcpy)(paddr_t addr, void *buf, size_t n, bool direction);
