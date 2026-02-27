@@ -15,13 +15,13 @@
 #define PMEM64 1
 #endif
 
-using word_t  = MUXDEF(CONFIG_ISA64, uint64_t, uint32_t);
-using sword_t = MUXDEF(CONFIG_ISA64, int64_t,  int32_t);
+using word_t  = uint32_t;
+using sword_t = int32_t;
 using vaddr_t = word_t;
 using paddr_t = MUXDEF(PMEM64, uint64_t, uint32_t);
 using ioaddr_t = uint16_t;
 
-#define FMT_WORD  MUXDEF(CONFIG_ISA64, "0x%016" PRIx64, "0x%08" PRIx32)
+#define FMT_WORD  "0x%08" PRIx32
 #define FMT_PADDR MUXDEF(PMEM64, "0x%016" PRIx64, "0x%08" PRIx32)
 
 // ----------- ANSI colors -----------
@@ -108,7 +108,6 @@ inline word_t host_read(void *addr, int len) {
   case 1: return *static_cast<uint8_t *>(addr);
   case 2: return *static_cast<uint16_t *>(addr);
   case 4: return *static_cast<uint32_t *>(addr);
-    IFDEF(CONFIG_ISA64, case 8: return *static_cast<uint64_t *>(addr));
   default: MUXDEF(CONFIG_RT_CHECK, assert(0), return 0);
   }
 }
@@ -118,8 +117,7 @@ inline void host_write(void *addr, int len, word_t data) {
   case 1: *static_cast<uint8_t *>(addr)  = data; return;
   case 2: *static_cast<uint16_t *>(addr) = data; return;
   case 4: *static_cast<uint32_t *>(addr) = data; return;
-    IFDEF(CONFIG_ISA64, case 8: *static_cast<uint64_t *>(addr) = data; return);
-    IFDEF(CONFIG_RT_CHECK, default: assert(0));
+  default: MUXDEF(CONFIG_RT_CHECK, assert(0), (void)0);
   }
 }
 

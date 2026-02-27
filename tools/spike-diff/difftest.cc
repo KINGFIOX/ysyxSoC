@@ -135,7 +135,7 @@ __EXPORT void difftest_exec(uint64_t n) {
 
 __EXPORT void difftest_init(int port) {
   difftest_htif_args.push_back("");
-  const char *isa = "RV" MUXDEF(CONFIG_RV64, "64", "32") MUXDEF(CONFIG_RVE, "E", "I") "MAFDC";
+  const char *isa = "RV32" MUXDEF(CONFIG_RVE, "E", "I") "MAFDC";
   cfg_t *cfg = new cfg_t(/*default_initrd_bounds=*/std::make_pair((reg_t)0, (reg_t)0),
             /*default_bootargs=*/nullptr,
             /*default_isa=*/isa,

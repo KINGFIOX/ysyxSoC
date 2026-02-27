@@ -19,15 +19,9 @@ guest_isa = get_option('guest_isa')
 
 conf = configuration_data()
 
-# ISA
+# ISA (riscv32 only)
 conf.set_quoted('CONFIG_ISA', guest_isa)
-if guest_isa.startswith('riscv')
-  conf.set('CONFIG_ISA_riscv', 1)
-endif
-if guest_isa == 'riscv64'
-  conf.set('CONFIG_ISA64', 1)
-  conf.set('CONFIG_RV64', 1)
-endif
+conf.set('CONFIG_ISA_riscv', 1)
 
 # Boolean features
 _bool_opts = {

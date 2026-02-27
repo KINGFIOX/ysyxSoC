@@ -1,5 +1,5 @@
 # ISA
-option('guest_isa', type: 'combo', choices: ['riscv32', 'riscv64'], value: 'riscv32', description: 'Guest ISA')
+option('guest_isa', type: 'combo', choices: ['riscv32'], value: 'riscv32', description: 'Guest ISA')
 
 # Trace
 option('trace',     type: 'boolean', value: true,  description: 'Enable tracer')

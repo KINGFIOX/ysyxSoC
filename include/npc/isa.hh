@@ -4,7 +4,7 @@
 #include <npc/isa_traits.hh>
 #include <optional>
 
-using CPU_state = npc::CpuState<>;
+using CPU_state = npc::CpuState;
 
 struct ISADecodeInfo {
   uint32_t inst;

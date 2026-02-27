@@ -6,8 +6,7 @@ static csh handle;
 
 void init_disasm() {
   cs_arch arch = CS_ARCH_RISCV;
-  cs_mode mode = static_cast<cs_mode>(
-      MUXDEF(CONFIG_ISA64, CS_MODE_RISCV64, CS_MODE_RISCV32) | CS_MODE_RISCVC);
+  cs_mode mode = static_cast<cs_mode>(CS_MODE_RISCV32 | CS_MODE_RISCVC);
   int ret = cs_open(arch, mode, &handle);
   assert(ret == CS_ERR_OK);
 }

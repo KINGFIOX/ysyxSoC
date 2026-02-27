@@ -10,35 +10,12 @@
 
 namespace npc {
 
-template <unsigned XLEN>
-struct IsaTraits;
-
-template <>
-struct IsaTraits<32> {
-  using word_t  = uint32_t;
-  using sword_t = int32_t;
-  static constexpr unsigned xlen = 32;
-  static constexpr bool is_64bit = false;
-  static constexpr const char *fmt_word = "0x%08" PRIx32;
-};
-
-template <>
-struct IsaTraits<64> {
-  using word_t  = uint64_t;
-  using sword_t = int64_t;
-  static constexpr unsigned xlen = 64;
-  static constexpr bool is_64bit = true;
-  static constexpr const char *fmt_word = "0x%016" PRIx64;
-};
-
-static constexpr unsigned current_xlen =
-#ifdef CONFIG_ISA64
-    64;
-#else
-    32;
-#endif
-
-using CurrentIsa = IsaTraits<current_xlen>;
+// RV32I type aliases and constants
+using word_t  = uint32_t;
+using sword_t = int32_t;
+static constexpr unsigned xlen = 32;
+static constexpr bool is_64bit = false;
+static constexpr const char *fmt_word = "0x%08" PRIx32;
 
 static constexpr int num_gprs =
 #ifdef CONFIG_RVE
@@ -79,11 +56,7 @@ constexpr std::string_view csr_name(Csr c) {
   return "unknown";
 }
 
-// CPU state templated on ISA word size
-template <typename Isa = CurrentIsa>
 struct CpuState {
-  using word_t = typename Isa::word_t;
-
   word_t gpr[num_gprs]{};
   word_t pc{};
   word_t csr[0x1000]{};
