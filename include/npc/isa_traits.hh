@@ -18,6 +18,7 @@ static constexpr bool is_64bit = false;
 static constexpr const char *fmt_word = "0x%08" PRIx32;
 
 static constexpr int num_gprs = 32;
+static constexpr int num_csrs = 0x1000;
 
 // RISC-V register names
 inline constexpr std::array<std::string_view, 32> gpr_names = {
@@ -58,20 +59,25 @@ constexpr std::string_view csr_name(Csr c) {
 }
 
 struct CpuState {
-  word_t gpr[num_gprs]{};
-  word_t pc{};
-  word_t csr[0x1000]{};
+  std::array<word_t, num_gprs> gpr;
+  word_t pc;
+  std::array<word_t, num_csrs> csr;
 
-  word_t read_csr(Csr idx) const { return csr[static_cast<uint16_t>(idx)]; }
-  void write_csr(Csr idx, word_t val) { csr[static_cast<uint16_t>(idx)] = val; }
+  [[nodiscard]] word_t read_csr(Csr idx) const {
+    return csr.at(static_cast<uint16_t>(idx));
+  }
+  void write_csr(Csr idx, word_t val) {
+    csr.at(static_cast<uint16_t>(idx)) = val;
+  }
 
   void display() const {
-    for (int i = 0; i < num_gprs; i++)
+    for (int i = 0; i < num_gprs; i++) {
       std::printf("%-4.*s\t"
                   "0x%08x"
                   "\n",
-                  static_cast<int>(gpr_names[i].size()), gpr_names[i].data(),
-                  gpr[i]);
+                  static_cast<int>(gpr_names.at(i).size()),
+                  gpr_names.at(i).data(), gpr.at(i));
+    }
     std::printf("pc\t"
                 "0x%08x"
                 "\n",
@@ -80,7 +86,7 @@ struct CpuState {
 };
 
 class Cpu {
-  CpuState state_{};
+  CpuState state_;
 
 public:
   void init();  // Implemented in init.cc
@@ -89,16 +95,14 @@ public:
   [[nodiscard]] word_t pc() const { return state_.pc; }
   void set_pc(word_t v) { state_.pc = v; }
 
-  [[nodiscard]] word_t gpr(int i) const { return state_.gpr[i]; }
-  void set_gpr(int i, word_t v) { state_.gpr[i] = v; }
+  [[nodiscard]] word_t gpr(int i) const { return state_.gpr.at(i); }
+  void set_gpr(int i, word_t v) { state_.gpr.at(i) = v; }
 
-  [[nodiscard]] word_t read_csr(Csr idx) const {
-    return state_.read_csr(idx);
-  }
+  [[nodiscard]] word_t read_csr(Csr idx) const { return state_.read_csr(idx); }
   void write_csr(Csr idx, word_t v) { state_.write_csr(idx, v); }
 
-  [[nodiscard]] word_t read_csr(int idx) const { return state_.csr[idx]; }
-  void write_csr(int idx, word_t v) { state_.csr[idx] = v; }
+  [[nodiscard]] word_t read_csr(int idx) const { return state_.csr.at(idx); }
+  void write_csr(int idx, word_t v) { state_.csr.at(idx) = v; }
 
   void display() const { state_.display(); }
 
