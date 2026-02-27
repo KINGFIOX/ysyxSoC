@@ -12,7 +12,7 @@
 
 # =============================== 路径定义 ===============================
 
-NPC_HOME     := $(abspath .)
+NPC_HOME     ?= $(abspath .)
 BUILD_DIR    := $(NPC_HOME)/build
 MESON_BDIR   := $(BUILD_DIR)/meson
 MILL         := mill
@@ -134,7 +134,7 @@ gdb: all
 # =============================== 配置 ===============================
 
 menuconfig: $(MESON_BDIR)/build.ninja
-	meson configure $(MESON_BDIR)
+	meson configure $(NPC_HOME)
 
 # =============================== 开发工具 ===============================
 

@@ -23,6 +23,7 @@ option('difftest',   type: 'boolean', value: true, description: 'Enable differen
 option('difftest_ref_path', type: 'string', value: 'tools/spike-diff', description: 'Difftest reference path (relative to project root)')
 option('difftest_ref_name', type: 'string', value: 'spike', description: 'Difftest reference name (e.g. spike -> riscv32-spike-so)')
 option('spike_path', type: 'string', value: '../tools/spike', description: 'Path to riscv-isa-sim (spike) source, relative to project root')
+option('spike_build_dir', type: 'string', value: 'build', description: 'Spike meson build dir name (build)')
 option('rt_check',   type: 'boolean', value: true,  description: 'Enable runtime checking')
 
 # SoC Address Map

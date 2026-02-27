@@ -39,7 +39,9 @@ static void tick() {
 
 static void reset(int cycles = 15) {
   top->reset = 1;
-  for (int i = 0; i < cycles; i++) { tick(); }
+  for (int i = 0; i < cycles; i++) {
+    tick();
+  }
   top->reset = 0;
 }
 
@@ -59,9 +61,11 @@ bool npc_core_init(int argc, char *argv[]) {
 
   reset();
 
-#define VERILATOR_SRAM_MEMORY top->rootp->NPCSoC__DOT__dut__DOT__asic__DOT__axi4ram__DOT__mem_ext__DOT__Memory
+#define VERILATOR_SRAM_MEMORY                                                  \
+  top->rootp                                                                   \
+      ->NPCSoC__DOT__dut__DOT__asic__DOT__axi4ram__DOT__mem_ext__DOT__Memory
 
-  init_sram(reinterpret_cast<uint8_t*>(VERILATOR_SRAM_MEMORY.data()));
+  init_sram(reinterpret_cast<uint8_t *>(VERILATOR_SRAM_MEMORY.data()));
 
   Log("Verilator core initialized, reset complete");
   return true;
@@ -112,33 +116,33 @@ static void sync_gpr_to_cpu() {
   c.set_gpr(2, DEBUG_GPR(2));
   c.set_gpr(3, DEBUG_GPR(3));
   c.set_gpr(4, DEBUG_GPR(4));
-  c.set_gpr(5, DEBUG_GPR(5));
-  c.set_gpr(6, DEBUG_GPR(6));
-  c.set_gpr(7, DEBUG_GPR(7));
-  c.set_gpr(8, DEBUG_GPR(8));
-  c.set_gpr(9, DEBUG_GPR(9));
-  c.set_gpr(10, DEBUG_GPR(10));
-  c.set_gpr(11, DEBUG_GPR(11));
-  c.set_gpr(12, DEBUG_GPR(12));
-  c.set_gpr(13, DEBUG_GPR(13));
-  c.set_gpr(14, DEBUG_GPR(14));
-  c.set_gpr(15, DEBUG_GPR(15));
-  c.set_gpr(16, DEBUG_GPR(16));
-  c.set_gpr(17, DEBUG_GPR(17));
-  c.set_gpr(18, DEBUG_GPR(18));
-  c.set_gpr(19, DEBUG_GPR(19));
-  c.set_gpr(20, DEBUG_GPR(20));
-  c.set_gpr(21, DEBUG_GPR(21));
-  c.set_gpr(22, DEBUG_GPR(22));
-  c.set_gpr(23, DEBUG_GPR(23));
-  c.set_gpr(24, DEBUG_GPR(24));
-  c.set_gpr(25, DEBUG_GPR(25));
-  c.set_gpr(26, DEBUG_GPR(26));
-  c.set_gpr(27, DEBUG_GPR(27));
-  c.set_gpr(28, DEBUG_GPR(28));
-  c.set_gpr(29, DEBUG_GPR(29));
-  c.set_gpr(30, DEBUG_GPR(30));
-  c.set_gpr(31, DEBUG_GPR(31));
+  c.set_gpr(5, DEBUG_GPR(5));   // NOLINT
+  c.set_gpr(6, DEBUG_GPR(6));   // NOLINT
+  c.set_gpr(7, DEBUG_GPR(7));   // NOLINT
+  c.set_gpr(8, DEBUG_GPR(8));   // NOLINT
+  c.set_gpr(9, DEBUG_GPR(9));   // NOLINT
+  c.set_gpr(10, DEBUG_GPR(10)); // NOLINT
+  c.set_gpr(11, DEBUG_GPR(11)); // NOLINT
+  c.set_gpr(12, DEBUG_GPR(12)); // NOLINT
+  c.set_gpr(13, DEBUG_GPR(13)); // NOLINT
+  c.set_gpr(14, DEBUG_GPR(14)); // NOLINT
+  c.set_gpr(15, DEBUG_GPR(15)); // NOLINT
+  c.set_gpr(16, DEBUG_GPR(16)); // NOLINT
+  c.set_gpr(17, DEBUG_GPR(17)); // NOLINT
+  c.set_gpr(18, DEBUG_GPR(18)); // NOLINT
+  c.set_gpr(19, DEBUG_GPR(19)); // NOLINT
+  c.set_gpr(20, DEBUG_GPR(20)); // NOLINT
+  c.set_gpr(21, DEBUG_GPR(21)); // NOLINT
+  c.set_gpr(22, DEBUG_GPR(22)); // NOLINT
+  c.set_gpr(23, DEBUG_GPR(23)); // NOLINT
+  c.set_gpr(24, DEBUG_GPR(24)); // NOLINT
+  c.set_gpr(25, DEBUG_GPR(25)); // NOLINT
+  c.set_gpr(26, DEBUG_GPR(26)); // NOLINT
+  c.set_gpr(27, DEBUG_GPR(27)); // NOLINT
+  c.set_gpr(28, DEBUG_GPR(28)); // NOLINT
+  c.set_gpr(29, DEBUG_GPR(29)); // NOLINT
+  c.set_gpr(30, DEBUG_GPR(30)); // NOLINT
+  c.set_gpr(31, DEBUG_GPR(31)); // NOLINT
 }
 
 static void sync_csr_to_cpu() {
@@ -161,7 +165,8 @@ bool npc_core_step(Decode *s) {
     tick();
     cycles++;
     if (cycles >= MAX_CYCLES) {
-      Log("Warning: npc_core_step exceeded {} cycles without debug_commit", MAX_CYCLES);
+      Log("Warning: npc_core_step exceeded {} cycles without debug_commit",
+          MAX_CYCLES);
       return false;
     }
   } while (!top->debug_valid);
