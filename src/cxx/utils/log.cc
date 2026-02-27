@@ -26,22 +26,29 @@ void Logger::close() {
 
 bool Logger::enabled() const {
 #ifdef CONFIG_TRACE
-  return (g_nr_guest_inst >= CONFIG_TRACE_START) &&
-         (g_nr_guest_inst <= CONFIG_TRACE_END) &&
+  const uint64_t start = static_cast<uint64_t>(CONFIG_TRACE_START);
+  const uint64_t end = static_cast<uint64_t>(CONFIG_TRACE_END);
+  return (g_nr_guest_inst >= start) && (g_nr_guest_inst <= end) &&
          MUXDEF(CONFIG_ITRACE, fp_ != nullptr, true);
 #else
   return false;
 #endif
 }
 
-} // namespace npc
+void Logger::write(std::string_view msg) {
+#ifdef CONFIG_TARGET_NATIVE_ELF
+  if (enabled() && fp_ != nullptr) {
+    std::fprintf(fp_, "%.*s", static_cast<int>(msg.size()), msg.data());
+    std::fflush(fp_);
+  }
+#endif
+}
 
-FILE *log_fp = nullptr;
+} // namespace npc
 
 void init_log(const char *log_file) {
   npc::g_logger.init(log_file);
-  log_fp = npc::g_logger.fp();
-  Log("Log is written to %s", log_file ? log_file : "stdout");
+  Log("Log is written to {}", log_file ? log_file : "stdout");
 }
 
 bool log_enable() {

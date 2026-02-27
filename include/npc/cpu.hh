@@ -104,8 +104,11 @@ finish:
   } while (0)
 
 #define INSTPAT_START(name)                                                    \
+  _Pragma("GCC diagnostic push")                                               \
+  _Pragma("GCC diagnostic ignored \"-Wpedantic\"")                             \
   {                                                                            \
     const void *__instpat_end = &&concat(__instpat_end_, name);
 #define INSTPAT_END(name)                                                      \
   concat(__instpat_end_, name) :;                                              \
-  }
+  }                                                                            \
+  _Pragma("GCC diagnostic pop")

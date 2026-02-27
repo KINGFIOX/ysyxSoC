@@ -95,7 +95,7 @@ void npc_core_fini() {
     ctx = nullptr;
   }
   Log("Verilator core finalized");
-  Log("total cycles: %lu", ncycles);
+  Log("total cycles: {}", ncycles);
 }
 
 static void read_debug_to_decode(Decode *s) {
@@ -159,7 +159,7 @@ bool npc_core_step(Decode *s) {
     tick();
     cycles++;
     if (cycles >= MAX_CYCLES) {
-      Log("Warning: npc_core_step exceeded %d cycles without debug_commit", MAX_CYCLES);
+      Log("Warning: npc_core_step exceeded {} cycles without debug_commit", MAX_CYCLES);
       return false;
     }
   } while (!top->debug_valid);

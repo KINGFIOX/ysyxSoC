@@ -2,6 +2,9 @@
 #define NPC_LOG_HH_
 
 #include <npc/common.hh>
+#include <format>
+#include <string>
+#include <string_view>
 
 namespace npc {
 
@@ -15,16 +18,29 @@ public:
   FILE *fp() const { return fp_; }
   bool enabled() const;
 
+  void write(std::string_view msg);
+
   template <typename... Args>
-  void write(const char *fmt, Args... args) {
-    if (enabled() && fp_) {
-      std::fprintf(fp_, fmt, args...);
-      std::fflush(fp_);
-    }
+  void write(std::format_string<Args...> fmt, Args &&...args) {
+    write(std::format(fmt, std::forward<Args>(args)...));
   }
 };
 
 extern Logger g_logger;
+
+// Format and output to stdout and log file. Used by Log macro.
+template <typename... Args>
+inline void log_impl(std::format_string<Args...> fmt, Args &&...args) {
+  std::string msg = std::format(fmt, std::forward<Args>(args)...);
+  std::printf("%s", msg.c_str());
+  g_logger.write(msg);
+}
+
+// Raw log without prefix. Used by trace dump and similar.
+template <typename... Args>
+inline void log_raw(std::format_string<Args...> fmt, Args &&...args) {
+  log_impl(fmt, std::forward<Args>(args)...);
+}
 
 class Timer {
   uint64_t boot_time_ = 0;

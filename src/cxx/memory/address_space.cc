@@ -8,8 +8,8 @@ AddressSpace g_address_space;
 void AddressSpace::register_device(MemoryDevice *dev) {
   Assert(count_ < kMaxDevices, "too many memory devices registered");
   devices_[count_++] = dev;
-  Log("registered memory device: %.*s [" FMT_PADDR ", " FMT_PADDR "]",
-      static_cast<int>(dev->name().size()), dev->name().data(),
+  Log("registered memory device: {} [{:08x}, {:08x}]",
+      dev->name(),
       dev->range().base,
       static_cast<paddr_t>(dev->range().base + dev->range().size - 1));
 }

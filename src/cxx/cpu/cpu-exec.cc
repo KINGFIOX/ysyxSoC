@@ -22,7 +22,7 @@ static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
       char logbuf[128];
       npc::trace::gen_logbuf(logbuf, sizeof(logbuf), _this->pc, _this->snpc,
                              _this->isa.inst);
-      log_write("%s\n", logbuf);
+      _Log("{}\n", logbuf);
     }
   }
 
@@ -61,7 +61,10 @@ enum {
 
 #if defined(CONFIG_FTRACE) || defined(CONFIG_ETRACE)
 
-static void decode_operand(const Decode *s, int *rd, word_t *src1, word_t *src2, word_t *imm, int type) {
+static void decode_operand(const Decode *s, int *rd, word_t *src1, word_t *src2,
+                           word_t *imm, int type) {
+  (void)src1;
+  (void)src2;
   uint32_t i = s->isa.inst;
   *rd     = BITS(i, 11, 7);
   switch (type) {
@@ -155,11 +158,10 @@ static void execute(uint64_t n) {
 }
 
 static void statistic() {
-#define NUMBERIC_FMT "%" PRIu64
-  Log("host time spent = " NUMBERIC_FMT " us", g_timer);
-  Log("total guest instructions = " NUMBERIC_FMT, g_nr_guest_inst);
+  Log("host time spent = {} us", g_timer);
+  Log("total guest instructions = {}", g_nr_guest_inst);
   if (g_timer > 0)
-    Log("simulation frequency = " NUMBERIC_FMT " inst/s",
+    Log("simulation frequency = {} inst/s",
         g_nr_guest_inst * 1000000 / g_timer);
   else
     Log("Finish running in less than 1 us and can not calculate the simulation "
@@ -199,15 +201,15 @@ void cpu_exec(uint64_t n) {
 
   case NPC_ABORT:
   case NPC_END:
-    Log("npc: %s at pc = " FMT_WORD,
+    Log("npc: {} at pc = {:08x}",
         (npc_state.state == NPC_ABORT
              ? ANSI_FMT("ABORT", ANSI_FG_RED)
              : (npc_state.halt_ret == 0
                     ? ANSI_FMT("HIT GOOD TRAP", ANSI_FG_GREEN)
                     : ANSI_FMT("HIT BAD TRAP", ANSI_FG_RED))),
         npc_state.halt_pc);
-    // fall through
     g_trace.dump_all();
+    [[fallthrough]];
   case NPC_QUIT:
     statistic();
   }

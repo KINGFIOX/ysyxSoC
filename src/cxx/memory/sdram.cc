@@ -20,7 +20,7 @@ void SdramDevice::write(paddr_t addr, int len, word_t data) {
 
 void SdramDevice::read_half(int offset, uint16_t *out) {
   if (offset < 0 || offset >= static_cast<int>(CONFIG_SOC_SDRAM_SIZE)) {
-    Log("Warning: SDRAM read out of bounds at offset 0x%08x", offset);
+    Log("Warning: SDRAM read out of bounds at offset {:08x}", offset);
     *out = 0;
     return;
   }
@@ -30,7 +30,7 @@ void SdramDevice::read_half(int offset, uint16_t *out) {
 
 void SdramDevice::write_byte(int offset, uint8_t data) {
   if (offset < 0 || offset >= static_cast<int>(CONFIG_SOC_SDRAM_SIZE)) {
-    Log("Warning: SDRAM write out of bounds at offset 0x%08x", offset);
+    Log("Warning: SDRAM write out of bounds at offset {:08x}", offset);
     return;
   }
   storage_[offset] = data;

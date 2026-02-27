@@ -149,9 +149,9 @@ void init_ftrace(const char *img_file) {
               [](const FuncSym &a, const FuncSym &b) {
                 return a.start < b.start;
               });
-    Log("ftrace: loaded %zu functions from %s", g_funcs.size(), elf_file);
+    Log("ftrace: loaded {} functions from {}", g_funcs.size(), elf_file);
   } else {
-    Log("ftrace: no functions found in %s", elf_file);
+    Log("ftrace: no functions found in {}", elf_file);
   }
 
   free(elf_file);
@@ -188,7 +188,7 @@ void ftrace_dump() {
   if (g_log.empty()) return;
 
   constexpr auto max = npc::trace::Config::ftrace_stack_max;
-  Log("Last %zu ftrace entries:", g_log.size());
+  Log("Last {} ftrace entries:", g_log.size());
   for (const auto &e : g_log) {
     size_t pad = e.depth * 2;
     if (pad > 2 * max) pad = 2 * max;
@@ -196,10 +196,9 @@ void ftrace_dump() {
     std::memset(spaces, ' ', pad);
     spaces[pad] = '\0';
     if (e.type == 'C') {
-      _Log(FMT_WORD ": %scall [%s@" FMT_WORD "]\n", e.pc, spaces, e.name,
-           e.target);
+      _Log("{:08x}: {}call [{}@{:08x}]\n", e.pc, spaces, e.name, e.target);
     } else {
-      _Log(FMT_WORD ": %sret  [%s]\n", e.pc, spaces, e.name);
+      _Log("{:08x}: {}ret  [{}]\n", e.pc, spaces, e.name);
     }
   }
 }

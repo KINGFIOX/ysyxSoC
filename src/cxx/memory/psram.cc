@@ -20,7 +20,7 @@ void PsramDevice::write(paddr_t addr, int len, word_t data) {
 
 void PsramDevice::read_byte(int offset, char *out) {
   if (offset < 0 || offset >= static_cast<int>(CONFIG_SOC_PSRAM_SIZE)) {
-    Log("Warning: PSRAM read out of bounds at offset 0x%08x", offset);
+    Log("Warning: PSRAM read out of bounds at offset {:08x}", offset);
     *out = 0;
     return;
   }
@@ -29,7 +29,7 @@ void PsramDevice::read_byte(int offset, char *out) {
 
 void PsramDevice::write_byte(int offset, char data) {
   if (offset < 0 || offset >= static_cast<int>(CONFIG_SOC_PSRAM_SIZE)) {
-    Log("Warning: PSRAM write out of bounds at offset 0x%08x", offset);
+    Log("Warning: PSRAM write out of bounds at offset {:08x}", offset);
     return;
   }
   storage_[offset] = static_cast<uint8_t>(data);

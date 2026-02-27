@@ -3,6 +3,9 @@
 
 extern "C" void exception_dpi(int en, int pc, int mcause, int a0, int tval) {
   if (!en) return;
+#ifndef CONFIG_DIFFTEST
+  (void)tval;
+#endif
   IFDEF(CONFIG_DIFFTEST, ref_difftest_raise_intr(a0, tval));
   IFDEF(CONFIG_DIFFTEST, difftest_skip_ref());
   switch (mcause) {

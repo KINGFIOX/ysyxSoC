@@ -122,9 +122,9 @@ verilator_root = run_command('verilator', '--getenv', 'VERILATOR_ROOT',
 verilator_mdir = meson.project_source_root() / 'build' / 'obj-verilator'
 
 verilator_inc_args = [
-  '-I' + verilator_mdir,
-  '-I' + verilator_root / 'include',
-  '-I' + verilator_root / 'include' / 'vltstd',
+  '-isystem' + verilator_mdir,
+  '-isystem' + verilator_root / 'include',
+  '-isystem' + verilator_root / 'include' / 'vltstd',
 ]
 
 verilator_link_args = [

@@ -60,32 +60,20 @@ extern NPCState npc_state;
 
 // ----------- Log / Timer -----------
 
-extern FILE *log_fp;
 bool log_enable();
 uint64_t get_time();
 void init_rand();
 void assert_fail_msg();
 
-#define log_write(...)                                                         \
-  IFDEF(                                                                       \
-      CONFIG_TARGET_NATIVE_ELF, do {                                           \
-        if (log_enable() && log_fp != nullptr) {                               \
-          std::fprintf(log_fp, __VA_ARGS__);                                   \
-          std::fflush(log_fp);                                                 \
-        }                                                                      \
-      } while (0))
-
-#define _Log(...)                                                              \
-  do {                                                                         \
-    std::printf(__VA_ARGS__);                                                  \
-    log_write(__VA_ARGS__);                                                    \
-  } while (0)
+#include <npc/log.hh>
 
 // ----------- Debug macros -----------
 
 #define Log(format, ...)                                                       \
-  _Log(ANSI_FMT("[%s:%d %s] " format, ANSI_FG_BLUE) "\n", __FILE__,           \
-       __LINE__, __func__, ##__VA_ARGS__)
+  npc::log_impl(ANSI_FMT("[{}:{} {}] " format, ANSI_FG_BLUE) "\n", __FILE__,   \
+                __LINE__, __func__, ##__VA_ARGS__)
+
+#define _Log(format, ...) npc::log_raw(format, ##__VA_ARGS__)
 
 #define Assert(cond, format, ...)                                              \
   do {                                                                         \

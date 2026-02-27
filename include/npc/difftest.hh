@@ -30,8 +30,8 @@ inline void init_difftest(char *, long, int) {}
 inline bool difftest_check_reg(const char *name, vaddr_t pc,
                                word_t ref, word_t dut) {
   if (unlikely(ref != dut)) {
-    Log("%s is different after executing instruction at pc = " FMT_WORD
-        ", right = " FMT_WORD ", wrong = " FMT_WORD ", diff = " FMT_WORD,
+    Log("{} is different after executing instruction at pc = {:08x}"
+        ", right = {:08x}, wrong = {:08x}, diff = {:08x}",
         name, pc, ref, dut, ref ^ dut);
     return false;
   }

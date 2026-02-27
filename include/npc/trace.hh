@@ -4,12 +4,16 @@
 #include <npc/ring_buffer.hh>
 #include <npc/trace_config.hh>
 #include <npc/common.hh>
-#include <cstdio>
-#include <cstring>
+#include <algorithm>
+#include <format>
+#include <span>
 
 void npc_core_flush_trace();
 
 namespace npc::trace {
+
+inline constexpr int kInstMaxBytes = 4;
+inline constexpr int kBytesPerHexGroup = 3;
 
 // ======================== InstructionTrace ========================
 
@@ -19,19 +23,36 @@ struct ItraceItem {
   uint32_t inst;
 };
 
+inline void gen_logbuf(std::span<char> logbuf, vaddr_t pc, vaddr_t snpc,
+                       uint32_t inst) {
+  const int ilen = static_cast<int>(snpc - pc);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) - type pun for instruction bytes
+  const auto *bytes = reinterpret_cast<const uint8_t *>(&inst);
+
+  auto *out = logbuf.data();
+  size_t size = logbuf.size();
+  auto it = std::format_to_n(out, size, "{:#010x}:", pc);
+  out = it.out;
+  size_t remaining = size - static_cast<size_t>(out - logbuf.data());
+
+  for (int i = ilen - 1; i >= 0; i--) {
+    it = std::format_to_n(out, remaining, " {:02x}", bytes[i]);
+    out = it.out;
+    remaining = size - static_cast<size_t>(out - logbuf.data());
+  }
+
+  int space_len = (kInstMaxBytes - ilen) * kBytesPerHexGroup + 1;
+  if (space_len < 1) space_len = 1;
+  out = std::fill_n(out, space_len, ' ');
+  remaining = size - static_cast<size_t>(out - logbuf.data());
+  disassemble(out, static_cast<int>(remaining), pc, const_cast<uint8_t *>(bytes),
+             ilen);
+}
+
+// Backward-compatible overload for (char*, size_t) call sites.
 inline void gen_logbuf(char *logbuf, size_t size, vaddr_t pc, vaddr_t snpc,
                        uint32_t inst) {
-  char *p = logbuf;
-  p += snprintf(p, size, FMT_WORD ":", pc);
-  int ilen = snpc - pc;
-  auto *bytes = reinterpret_cast<uint8_t *>(&inst);
-  for (int i = ilen - 1; i >= 0; i--)
-    p += snprintf(p, 4, " %02x", bytes[i]);
-  int space_len = (4 - ilen) * 3 + 1;
-  if (space_len < 1) space_len = 1;
-  std::memset(p, ' ', space_len);
-  p += space_len;
-  disassemble(p, static_cast<int>(size - (p - logbuf)), pc, bytes, ilen);
+  gen_logbuf(std::span<char>(logbuf, size), pc, snpc, inst);
 }
 
 template <typename Cfg = Config>
@@ -48,14 +69,14 @@ public:
   void dump() const {
     if constexpr (Cfg::itrace) {
       if (ring_.empty()) return;
-      Log("Last %zu instructions:", ring_.capacity());
+      Log("Last {} instructions:", ring_.capacity());
       char logbuf[128];
       for (auto it = ring_.begin(); it != ring_.end(); ++it) {
         gen_logbuf(logbuf, sizeof(logbuf), it->pc, it->snpc, it->inst);
         if (ring_.is_last(it.index()))
-          _Log(ANSI_FMT("--> %s", ANSI_FG_BLUE) "\n", logbuf);
+          _Log(ANSI_FMT("--> {}", ANSI_FG_BLUE) "\n", logbuf);
         else
-          _Log(ANSI_FMT("    %s", ANSI_FG_BLUE) "\n", logbuf);
+          _Log(ANSI_FMT("    {}", ANSI_FG_BLUE) "\n", logbuf);
       }
     }
   }
@@ -91,10 +112,10 @@ public:
   void dump() const {
     if constexpr (Cfg::mtrace) {
       if (ring_.empty()) return;
-      Log("Last %zu memory accesses:", ring_.capacity());
+      Log("Last {} memory accesses:", ring_.capacity());
       for (const auto &item : ring_) {
-        _Log(ANSI_FMT("    %c pc=" FMT_WORD " addr=" FMT_WORD
-                       " len=%d data=" FMT_WORD, ANSI_FG_BLUE) "\n",
+        _Log(ANSI_FMT("    {} pc={:08x} addr={:08x} len={} data={:08x}",
+                      ANSI_FG_BLUE) "\n",
              item.type, item.pc, item.addr, item.len, item.data);
       }
     }
@@ -145,16 +166,15 @@ public:
   void dump() const {
     if constexpr (Cfg::etrace) {
       if (ring_.empty()) return;
-      Log("Last %zu exceptions/interrupts:", ring_.capacity());
+      Log("Last {} exceptions/interrupts:", ring_.capacity());
       for (const auto &item : ring_) {
         if (item.type == 'R') {
-          _Log(ANSI_FMT("    %c epc=" FMT_WORD
-                         " (return from exception/interrupt)",
-                         ANSI_FG_BLUE) "\n",
+          _Log(ANSI_FMT("    {} epc={:08x} (return from exception/interrupt)",
+                        ANSI_FG_BLUE) "\n",
                item.type, item.epc);
         } else {
-          _Log(ANSI_FMT("    %c cause=%u (%s) epc=" FMT_WORD
-                         " handler=" FMT_WORD, ANSI_FG_BLUE) "\n",
+          _Log(ANSI_FMT("    {} cause={} ({}) epc={:08x} handler={:08x}",
+                        ANSI_FG_BLUE) "\n",
                item.type, static_cast<unsigned>(item.cause),
                get_exception_name(item.cause), item.epc, item.handler);
         }

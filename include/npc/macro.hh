@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cstring>
 
 #define NPC_STR_TEMP(x) #x
@@ -45,13 +46,15 @@
 
 #define BITMASK(bits) ((1ull << (bits)) - 1)
 #define BITS(x, hi, lo) (((x) >> (lo)) & BITMASK((hi) - (lo) + 1))
-#define SEXT(x, len)                                                           \
-  ({                                                                           \
-    struct {                                                                   \
-      int64_t n : len;                                                         \
-    } __x = {.n = x};                                                          \
-    (uint64_t)__x.n;                                                           \
-  })
+
+// Sign-extend x from len bits to 64 bits. Replaces GCC statement-expression.
+inline constexpr uint64_t sext(uint64_t x, int len) {
+  const uint64_t mask = (1ULL << len) - 1;
+  x &= mask;
+  return static_cast<uint64_t>(
+      static_cast<int64_t>(x << (64 - len)) >> (64 - len));
+}
+#define SEXT(x, len) sext((x), (len))
 
 #define ROUNDUP(a, sz) ((((uintptr_t)a) + (sz) - 1) & ~((sz) - 1))
 #define ROUNDDOWN(a, sz) ((((uintptr_t)a)) & ~((sz) - 1))

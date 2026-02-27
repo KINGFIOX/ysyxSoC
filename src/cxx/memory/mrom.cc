@@ -16,7 +16,7 @@ static constexpr uint32_t builtin_img[] = {
 
 long MromDevice::load_image(const char *path) {
   auto r = range();
-  Log("mrom area [" FMT_PADDR ", " FMT_PADDR "]", r.base,
+  Log("mrom area [{:08x}, {:08x}]", r.base,
       static_cast<paddr_t>(r.base + r.size - 1));
 
   if (!path) {
@@ -31,10 +31,10 @@ long MromDevice::load_image(const char *path) {
 
   std::fseek(fp, 0, SEEK_END);
   long size = std::ftell(fp);
-  Log("The image is %s, size = %ld", path, size);
+  Log("The image is {}, size = {}", path, size);
 
   if (size > static_cast<long>(r.size)) {
-    Log("Warning: image size %ld exceeds MROM size %zu, truncated", size,
+    Log("Warning: image size {} exceeds MROM size {}, truncated", size,
         r.size);
     size = static_cast<long>(r.size);
   }
