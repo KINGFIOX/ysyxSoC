@@ -1,63 +1,37 @@
-/**
- * NPC Core - Verilator 仿真驱动
- *
- * 职责:
- *   1. 初始化 Verilator 生成的 VNPCSoC 模型
- *   2. 每次 npc_core_step() 驱动时钟, 等待 debug.valid 有效
- *   3. 将 debug 信息写回 Decode 结构体, 供 itrace/difftest 使用
- *   4. 同步寄存器状态到全局 cpu 结构体
- */
+#include <npc/cpu.hh>
+#include <npc/isa.hh>
 
-#include "debug.h"
-#include <cpu/core.h>
-
-extern "C" {
-#include <common.h>
-#include <cpu/cpu.h>
-#include <cpu/decode.h>
-#include <isa.h>
-#include <memory/paddr.h>
-#include "../isa/riscv32/local-include/reg.h"
-
-// SRAM 初始化接口
 void init_sram(uint8_t *verilator_sram_ptr);
-}
 
 #include "VNPCSoC.h"
-#include "VNPCSoC___024root.h"  // 访问内部 Verilator 结构（包括 SRAM 内存）
+#include "VNPCSoC___024root.h"
 #include <verilated.h>
 
 #ifdef CONFIG_VERILATOR_TRACE
 #include <verilated_vcd_c.h>
 #endif
 
-// Verilator 模型实例
 static VNPCSoC *top = nullptr;
 static VerilatedContext *ctx = nullptr;
 #ifdef CONFIG_VERILATOR_TRACE
 static VerilatedVcdC *tfp = nullptr;
-static uint64_t sim_time = 0;  // 仿真时间, 用于波形 dump
+static uint64_t sim_time = 0;
 #endif
 
 static uint64_t ncycles = 0;
 
-// Helper macro to access nested gpr array
-// Chisel generates: io_debug_gpr_0, io_debug_gpr_1, etc.
 #define DEBUG_GPR(n) top->debug_gpr_##n
 
-/// @brief 打一拍(寄存器更新)
 static void tick() {
-  // 下降沿
   top->clock = 0;
   top->eval();
 #ifdef CONFIG_VERILATOR_TRACE
   tfp->dump(sim_time++);
 #endif
 
-  // 上升沿 (Chisel 默认在上升沿触发)
   top->clock = 1;
   top->eval();
-  ncycles++; // 统计
+  ncycles++;
 #ifdef CONFIG_VERILATOR_TRACE
   tfp->dump(sim_time++);
 #endif
@@ -69,28 +43,22 @@ static void reset(int cycles = 15) {
   top->reset = 0;
 }
 
-extern "C" bool npc_core_init(int argc, char *argv[]) {
-  // init VerilatedContext
+bool npc_core_init(int argc, char *argv[]) {
   ctx = new VerilatedContext;
   ctx->commandArgs(argc, argv);
 
-  // init top module
   top = new VNPCSoC(ctx);
 
-// init trace
 #ifdef CONFIG_VERILATOR_TRACE
   Verilated::traceEverOn(true);
   tfp = new VerilatedVcdC;
-  top->trace(tfp, 99);  // 99 levels: 追踪所有层级的信号
+  top->trace(tfp, 99);
   tfp->open("build/npc_core.vcd");
   Log("VCD trace enabled: build/npc_core.vcd");
 #endif
 
-  reset(); // 执行复位
+  reset();
 
-  // 初始化 SRAM 访问指针（指向 Verilator 中 AXI4RAM 的内存数组）
-  // 路径由 Verilator 根据模块层次生成，如果 SoC 结构变化需要更新
-  // 可通过 grep "axi4ram.*Memory" build/obj-verilator/VNPCSoC___024root.h 查找正确路径
 #define VERILATOR_SRAM_MEMORY top->rootp->NPCSoC__DOT__dut__DOT__asic__DOT__axi4ram__DOT__mem_ext__DOT__Memory
 
   init_sram(reinterpret_cast<uint8_t*>(VERILATOR_SRAM_MEMORY.data()));
@@ -99,7 +67,7 @@ extern "C" bool npc_core_init(int argc, char *argv[]) {
   return true;
 }
 
-extern "C" void npc_core_flush_trace(void) {
+void npc_core_flush_trace() {
 #ifdef CONFIG_VERILATOR_TRACE
   if (tfp) {
     tfp->flush();
@@ -107,7 +75,7 @@ extern "C" void npc_core_flush_trace(void) {
 #endif
 }
 
-extern "C" void npc_core_fini(void) {
+void npc_core_fini() {
 #ifdef CONFIG_VERILATOR_TRACE
   if (tfp) {
     tfp->close();
@@ -130,15 +98,13 @@ extern "C" void npc_core_fini(void) {
   Log("total cycles: %lu", ncycles);
 }
 
-/// @brief 读取 debug 信息, 写入 Decode 结构体
 static void read_debug_to_decode(Decode *s) {
   s->pc = top->debug_pc;
   s->dnpc = top->debug_dnpc;
-  s->snpc = s->pc + 4; // 对于 RV32, 静态下一条指令地址
+  s->snpc = s->pc + 4;
   s->isa.inst = top->debug_inst;
 }
 
-/// @brief 软件维护了硬件的状态, 主要是为了方便 difftest and trace
 static void sync_gpr_to_cpu() {
   cpu.gpr[0]  = DEBUG_GPR(0);
   cpu.gpr[1]  = DEBUG_GPR(1);
@@ -184,11 +150,10 @@ static void sync_csr_to_cpu() {
   cpu.csr[MARCHID] = top->debug_csr_marchid;
 }
 
-extern "C" bool npc_core_step(Decode *s) {
+bool npc_core_step(Decode *s) {
   top->step = 1;
 
-  // 运行直到 debug.valid 为真
-  const int MAX_CYCLES = 1000000; // 防止死循环
+  const int MAX_CYCLES = 1000000;
   int cycles = 0;
   do {
     tick();
@@ -199,7 +164,6 @@ extern "C" bool npc_core_step(Decode *s) {
     }
   } while (!top->debug_valid);
 
-  // 读取 commit 信息
   read_debug_to_decode(s);
   cpu.pc = s->dnpc;
   sync_gpr_to_cpu();

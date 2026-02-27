@@ -38,6 +38,9 @@ class ysyxSoCTop extends Module {
 class NPCSoCInterface extends Bundle {
   val clock = Input(Clock())
   val reset = Input(Bool())
+  val externalPins = new ExternalPins
+
+  // for simulation
   val step  = Input(Bool())
   val debug = Output(new DebugBundle)
 }
@@ -58,8 +61,7 @@ class NPCSoC
 
   val dut = LazyModule(new ysyxSoCFull)
   val mdut = Module(dut.module)
-  mdut.dontTouchPorts()
-  mdut.externalPins := DontCare
+  mdut.externalPins <> io.externalPins
 
   mdut.step := io.step
   io.debug := read(mdut.probe)
