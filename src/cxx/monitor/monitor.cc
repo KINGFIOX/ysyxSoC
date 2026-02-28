@@ -18,7 +18,6 @@ namespace {
 
 struct MonitorArgs {
   const char *log_file = nullptr;
-  char *diff_so_file = nullptr;
   const char *img_file = nullptr;
   int difftest_port = 1234;
 };
@@ -29,7 +28,6 @@ MonitorArgs parse_args(int argc, char *argv[]) {
   static constexpr struct option long_options[] = {
       {"batch", no_argument, nullptr, 'b'},
       {"log", required_argument, nullptr, 'l'},
-      {"diff", required_argument, nullptr, 'd'},
       {"port", required_argument, nullptr, 'p'},
       {"flash", required_argument, nullptr, 'f'},
       {"help", no_argument, nullptr, 'h'},
@@ -37,18 +35,16 @@ MonitorArgs parse_args(int argc, char *argv[]) {
   };
 
   int o;
-  while ((o = getopt_long(argc, argv, "-bhl:d:p:f:", long_options, nullptr)) != -1) {
+  while ((o = getopt_long(argc, argv, "-bhl:p:f:", long_options, nullptr)) != -1) {
     switch (o) {
     case 'b': sdb_set_batch_mode(); break;
     case 'p': std::sscanf(optarg, "%d", &args.difftest_port); break;
     case 'l': args.log_file = optarg; break;
-    case 'd': args.diff_so_file = optarg; break;
     case 1:   args.img_file = optarg; return args;
     default:
       std::printf("Usage: %s [OPTION...] IMAGE [args]\n\n", argv[0]);
       std::printf("\t-b,--batch              run with batch mode\n");
       std::printf("\t-l,--log=FILE           output log to FILE\n");
-      std::printf("\t-d,--diff=REF_SO        run DiffTest with reference REF_SO\n");
       std::printf("\t-p,--port=PORT          run DiffTest with port PORT\n");
       std::printf("\t-f,--flash=FILE         load flash content from FILE\n\n");
       std::exit(0);
@@ -84,7 +80,7 @@ void init_monitor(int argc, char *argv[]) {
   npc_core_init(argc, argv);
 
   IFDEF(CONFIG_FTRACE, init_ftrace(args.img_file));
-  init_difftest(args.diff_so_file, img_size, args.difftest_port);
+  init_difftest(img_size, args.difftest_port);
   init_sdb();
   IFDEF(CONFIG_ITRACE, init_disasm());
 

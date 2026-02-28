@@ -15,7 +15,7 @@
 
 #include "mmu.h"
 #include "sim.h"
-#include <common.h>
+#include <cassert>
 #include <cstdint>
 #include <difftest-def.h>
 
@@ -78,6 +78,7 @@ static processor_t *p = NULL;
 static state_t *state = NULL;
 
 void sim_t::diff_init(int port) {
+  (void)port;
   p = get_core("0");
   state = p->get_state();
   // 设置初始 PC 为复位向量地址
@@ -113,7 +114,7 @@ void sim_t::diff_memcpy(reg_t dest, void* src, size_t n) {
 
 extern "C" {
 
-__EXPORT void difftest_memcpy(paddr_t addr, void *buf, size_t n, bool direction) {
+void difftest_memcpy(paddr_t addr, void *buf, size_t n, bool direction) {
   if (direction == DIFFTEST_TO_REF) {
     s->diff_memcpy(addr, buf, n);
   } else {
@@ -121,7 +122,7 @@ __EXPORT void difftest_memcpy(paddr_t addr, void *buf, size_t n, bool direction)
   }
 }
 
-__EXPORT void difftest_regcpy(void* dut, bool direction) {
+void difftest_regcpy(void* dut, bool direction) {
   if (direction == DIFFTEST_TO_REF) {
     s->diff_set_regs(dut);
   } else {
@@ -129,11 +130,11 @@ __EXPORT void difftest_regcpy(void* dut, bool direction) {
   }
 }
 
-__EXPORT void difftest_exec(uint64_t n) {
+void difftest_exec(uint64_t n) {
   s->diff_step(n);
 }
 
-__EXPORT void difftest_init(int port) {
+void difftest_init(int port) {
   difftest_htif_args.push_back("");
   const char *isa = "RV32IMAFDC";
   cfg_t *cfg = new cfg_t(/*default_initrd_bounds=*/std::make_pair((reg_t)0, (reg_t)0),
@@ -157,7 +158,7 @@ __EXPORT void difftest_init(int port) {
   s->diff_init(port); // 初始化 state, 因此设置 mstatus 要放在这句话之后
 }
 
-__EXPORT void difftest_raise_intr(uint64_t NO, uint64_t tval) {
+void difftest_raise_intr(uint64_t NO, uint64_t tval) {
   insn_trap_t t(NO, false, tval);
   p->take_trap_public(t, state->pc);
 }

@@ -1,14 +1,18 @@
-#include <dlfcn.h>
-
 #include <npc/difftest.hh>
 #include <npc/isa.hh>
+
+#ifdef CONFIG_DIFFTEST
+
+extern "C" void difftest_memcpy(paddr_t addr, void *buf, size_t n, bool direction);
+extern "C" void difftest_regcpy(void *dut, bool direction);
+extern "C" void difftest_exec(uint64_t n);
+extern "C" void difftest_init(int port);
+extern "C" void difftest_raise_intr(uint64_t NO, uint64_t tval);
 
 void (*ref_difftest_memcpy)(paddr_t addr, void *buf, size_t n, bool direction) = nullptr;
 void (*ref_difftest_regcpy)(void *dut, bool direction) = nullptr;
 void (*ref_difftest_exec)(uint64_t n) = nullptr;
 void (*ref_difftest_raise_intr)(uint64_t NO, int tval) = nullptr;
-
-#ifdef CONFIG_DIFFTEST
 
 static bool is_skip_ref = false;
 static int skip_dut_nr_inst = 0;
@@ -41,34 +45,20 @@ void difftest_skip_dut(int nr_ref, int nr_dut) {
   }
 }
 
-void init_difftest(char *ref_so_file, long img_size, int port) {
-  assert(ref_so_file != nullptr);
-
-  void *handle;
-  handle = dlopen(ref_so_file, RTLD_LAZY);
-  assert(handle);
-
-  ref_difftest_memcpy = reinterpret_cast<decltype(ref_difftest_memcpy)>(dlsym(handle, "difftest_memcpy"));
-  assert(ref_difftest_memcpy);
-
-  ref_difftest_regcpy = reinterpret_cast<decltype(ref_difftest_regcpy)>(dlsym(handle, "difftest_regcpy"));
-  assert(ref_difftest_regcpy);
-
-  ref_difftest_exec = reinterpret_cast<decltype(ref_difftest_exec)>(dlsym(handle, "difftest_exec"));
-  assert(ref_difftest_exec);
-
-  ref_difftest_raise_intr = reinterpret_cast<decltype(ref_difftest_raise_intr)>(dlsym(handle, "difftest_raise_intr"));
-  assert(ref_difftest_raise_intr);
-
-  void (*ref_difftest_init)(int) = reinterpret_cast<decltype(ref_difftest_init)>(dlsym(handle, "difftest_init"));
-  assert(ref_difftest_init);
+void init_difftest(long img_size, int port) {
+  ref_difftest_memcpy = difftest_memcpy;
+  ref_difftest_regcpy = difftest_regcpy;
+  ref_difftest_exec = difftest_exec;
+  ref_difftest_raise_intr = [](uint64_t NO, int tval) {
+    difftest_raise_intr(NO, static_cast<uint64_t>(tval));
+  };
 
   Log("Differential testing: {}", ANSI_FMT("ON", ANSI_FG_GREEN));
-  Log("The result of every instruction will be compared with {}. "
+  Log("The result of every instruction will be compared with SPIKE. "
       "This will help you a lot for debugging, but also significantly reduce the performance. "
-      "If it is not necessary, you can turn it off in menuconfig.", ref_so_file);
+      "If it is not necessary, you can turn it off in menuconfig.");
 
-  ref_difftest_init(port);
+  difftest_init(port);
   uint8_t *get_flash_ptr();
   ref_difftest_memcpy(RESET_VECTOR, get_flash_ptr(), img_size, DIFFTEST_TO_REF);
   ref_difftest_regcpy(npc::cpu().state_ptr(), DIFFTEST_TO_REF);

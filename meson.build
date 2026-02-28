@@ -58,24 +58,7 @@ conf.set_quoted('CONFIG_ITRACE_COND', get_option('itrace_cond'))
 conf.set_quoted('CONFIG_MTRACE_COND', get_option('mtrace_cond'))
 conf.set_quoted('CONFIG_CC_OPT',      '-O2')
 
-if get_option('difftest')
-  conf.set_quoted('CONFIG_DIFFTEST_REF_PATH', get_option('difftest_ref_path'))
-  conf.set_quoted('CONFIG_DIFFTEST_REF_NAME', get_option('difftest_ref_name'))
-  # 生成 difftest_ref.txt 供 Makefile 在 run 时传入 --diff
-  # spike-diff 由 meson 构建，输出在 build/meson/riscv32-spike-so
-  _ref_path = get_option('difftest_ref_path')
-  _ref_name = get_option('difftest_ref_name')
-  if _ref_path != 'none' and _ref_name != 'none'
-    _diff_ref_so_rel = 'build/meson/tools/spike-diff/' + get_option('guest_isa') + '-' + _ref_name + '-so.so'
-    _diff_ref_conf = configuration_data()
-    _diff_ref_conf.set('DIFF_REF_SO_REL', _diff_ref_so_rel)
-    configure_file(
-      input: 'difftest_ref.txt.in',
-      output: 'difftest_ref.txt',
-      configuration: _diff_ref_conf,
-    )
-  endif
-endif
+# difftest: SPIKE 直接集成，无需 difftest_ref.txt
 
 # SoC address map — hex string values emitted as bare integer macros
 _soc_map = {
@@ -217,6 +200,8 @@ if get_option('ftrace')
   cc_sources += files('src/cxx/utils/ftrace.cc')
 endif
 
+# spike_ref 单独编译，避免 spike 头文件污染其他源文件
+
 # ======================== Compile arguments ========================
 
 common_args = [
@@ -225,6 +210,50 @@ common_args = [
 ] + verilator_inc_args
 
 cxx_only_args = ['-Wno-sign-compare', '-Wno-narrowing']
+
+# ======================== SPIKE integration (difftest) ========================
+
+spike_inc_dirs = []
+spike_link_args = []
+spike_cpp_args = []
+spike_build_rpath = ''
+if get_option('difftest')
+  fs = import('fs')
+  spike_path = get_option('spike_path')
+  spike_build_dir = get_option('spike_build_dir')
+  spike_src = meson.project_source_root() / spike_path
+  spike_build = spike_src / spike_build_dir
+  spike_libriscv = spike_build / 'libriscv.so'
+
+  if not fs.exists(spike_libriscv)
+    error('SPIKE not built. Run: cd ' + spike_src + ' && meson setup ' + spike_build_dir + ' -Ddefault_isa=RV32IMAFDC && ninja -C ' + spike_build_dir)
+  endif
+
+  # 使用 -I 传入 spike 头文件路径（spike 在项目外）
+  spike_inc_args = [
+    '-I' + spike_src,
+    '-I' + (spike_src / 'fesvr'),
+    '-I' + (spike_src / 'riscv'),
+    '-I' + (spike_src / 'riscv_gen'),
+    '-I' + (spike_src / 'disasm'),
+    '-I' + (spike_src / 'customext'),
+    '-I' + (spike_src / 'fdt'),
+    '-I' + (spike_src / 'softfloat'),
+    '-I' + (spike_src / 'spike_main'),
+    '-I' + (spike_src / 'spike_dasm'),
+    '-I' + spike_build,
+  ]
+  spike_inc_dirs = []
+  spike_build_rpath = spike_build
+  spike_cpp_args = []
+  # spike_ref 单独编译为静态库，仅此文件使用 spike 头文件
+  spike_ref_lib = static_library('spike_ref', 'src/cxx/cpu/difftest/spike_ref.cc',
+    include_directories: inc_dirs,
+    cpp_args: common_args + cxx_only_args + spike_inc_args,
+    override_options: ['cpp_std=c++17'],
+  )
+  spike_link_args = [spike_ref_lib, spike_libriscv]
+endif
 
 # ======================== Build the simulator ========================
 
@@ -236,21 +265,21 @@ if get_option('ftrace')
   deps += dep_elf
 endif
 
+_npc_link_with = []
+_npc_link_args = ['-no-pie'] + verilator_link_args
+if get_option('difftest')
+  _npc_link_with = [spike_ref_lib]
+  _npc_link_args += [spike_libriscv]
+endif
+
 npc_exe = executable(guest_isa + '-npc',
   cc_sources,
   bison_gen, flex_gen,
-  cpp_args: common_args + cxx_only_args,
-  link_args: ['-no-pie'] + verilator_link_args,
-  include_directories: [inc_dirs],
+  cpp_args: common_args + cxx_only_args + spike_cpp_args,
+  link_args: _npc_link_args,
+  link_with: _npc_link_with,
+  include_directories: inc_dirs,
   dependencies: deps,
+  build_rpath: spike_build_rpath,
   install: false,
 )
-
-# spike-diff: difftest 参考 .so，需 spike 已构建
-if get_option('difftest')
-  _ref_path = get_option('difftest_ref_path')
-  _ref_name = get_option('difftest_ref_name')
-  if _ref_path != 'none' and _ref_name == 'spike'
-    subdir('tools/spike-diff')
-  endif
-endif
