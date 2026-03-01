@@ -1,9 +1,36 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use crate::libcpu::AbstractCpu;
 use rustyline::DefaultEditor;
 
 use super::command;
 use super::expression;
 use super::watchpoint::WatchpointPool;
+
+struct SigIntGuard {
+    flag: Arc<AtomicBool>,
+    sig_id: signal_hook::SigId,
+}
+
+impl SigIntGuard {
+    fn new() -> Self {
+        let flag = Arc::new(AtomicBool::new(false));
+        let sig_id = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&flag))
+            .expect("failed to register SIGINT handler");
+        Self { flag, sig_id }
+    }
+
+    fn interrupted(&self) -> bool {
+        self.flag.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for SigIntGuard {
+    fn drop(&mut self) {
+        signal_hook::low_level::unregister(self.sig_id);
+    }
+}
 
 const GPR_NAMES: &[&str] = &[
     "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
@@ -96,10 +123,10 @@ impl Sdb {
         }
     }
 
-    pub fn mainloop(&mut self, dut: &mut dyn AbstractCpu) {
+    pub fn mainloop(&mut self, dut: &mut dyn AbstractCpu) -> miette::Result<()> {
         let mut rl = DefaultEditor::new().expect("failed to create readline editor");
 
-        while self.state == State::Stop {
+        loop {
             match rl.readline("(sdb) ") {
                 Ok(line) => {
                     let line = line.trim().to_string();
@@ -119,9 +146,15 @@ impl Sdb {
                     self.state = State::Quit;
                 }
                 Err(e) => {
-                    eprintln!("readline error: {e}");
-                    self.state = State::Stop;
+                    eprintln!("readline error: {e}"); // self.state still be Stop
                 }
+            }
+            // check state after executing a line
+            match self.state {
+                State::Stop => { /*continue*/ }
+                State::Running => panic!("impossible to be in running state"),
+                State::Quit => return Ok(()),
+                State::Abort => return Err(miette::Error::msg("abort")),
             }
         }
     }
@@ -142,19 +175,26 @@ impl Sdb {
     }
 
     fn execute_steps(&mut self, n: usize, dut: &mut dyn AbstractCpu) {
-        assert!(self.state == State::Running);
+        self.state = State::Running;
+        let guard = SigIntGuard::new();
+
         for _ in 0..n {
+            if guard.interrupted() {
+                self.state = State::Stop;
+                return;
+            }
             dut.step();
             if self.check_breakpoints(dut) {
-                break;
+                self.state = State::Stop;
+                return;
             }
             let mut buf = String::new();
             if self.watchpoints.check(dut, &mut buf) {
-                print!("{buf}");
-                break;
+                self.state = State::Stop;
+                return;
             }
         }
-        self.state = State::Stop;
+
     }
 
     fn check_breakpoints(&self, dut: &dyn AbstractCpu) -> bool {
@@ -182,8 +222,8 @@ fn cmd_quit(_args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
 }
 
 fn cmd_continue(_args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
-    sdb.state = State::Running;
     sdb.execute_steps(usize::MAX, dut); // this will change the state of the Sdb
+    assert!(sdb.state != State::Running)
 }
 
 fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
@@ -198,8 +238,8 @@ fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
             }
         }
     };
-    sdb.state = State::Running;
     sdb.execute_steps(n, dut);
+    assert!(sdb.state != State::Running)
 }
 
 fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
@@ -291,7 +331,7 @@ fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     }
 }
 
-fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu){
+fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
     let id: usize = match args.trim().parse() {
         Ok(v) => v,
         Err(_) => {
@@ -306,7 +346,7 @@ fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu){
     }
 }
 
-fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu){
+fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     let expr = args.trim();
     if expr.is_empty() {
         eprintln!("usage: b ADDR");
