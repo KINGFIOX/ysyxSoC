@@ -1,10 +1,10 @@
 #***************************************************************************************
-# ysyxSoC Makefile — thin wrapper around meson + mill
+# ysyxSoC Makefile — thin wrapper around cargo + mill
 #
 # 三步构建流程:
 #   make verilog    — Chisel → SystemVerilog
 #   make verilate   — SystemVerilog → Verilator C++ 库
-#   make build      — C/C++ → 仿真可执行文件 (meson)
+#   make build      — Rust + C++ FFI → 仿真可执行文件 (cargo)
 #
 # 也可以一步到位:
 #   make run IMG=<bin>
@@ -98,13 +98,12 @@ $(VERILATOR_LIB): $(VERILATOR_MK)
 verilate: $(VERILATOR_LIB)
 
 # =============================== Step 3: make build ===============================
-# C/C++ → 仿真可执行文件 (meson compile)
-# 仅编译 C/C++ 部分，不会触发 verilog/verilate
+# Rust + C++ FFI → 仿真可执行文件 (cargo build)
 
-BINARY := $(MESON_BDIR)/$(GUEST_ISA)-npc
+BINARY := target/debug/npc
 
-build: $(MESON_BDIR)/build.ninja
-	meson compile -C $(MESON_BDIR)
+build:
+	cargo build
 
 # =============================== make all ===============================
 # 完整流程: verilog → verilate → build
@@ -170,12 +169,12 @@ clean-all: distclean
 # =============================== 帮助 ===============================
 
 help:
-	@echo "ysyxSoC Makefile (meson backend)"
+	@echo "ysyxSoC Makefile (cargo backend)"
 	@echo ""
 	@echo "三步构建:"
 	@echo "  verilog            — Step 1: Chisel → SystemVerilog"
 	@echo "  verilate           — Step 2: SystemVerilog → Verilator C++ 库"
-	@echo "  build              — Step 3: C/C++ → 仿真可执行文件"
+	@echo "  build              — Step 3: Rust + C++ FFI → 仿真可执行文件 (cargo)"
 	@echo "  all                — 执行 Step 1-3"
 	@echo ""
 	@echo "运行与调试:"

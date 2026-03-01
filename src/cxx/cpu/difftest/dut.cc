@@ -3,106 +3,80 @@
 
 #ifdef CONFIG_DIFFTEST
 
-extern "C" void difftest_memcpy(paddr_t addr, void *buf, size_t n, bool direction);
-extern "C" void difftest_regcpy(void *dut, bool direction);
-extern "C" void difftest_exec(uint64_t n);
-extern "C" void difftest_init(int port);
-extern "C" void difftest_raise_intr(uint64_t NO, uint64_t tval);
+#include <npc/cpu_model.hh>
 
-void (*ref_difftest_memcpy)(paddr_t addr, void *buf, size_t n, bool direction) = nullptr;
-void (*ref_difftest_regcpy)(void *dut, bool direction) = nullptr;
-void (*ref_difftest_exec)(uint64_t n) = nullptr;
-void (*ref_difftest_raise_intr)(uint64_t NO, int tval) = nullptr;
+namespace npc {
 
-static bool is_skip_ref = false;
-static int skip_dut_nr_inst = 0;
-
-// this is used to let ref skip instructions which
-// can not produce consistent behavior with NPC
-void difftest_skip_ref() {
-  is_skip_ref = true;
-  // If such an instruction is one of the instruction packing in QEMU
-  // (see below), we end the process of catching up with QEMU's pc to
-  // keep the consistent behavior in our best.
-  // Note that this is still not perfect: if the packed instructions
-  // already write some memory, and the incoming instruction in NPC
-  // will load that memory, we will encounter false negative. But such
-  // situation is infrequent.
-  skip_dut_nr_inst = 0;
-}
-
-// this is used to deal with instruction packing in QEMU.
-// Sometimes letting QEMU step once will execute multiple instructions.
-// We should skip checking until NPC's pc catches up with QEMU's pc.
-// The semantic is
-//   Let REF run `nr_ref` instructions first.
-//   We expect that DUT will catch up with REF within `nr_dut` instructions.
-void difftest_skip_dut(int nr_ref, int nr_dut) {
-  skip_dut_nr_inst += nr_dut;
-
-  while (nr_ref -- > 0) {
-    ref_difftest_exec(1);
+static void print_reg_row(const char *name, word_t ref_val, word_t dut_val) {
+  bool is_diff = (ref_val != dut_val);
+  if (is_diff) {
+    printf("| %s%-4s%s | %s" FMT_WORD "%s | %s" FMT_WORD "%s | %sMISMATCH%s |\n",
+           ANSI_FG_RED, name, ANSI_NONE,
+           ANSI_FG_GREEN, ref_val, ANSI_NONE,
+           ANSI_FG_RED, dut_val, ANSI_NONE,
+           ANSI_FG_RED, ANSI_NONE);
+  } else {
+    printf("| %-4s | " FMT_WORD " | " FMT_WORD " | OK       |\n",
+           name, ref_val, dut_val);
   }
 }
 
-void init_difftest(long img_size, int port) {
-  ref_difftest_memcpy = difftest_memcpy;
-  ref_difftest_regcpy = difftest_regcpy;
-  ref_difftest_exec = difftest_exec;
-  ref_difftest_raise_intr = [](uint64_t NO, int tval) {
-    difftest_raise_intr(NO, static_cast<uint64_t>(tval));
-  };
+static void print_diff_table(CpuModel &dut, CpuModel &ref, vaddr_t pc) {
+  printf("\n");
+  printf("+------+------------+------------+----------+\n");
+  printf("|   %sDifftest FAILED at PC = " FMT_WORD "%s    |\n", ANSI_FG_YELLOW, pc, ANSI_NONE);
+  printf("+------+------------+------------+----------+\n");
+  printf("| Reg  | REF        | DUT        | Status   |\n");
+  printf("+------+------------+------------+----------+\n");
 
-  Log("Differential testing: {}", ANSI_FMT("ON", ANSI_FG_GREEN));
-  Log("The result of every instruction will be compared with SPIKE. "
-      "This will help you a lot for debugging, but also significantly reduce the performance. "
-      "If it is not necessary, you can turn it off in menuconfig.");
+  for (int i = 0; i < num_gprs; i++) {
+    print_reg_row(reg_name(i), ref.gpr(i), dut.gpr(i));
+  }
 
-  difftest_init(port);
-  uint8_t *get_flash_ptr();
-  ref_difftest_memcpy(RESET_VECTOR, get_flash_ptr(), img_size, DIFFTEST_TO_REF);
-  ref_difftest_regcpy(npc::cpu().state_ptr(), DIFFTEST_TO_REF);
+  printf("+------+------------+------------+----------+\n");
+  print_reg_row("pc", ref.pc(), dut.pc());
+
+  printf("+------+------------+------------+----------+\n");
+  printf("\n");
 }
 
-/// @return true: 一致
-/// @return false: 不一致
-static bool checkregs(const CPU_state *ref, vaddr_t pc) {
-  if (!isa_difftest_checkregs(ref, pc)) {
+static bool compare_states(CpuModel &dut, CpuModel &ref) {
+  for (int i = 0; i < num_gprs; i++) {
+    if (ref.gpr(i) != dut.gpr(i)) return false;
+  }
+  if (ref.pc() != dut.pc()) return false;
+  return true;
+}
+
+static void sync_ref_from_dut(CpuModel &dut, CpuModel &ref) {
+  ref.set_pc(dut.pc());
+  for (int i = 0; i < num_gprs; i++)
+    ref.set_gpr(i, dut.gpr(i));
+  ref.set_mstatus(dut.mstatus());
+  ref.set_mtvec(dut.mtvec());
+  ref.set_mepc(dut.mepc());
+  ref.set_mcause(dut.mcause());
+  ref.set_mtval(dut.mtval());
+}
+
+bool Scoreboard::check(CpuModel &dut_model, CpuModel &ref_model,
+                        const StepResult &dut_result) {
+  if (dut_result.is_mmio) {
+    sync_ref_from_dut(dut_model, ref_model);
+    return true;
+  }
+
+  ref_model.step();
+
+  if (!compare_states(dut_model, ref_model)) {
+    print_diff_table(dut_model, ref_model, dut_result.pc);
     npc_state.state = NPC_ABORT;
-    npc_state.halt_pc = pc;
+    npc_state.halt_pc = dut_result.pc;
     return false;
   }
   return true;
 }
 
-bool difftest_step(vaddr_t pc, vaddr_t npc) {
-  CPU_state ref_r;
+} // namespace npc
 
-// ========== start of 校准 ====================================================
-// riscv32 没有需要 "校准" 的指令, 所以这部分对于 riscv32 没用
-  if (skip_dut_nr_inst > 0) {
-    ref_difftest_regcpy(&ref_r, DIFFTEST_TO_DUT);
-    if (ref_r.pc == npc) {
-      skip_dut_nr_inst = 0;
-      return checkregs(&ref_r, npc);
-    }
-    skip_dut_nr_inst --;
-    if (skip_dut_nr_inst == 0)
-      panic("can not catch up with ref.pc = " FMT_WORD " at pc = " FMT_WORD, ref_r.pc, pc);
-    return false;
-  }
-// =========================== end of 校准 ====================================
-
-  if (is_skip_ref) { // mmio 会跳过检查
-    // to skip the checking of an instruction, just copy the reg state to reference design
-    ref_difftest_regcpy(npc::cpu().state_ptr(), DIFFTEST_TO_REF);
-    is_skip_ref = false; // 仅跳过一条指令的检查
-    return true; // 因为这里直接将 qemu 的状态复制到了 npc, 所以一定是一致的
-  }
-
-  ref_difftest_exec(1);
-  ref_difftest_regcpy(&ref_r, DIFFTEST_TO_DUT); // 将 ref 的寄存器状态复制到 dut
-
-  return checkregs(&ref_r, pc);
-}
 #endif

@@ -1,0 +1,85 @@
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include "verilator_bridge.h"
+    safety!(unsafe)
+    generate!("vl_context_new")
+    generate!("vl_context_delete")
+    // vl_context_command_args has const char** which autocxx can't handle;
+    // use the raw extern "C" below if needed.
+    generate!("vl_context_time")
+    generate!("vl_context_time_inc")
+    generate!("vl_context_got_finish")
+    generate!("vnpcsoc_new")
+    generate!("vnpcsoc_delete")
+    generate!("vnpcsoc_eval")
+    generate!("vnpcsoc_final")
+    generate!("vnpcsoc_set_clock")
+    generate!("vnpcsoc_set_reset")
+    generate!("vnpcsoc_set_step")
+    generate!("vnpcsoc_get_debug_valid")
+    generate!("vnpcsoc_get_debug_isMMIO")
+    generate!("vnpcsoc_get_debug_pc")
+    generate!("vnpcsoc_get_debug_dnpc")
+    generate!("vnpcsoc_get_debug_inst")
+    generate!("vnpcsoc_get_debug_gpr")
+    generate!("vnpcsoc_get_debug_csr_mstatus")
+    generate!("vnpcsoc_get_debug_csr_mtvec")
+    generate!("vnpcsoc_get_debug_csr_mepc")
+    generate!("vnpcsoc_get_debug_csr_mcause")
+    generate!("vnpcsoc_get_debug_csr_mtval")
+    generate!("vnpcsoc_get_debug_csr_mvendorid")
+    generate!("vnpcsoc_get_debug_csr_marchid")
+    generate!("vnpcsoc_sram_ptr")
+    generate!("vl_trace_ever_on")
+    generate!("vl_vcd_new")
+    generate!("vl_vcd_delete")
+    generate!("vl_vcd_open")
+    generate!("vl_vcd_close")
+    generate!("vl_vcd_flush")
+    generate!("vl_vcd_dump")
+    generate!("vnpcsoc_trace")
+}
+
+pub use ffi::*;
+
+include_cpp! {
+    #include "spike_bridge.h"
+    name!(spike)
+    safety!(unsafe)
+    // sim_t
+    generate!("sim_new")
+    generate!("sim_delete")
+    generate!("sim_run")
+    generate!("sim_set_debug")
+    generate!("sim_set_histogram")
+    generate!("sim_configure_log")
+    generate!("sim_set_procs_debug")
+    generate!("sim_get_dts")
+    generate!("sim_get_core")
+    // processor_t
+    generate!("proc_step")
+    generate!("proc_reset")
+    generate!("proc_set_debug")
+    generate!("proc_get_id")
+    generate!("proc_get_xlen")
+    generate!("proc_get_state")
+    generate!("proc_get_mmu")
+    generate!("proc_get_csr")
+    generate!("proc_put_csr")
+    generate!("proc_take_trap")
+    // state_t
+    generate!("state_get_pc")
+    generate!("state_set_pc")
+    generate!("state_get_gpr")
+    generate!("state_set_gpr")
+    // mmu_t
+    generate!("mmu_load_u8")
+    generate!("mmu_load_u16")
+    generate!("mmu_load_u32")
+    generate!("mmu_load_u64")
+    generate!("mmu_store_u8")
+    generate!("mmu_store_u16")
+    generate!("mmu_store_u32")
+    generate!("mmu_store_u64")
+}

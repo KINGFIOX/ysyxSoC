@@ -1,0 +1,49 @@
+#pragma once
+#include <cstdint>
+
+class VerilatedContext;
+class VNPCSoC;
+
+VerilatedContext* vl_context_new();
+void vl_context_delete(VerilatedContext* ctx);
+void vl_context_command_args(VerilatedContext* ctx, int argc, const char** argv);
+uint64_t vl_context_time(const VerilatedContext* ctx);
+void vl_context_time_inc(VerilatedContext* ctx, uint64_t add);
+bool vl_context_got_finish(const VerilatedContext* ctx);
+
+VNPCSoC* vnpcsoc_new(VerilatedContext* ctx, const char* name);
+void vnpcsoc_delete(VNPCSoC* top);
+void vnpcsoc_eval(VNPCSoC* top);
+void vnpcsoc_final(VNPCSoC* top);
+
+void vnpcsoc_set_clock(VNPCSoC* top, uint8_t val);
+void vnpcsoc_set_reset(VNPCSoC* top, uint8_t val);
+void vnpcsoc_set_step(VNPCSoC* top, uint8_t val);
+
+uint8_t  vnpcsoc_get_debug_valid(const VNPCSoC* top);
+uint8_t  vnpcsoc_get_debug_isMMIO(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_pc(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_dnpc(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_inst(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_gpr(const VNPCSoC* top, int index);
+uint32_t vnpcsoc_get_debug_csr_mstatus(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_csr_mtvec(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_csr_mepc(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_csr_mcause(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_csr_mtval(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_csr_mvendorid(const VNPCSoC* top);
+uint32_t vnpcsoc_get_debug_csr_marchid(const VNPCSoC* top);
+
+uint8_t* vnpcsoc_sram_ptr(VNPCSoC* top);
+
+// VCD trace
+class VerilatedVcdC;
+
+void vl_trace_ever_on(bool flag);
+VerilatedVcdC* vl_vcd_new();
+void vl_vcd_delete(VerilatedVcdC* tfp);
+void vl_vcd_open(VerilatedVcdC* tfp, const char* filename);
+void vl_vcd_close(VerilatedVcdC* tfp);
+void vl_vcd_flush(VerilatedVcdC* tfp);
+void vl_vcd_dump(VerilatedVcdC* tfp, uint64_t time);
+void vnpcsoc_trace(VNPCSoC* top, VerilatedVcdC* tfp, int levels);

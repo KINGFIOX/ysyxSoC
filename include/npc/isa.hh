@@ -4,18 +4,10 @@
 #include <npc/isa_traits.hh>
 #include <optional>
 
-using CPU_state = npc::CpuState;
-
-struct ISADecodeInfo {
-  uint32_t inst;
-};
-
 extern unsigned char isa_logo[];
 void init_isa();
 void isa_reg_display();
 std::optional<word_t> isa_reg_str2val(const char *name);
-
-struct Decode;
 
 enum { MMU_DIRECT, MMU_TRANSLATE, MMU_FAIL };
 enum { MEM_TYPE_IFETCH, MEM_TYPE_READ, MEM_TYPE_WRITE };
@@ -29,10 +21,9 @@ word_t isa_return_intr();
 #define INTR_EMPTY ((word_t)-1)
 word_t isa_query_intr();
 
-bool isa_difftest_checkregs(const CPU_state *ref_r, vaddr_t pc);
 void isa_difftest_attach();
 
-// ----------- Register helpers -----------
+// ----------- CSR address constants -----------
 
 enum {
   MSTATUS   = 0x0300,
@@ -44,24 +35,11 @@ enum {
   MARCHID   = 0x0F12,
 };
 
-inline int check_csr_idx(int idx) {
-  IFDEF(CONFIG_RT_CHECK, assert(idx == MSTATUS || idx == MTVEC ||
-    idx == MEPC || idx == MCAUSE || idx == MTVAL ||
-    idx == MVENDORID || idx == MARCHID));
-  return idx;
-}
-
-inline word_t csr(int idx) {
-  return npc::cpu().read_csr(check_csr_idx(idx));
-}
+// ----------- Register helpers -----------
 
 inline int check_reg_idx(int idx) {
   IFDEF(CONFIG_RT_CHECK, assert(idx >= 0 && idx < 32));
   return idx;
-}
-
-inline word_t gpr(int idx) {
-  return npc::cpu().gpr(check_reg_idx(idx));
 }
 
 inline const char *reg_name(int idx) {

@@ -18,16 +18,14 @@
 #include <cassert>
 #include <cstdint>
 #include <difftest-def.h>
+#include <vector>
 
 #define NR_GPR 32
 
 static std::vector<std::pair<reg_t, abstract_device_t*>> difftest_plugin_devices;
 static std::vector<std::string> difftest_htif_args;
-// spike mem_t 要求大小是 4 KiB 的倍数
 #define ALIGN_4K(size) (((size) + 0xFFF) & ~0xFFF)
 
-// NPC 物理内存和 MMIO 区域
-// 必须添加所有可能访问的地址区域，否则 spike 会抛出 access fault
 static std::vector<std::pair<reg_t, mem_t*>> difftest_mem = {
     // 主存储区域
     std::make_pair(reg_t(CONFIG_SOC_MROM_BASE), new mem_t(ALIGN_4K(CONFIG_SOC_MROM_SIZE))),
@@ -57,15 +55,15 @@ static std::vector<std::pair<reg_t, mem_t*>> difftest_mem = {
 #endif
 };
 static debug_module_config_t difftest_dm_config = {
-  .progbufsize = 2,
-  .max_sba_data_width = 0,
-  .require_authentication = false,
-  .abstract_rti = 0,
-  .support_hasel = true,
-  .support_abstract_csr_access = true,
-  .support_abstract_fpr_access = true,
-  .support_haltgroups = true,
-  .support_impebreak = true
+  2,    /* progbufsize */
+  0,    /* max_sba_data_width */
+  false,/* require_authentication */
+  0,    /* abstract_rti */
+  true, /* support_hasel */
+  true, /* support_abstract_csr_access */
+  true, /* support_abstract_fpr_access */
+  true, /* support_haltgroups */
+  true  /* support_impebreak */
 };
 
 struct diff_context_t {

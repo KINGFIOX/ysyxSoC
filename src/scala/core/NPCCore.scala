@@ -11,12 +11,13 @@ import ysyx.CPUAXI4BundleParameters
 
 /** Debug Bundle for difftest and tracing */
 class DebugBundle extends Bundle with HasCoreParameter with HasRegFileParameter {
-  val valid = Bool()
-  val pc    = UInt(XLEN.W)
-  val dnpc  = UInt(XLEN.W)
-  val inst  = UInt(InstLen.W)
-  val gpr   = Vec(NRReg, UInt(XLEN.W))
-  val csr   = new CSRUDebugBundle
+  val valid  = Bool()
+  val pc     = UInt(XLEN.W)
+  val dnpc   = UInt(XLEN.W)
+  val inst   = UInt(InstLen.W)
+  val isMMIO = Bool()
+  val gpr    = Vec(NRReg, UInt(XLEN.W))
+  val csr    = new CSRUDebugBundle
 }
 
 class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with HasCSRParameter {
@@ -112,6 +113,7 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   private val csr_waddr_reg = RegInit(0.U(XLEN.W))
   private val csr_xcuase_reg = RegInit(0.U(XLEN.W))
   private val csr_xtval_reg = RegInit(0.U(XLEN.W))
+  private val isMMIO_reg = RegInit(false.B)
 
   private val isMem = cu.io.out.memEn
 
@@ -130,6 +132,7 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
         mem_en_reg := false.B
         rf_wen_reg := false.B
         csr_wen_reg := false.B
+        isMMIO_reg := false.B
       }
     }
     is(State.ifu_valid_wait) {
@@ -166,6 +169,7 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
     }
     is(State.mem_valid_wait) {
       when(lsu.io.out.fire) {
+        isMMIO_reg := lsu.io.isMMIO
         when(excpu.io.out.fire) {
           state := State.exception
           csr_xcuase_reg := excpu.io.out.bits.mcause
@@ -235,11 +239,12 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
 
   /* ========== Debug Output (Probe) ========== */
   val debugWire = Wire(new DebugBundle)
-  debugWire.valid := ifu.io.in.fire
-  debugWire.pc    := pc_reg
-  debugWire.dnpc  := dnpc_reg
-  debugWire.inst  := inst_reg
-  debugWire.gpr   := rfu.io.out.debug.gpr
-  debugWire.csr   := csru.io.debug
+  debugWire.valid  := ifu.io.in.fire
+  debugWire.pc     := pc_reg
+  debugWire.dnpc   := dnpc_reg
+  debugWire.inst   := inst_reg
+  debugWire.isMMIO := isMMIO_reg
+  debugWire.gpr    := rfu.io.out.debug.gpr
+  debugWire.csr    := csru.io.debug
   define(io.probe, ProbeValue(debugWire))
 }

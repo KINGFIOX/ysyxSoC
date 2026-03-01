@@ -58,62 +58,18 @@ constexpr std::string_view csr_name(Csr c) {
   return "unknown";
 }
 
+// #derived[Debug]
 struct CpuState {
   std::array<word_t, num_gprs> gpr;
   word_t pc;
-  std::array<word_t, num_csrs> csr;
-
-  [[nodiscard]] word_t read_csr(Csr idx) const {
-    return csr.at(static_cast<uint16_t>(idx));
-  }
-  void write_csr(Csr idx, word_t val) {
-    csr.at(static_cast<uint16_t>(idx)) = val;
-  }
-
-  void display() const {
-    for (int i = 0; i < num_gprs; i++) {
-      std::printf("%-4.*s\t"
-                  "0x%08x"
-                  "\n",
-                  static_cast<int>(gpr_names.at(i).size()),
-                  gpr_names.at(i).data(), gpr.at(i));
-    }
-    std::printf("pc\t"
-                "0x%08x"
-                "\n",
-                pc);
-  }
+  word_t mstatus;
+  word_t mtvec;
+  word_t mepc;
+  word_t mcause;
+  word_t mtval;
+  word_t mvendorid;
+  word_t marchid;
 };
-
-class Cpu {
-  CpuState state_;
-
-public:
-  void init();  // Implemented in init.cc
-  void reset(); // Implemented in init.cc
-
-  [[nodiscard]] word_t pc() const { return state_.pc; }
-  void set_pc(word_t v) { state_.pc = v; }
-
-  [[nodiscard]] word_t gpr(int i) const { return state_.gpr.at(i); }
-  void set_gpr(int i, word_t v) { state_.gpr.at(i) = v; }
-
-  [[nodiscard]] word_t read_csr(Csr idx) const { return state_.read_csr(idx); }
-  void write_csr(Csr idx, word_t v) { state_.write_csr(idx, v); }
-
-  [[nodiscard]] word_t read_csr(int idx) const { return state_.csr.at(idx); }
-  void write_csr(int idx, word_t v) { state_.csr.at(idx) = v; }
-
-  void display() const { state_.display(); }
-
-  [[nodiscard]] CpuState *state_ptr() { return &state_; }
-  [[nodiscard]] const CpuState *state_ptr() const { return &state_; }
-};
-
-inline Cpu &cpu() {
-  static Cpu instance;
-  return instance;
-}
 
 } // namespace npc
 

@@ -6,7 +6,6 @@ import ysyx.core.common.HasCoreParameter
 import freechips.rocketchip.amba.axi4._
 import ysyx.CPUAXI4BundleParameters
 import ysyx.SoCConfig
-import ysyx.core.dpi.DifftestSkipRef
 
 // - read: 自然对齐即可 (符合 riscv 规范)
 // - write: 强制对齐到 4byte, 通过 waddr + wstrb 恢复原先的地址
@@ -331,6 +330,7 @@ class LSU extends Module with HasCoreParameter {
     val in     = Flipped(DecoupledIO(new MEMUInputBundle))
     val out    = DecoupledIO(new MEMUOutputBundle)
     val dcache = AXI4Bundle(CPUAXI4BundleParameters())
+    val isMMIO = Output(Bool())
   })
 
   // ---------- Sub-modules ----------
@@ -459,8 +459,5 @@ class LSU extends Module with HasCoreParameter {
   ))
   io.out.bits.xtval := addr_reg
 
-  // ---------- Difftest Skip for MMIO Access ----------
-  // Skip difftest reference when MMIO read/write completes,
-  // since reference (e.g., Spike) doesn't have these peripherals
-  DifftestSkipRef(io.out.fire && isMMIO_reg)
+  io.isMMIO := isMMIO_reg
 }

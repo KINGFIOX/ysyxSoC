@@ -2,13 +2,6 @@
 
 #include <npc/isa.hh>
 
-struct Decode {
-  vaddr_t pc;
-  vaddr_t snpc;
-  vaddr_t dnpc;
-  ISADecodeInfo isa;
-};
-
 void cpu_exec(uint64_t n);
 void set_npc_state(int state, vaddr_t pc, int halt_ret);
 void invalid_inst(vaddr_t thispc);
@@ -18,8 +11,6 @@ void invalid_inst(vaddr_t thispc);
 
 bool npc_core_init(int argc, char *argv[]);
 void npc_core_fini();
-void npc_core_flush_trace();
-bool npc_core_step(Decode *s);
 
 inline uint32_t inst_fetch(vaddr_t *pc, int len) {
   uint32_t inst = vaddr_ifetch(*pc, len);

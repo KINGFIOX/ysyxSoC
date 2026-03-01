@@ -2,10 +2,9 @@ project('npc', 'cpp',
   version: '0.1.0',
   default_options: [
     'cpp_std=c++20',
-    'warning_level=1',
+    'warning_level=3',
     'werror=true',
     'optimization=2',
-    'b_pie=false',
   ],
 )
 
@@ -14,7 +13,7 @@ cxx = meson.get_compiler('cpp')
 guest_isa = get_option('guest_isa')
 
 # ======================== Configuration header ========================
-# Generates builddir/include/generated/autoconf.h so that
+# Generates build/include/generated/autoconf.h so that
 # #include <generated/autoconf.h> resolves via the build-tree mirror.
 
 conf = configuration_data()
@@ -94,7 +93,7 @@ endforeach
 subdir('include/generated')
 
 # Generate SoCConfig.scala for Chisel from the same option values.
-# Output lands in builddir; the Makefile copies it to src/scala/ before mill.
+# Output lands in build; the Makefile copies it to src/scala/ before mill.
 soc_config_scala = configure_file(
   input: 'src/scala/SoCConfig.scala.in',
   output: 'SoCConfig.scala',
@@ -161,6 +160,8 @@ flex_gen = custom_target('expr_lexer',
 
 cc_sources = files(
   'src/cxx/cpu/difftest/dut.cc',
+  'src/cxx/cpu/cpu_model.cc',
+  'src/cxx/cpu/verilator_model.cc',
   'src/cxx/isa/riscv32/difftest/dut.cc',
   'src/cxx/isa/riscv32/init.cc',
   'src/cxx/isa/riscv32/reg.cc',
@@ -168,7 +169,6 @@ cc_sources = files(
   'src/cxx/isa/riscv32/system/intr.cc',
   'src/cxx/isa/riscv32/system/mmu.cc',
   'src/cxx/npc-main.cc',
-  'src/cxx/cpu/core.cc',
   'src/cxx/cpu/cpu-exec.cc',
   'src/cxx/memory/address_space.cc',
   'src/cxx/memory/flash.cc',
@@ -200,8 +200,6 @@ if get_option('ftrace')
   cc_sources += files('src/cxx/utils/ftrace.cc')
 endif
 
-# spike_ref 单独编译，避免 spike 头文件污染其他源文件
-
 # ======================== Compile arguments ========================
 
 common_args = [
@@ -213,8 +211,6 @@ cxx_only_args = ['-Wno-sign-compare', '-Wno-narrowing']
 
 # ======================== SPIKE integration (difftest) ========================
 
-spike_inc_dirs = []
-spike_link_args = []
 spike_cpp_args = []
 spike_build_rpath = ''
 if get_option('difftest')
@@ -229,7 +225,6 @@ if get_option('difftest')
     error('SPIKE not built. Run: cd ' + spike_src + ' && meson setup ' + spike_build_dir + ' -Ddefault_isa=RV32IMAFDC && ninja -C ' + spike_build_dir)
   endif
 
-  # 使用 -I 传入 spike 头文件路径（spike 在项目外）
   spike_inc_args = [
     '-I' + spike_src,
     '-I' + (spike_src / 'fesvr'),
@@ -243,16 +238,14 @@ if get_option('difftest')
     '-I' + (spike_src / 'spike_dasm'),
     '-I' + spike_build,
   ]
-  spike_inc_dirs = []
   spike_build_rpath = spike_build
-  spike_cpp_args = []
-  # spike_ref 单独编译为静态库，仅此文件使用 spike 头文件
-  spike_ref_lib = static_library('spike_ref', 'src/cxx/cpu/difftest/spike_ref.cc',
+  # Spike 头文件使用 __int128、compound-literals 等扩展，需放宽检查
+  spike_cpp_args = ['-Wno-pedantic']
+  # spike_model 单独编译为静态库，隔离 spike 头文件
+  spike_model_lib = static_library('spike_model', 'src/cxx/cpu/spike_model.cc',
     include_directories: inc_dirs,
-    cpp_args: common_args + cxx_only_args + spike_inc_args,
-    override_options: ['cpp_std=c++17'],
+    cpp_args: common_args + cxx_only_args + spike_inc_args + spike_cpp_args,
   )
-  spike_link_args = [spike_ref_lib, spike_libriscv]
 endif
 
 # ======================== Build the simulator ========================
@@ -261,6 +254,7 @@ deps = [dep_readline, dep_dl, dep_pthread]
 if get_option('itrace')
   deps += dep_capstone
 endif
+
 if get_option('ftrace')
   deps += dep_elf
 endif
@@ -268,7 +262,7 @@ endif
 _npc_link_with = []
 _npc_link_args = ['-no-pie'] + verilator_link_args
 if get_option('difftest')
-  _npc_link_with = [spike_ref_lib]
+  _npc_link_with = [spike_model_lib]
   _npc_link_args += [spike_libriscv]
 endif
 

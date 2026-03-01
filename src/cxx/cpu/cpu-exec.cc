@@ -1,6 +1,7 @@
 #include <npc/trace.hh>
 #include <npc/state.hh>
 #include <npc/cpu.hh>
+#include <npc/cpu_model.hh>
 #include <npc/difftest.hh>
 #include <npc/isa.hh>
 #include "../monitor/sdb/sdb.hh"
@@ -15,12 +16,17 @@ npc::trace::TraceManager<> g_trace;
 static uint64_t g_timer = 0;
 static bool g_print_step = false;
 
-static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
+#ifdef CONFIG_DIFFTEST
+static npc::Scoreboard g_scoreboard;
+#endif
+
+static void trace_and_difftest(const npc::StepResult &r) {
+  word_t snpc = r.pc + 4;
+
   if constexpr (Cfg::itrace) {
     if (ITRACE_COND) {
       char logbuf[128];
-      npc::trace::gen_logbuf(logbuf, sizeof(logbuf), _this->pc, _this->snpc,
-                             _this->isa.inst);
+      npc::trace::gen_logbuf(logbuf, sizeof(logbuf), r.pc, snpc, r.inst);
       _Log("{}\n", logbuf);
     }
   }
@@ -28,22 +34,19 @@ static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
   if (g_print_step) {
     if constexpr (Cfg::itrace) {
       char logbuf[128];
-      npc::trace::gen_logbuf(logbuf, sizeof(logbuf), _this->pc, _this->snpc,
-                             _this->isa.inst);
+      npc::trace::gen_logbuf(logbuf, sizeof(logbuf), r.pc, snpc, r.inst);
       puts(logbuf);
     }
   }
 
   if constexpr (Cfg::difftest) {
-    difftest_step(_this->pc, dnpc);
+    g_scoreboard.check(npc::dut(), npc::ref(), r);
   }
 
   if constexpr (Cfg::watchpoint) {
     check_watchpoints();
   }
 }
-
-static bool exec_once(Decode *s) { return npc_core_step(s); }
 
 // ===============================  decode  ===============================
 
@@ -60,11 +63,11 @@ enum {
 
 #if defined(CONFIG_FTRACE) || defined(CONFIG_ETRACE)
 
-static void decode_operand(const Decode *s, int *rd, word_t *src1, word_t *src2,
-                           word_t *imm, int type) {
+static void decode_operand(const npc::StepResult *s, int *rd, word_t *src1,
+                           word_t *src2, word_t *imm, int type) {
   (void)src1;
   (void)src2;
-  uint32_t i = s->isa.inst;
+  uint32_t i = s->inst;
   *rd     = BITS(i, 11, 7);
   switch (type) {
     case TYPE_I: immI(); break;
@@ -80,7 +83,7 @@ static void decode_operand(const Decode *s, int *rd, word_t *src1, word_t *src2,
 
 #endif
 
-#define INSTPAT_INST(s) ((s)->isa.inst)
+#define INSTPAT_INST(s) ((s)->inst)
 #define INSTPAT_MATCH(s, name, type, ... /* execute body */ ) { \
   int rd = 0; \
   word_t src1 = 0, src2 = 0, imm = 0; \
@@ -92,7 +95,7 @@ static void decode_operand(const Decode *s, int *rd, word_t *src1, word_t *src2,
 
 #ifdef CONFIG_FTRACE
 
-static void ftrace_log(const Decode *s) {
+static void ftrace_log(const npc::StepResult *s) {
   INSTPAT_START();
   INSTPAT("??????? ????? ????? ????? ????? 11011 11", jal   , J, {
     if (rd == 1) {
@@ -100,7 +103,7 @@ static void ftrace_log(const Decode *s) {
     }
   });
   INSTPAT("??????? ????? ????? 000 ????? 11001 11", jalr   , I, {
-    int rs1 = BITS(s->isa.inst, 19, 15);
+    int rs1 = BITS(s->inst, 19, 15);
     if (rd == 0 && rs1 == 1 && imm == 0) {
       ftrace_ret(s->pc);
     } else if (rd != 0) {
@@ -116,13 +119,14 @@ static void ftrace_log(const Decode *s) {
 
 #ifdef CONFIG_ETRACE
 
-static void etrace_log(const Decode *s) {
+static void etrace_log(const npc::StepResult *s) {
+  auto &d = npc::dut();
   INSTPAT_START();
   INSTPAT("0000000 00000 00000 000 00000 11100 11", ecall  , I, {
-    g_trace.etrace().push('E', 11, npc::cpu().read_csr(MEPC), npc::cpu().read_csr(MTVEC));
+    g_trace.etrace().push('E', 11, d.mepc(), d.mtvec());
   });
   INSTPAT("0011000 00010 00000 000 00000 11100 11", mret   , R, {
-    g_trace.etrace().push('R', csr(MCAUSE), npc::cpu().read_csr(MEPC), 0);
+    g_trace.etrace().push('R', d.mcause(), d.mepc(), 0);
   });
   INSTPAT_END();
 }
@@ -130,28 +134,25 @@ static void etrace_log(const Decode *s) {
 #endif // CONFIG_ETRACE
 
 static void execute(uint64_t n) {
-  Decode s;
-
   for (; n > 0; n--) {
-    if (!exec_once(&s)) {
-      set_npc_state(NPC_ABORT, npc::cpu().pc(), -1);
-      break;
-    }
+    auto result = npc::dut().step();
+
+    if (npc_state.state != NPC_RUNNING) break;
 
     if constexpr (Cfg::itrace) {
-      g_trace.itrace().record(s.pc, s.snpc, s.isa.inst);
+      g_trace.itrace().record(result.pc, result.pc + 4, result.inst);
     }
 
 #ifdef CONFIG_FTRACE
-    ftrace_log(&s);
+    ftrace_log(&result);
 #endif
 
 #ifdef CONFIG_ETRACE
-    etrace_log(&s);
+    etrace_log(&result);
 #endif
 
     g_nr_guest_inst++;
-    trace_and_difftest(&s, npc::cpu().pc());
+    trace_and_difftest(result);
     if (npc_state.state != NPC_RUNNING) break;
   }
 }

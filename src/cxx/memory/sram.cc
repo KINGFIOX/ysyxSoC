@@ -18,12 +18,12 @@ void SramDevice::bind(uint8_t *verilator_ptr) {
 }
 
 word_t SramDevice::read(paddr_t addr, int len) {
-  if (unlikely(!ptr_)) {
+  if (!ptr_) {
     Log("Warning: sram_ptr not initialized");
     return 0xdeadbeef;
   }
   auto off = range().offset(addr);
-  if (unlikely(off + len > CONFIG_SOC_SRAM_SIZE)) {
+  if (off + len > CONFIG_SOC_SRAM_SIZE) {
     Log("Warning: sram read out of range: {:08x}", addr);
     return 0xdeadbeef;
   }

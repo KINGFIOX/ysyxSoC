@@ -61,7 +61,3 @@ inline constexpr uint64_t sext(uint64_t x, int len) {
 
 #define PG_ALIGN __attribute((aligned(4096)))
 
-#if !defined(likely)
-#define likely(cond) __builtin_expect(cond, 1)
-#define unlikely(cond) __builtin_expect(cond, 0)
-#endif

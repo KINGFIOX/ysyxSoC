@@ -8,8 +8,6 @@
 #include <format>
 #include <span>
 
-void npc_core_flush_trace();
-
 namespace npc::trace {
 
 inline constexpr int kInstMaxBytes = 4;
@@ -208,7 +206,7 @@ public:
       ::ftrace_dump();
     }
     if constexpr (Cfg::verilator_trace) {
-      ::npc_core_flush_trace();
+      // VCD trace flushing is handled by VerilatorModel::fini()
     }
   }
 };

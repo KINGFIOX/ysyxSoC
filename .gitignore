@@ -17,6 +17,8 @@
 !meson_options.txt
 !.clang-tidy
 !.clangd
+!Cargo.toml
+!Cargo.lock
 !scripts/**
 
 # =============================================================================
@@ -34,6 +36,7 @@
 !*.md
 !*.pdf
 !*.patch
+!*.rs
 
 # 子目录中的 meson.build
 !**/meson.build
@@ -68,3 +71,9 @@ src/scala/SoCConfig.scala
 # =============================================================================
 
 !report/*
+
+
+# Added by cargo
+
+/target
+.cargo
