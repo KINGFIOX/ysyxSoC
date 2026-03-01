@@ -8,9 +8,6 @@ const RESET_VECTOR: u64 = 0x30000000;
 const MEM_BASES: &[u64] = &[
     0x20000000, // MROM
     0x0f000000, // SRAM
-    0x10000000, // UART
-    0x10002000, // GPIO
-    0x10011000, // KEYBOARD
     0x21000000, // VGA
     0x10001000, // SPI_CTRL
     0x30000000, // XIP_FLASH
@@ -21,9 +18,6 @@ const MEM_BASES: &[u64] = &[
 const MEM_SIZES: &[u64] = &[
     0x1000,     // MROM
     0x2000,     // SRAM
-    0x1000,     // UART
-    0x10,       // GPIO
-    0x8,        // KEYBOARD
     0x200000,   // VGA
     0x1000,     // SPI_CTRL
     0x10000000, // XIP_FLASH
@@ -40,6 +34,7 @@ pub struct SpikeCpu {
 
 impl SpikeCpu {
     pub fn new() -> Self {
+        assert!(MEM_BASES.len() == MEM_SIZES.len());
         let mem_count: autocxx::c_int = (MEM_BASES.len() as i32).into();
         let sim = unsafe {
             sim_new(

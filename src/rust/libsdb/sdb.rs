@@ -14,13 +14,7 @@ const GPR_NAMES: &[&str] = &[
 struct CommandDef {
     names: &'static [&'static str],
     help: &'static str,
-    func: fn(&str, &mut Sdb, &mut dyn AbstractCpu) -> Action,
-}
-
-#[derive(PartialEq)]
-enum Action {
-    Continue,
-    Quit,
+    func: fn(&str, &mut Sdb, &mut dyn AbstractCpu),
 }
 
 const COMMANDS: &[CommandDef] = &[
@@ -76,10 +70,19 @@ const COMMANDS: &[CommandDef] = &[
     },
 ];
 
+#[derive(PartialEq)]
+enum State {
+    Stop,
+    Running,
+    Quit,
+    #[allow(unused)]
+    Abort,
+}
+
 pub struct Sdb {
     breakpoints: Vec<u32>,
     watchpoints: WatchpointPool,
-    stopped: bool,
+    state: State,
     last_cmd: Option<String>,
 }
 
@@ -88,15 +91,15 @@ impl Sdb {
         Self {
             breakpoints: Vec::new(),
             watchpoints: WatchpointPool::new(),
-            stopped: false,
+            state: State::Stop,
             last_cmd: None,
         }
     }
 
-    pub fn mainloop(&mut self, cpu: &mut dyn AbstractCpu) {
+    pub fn mainloop(&mut self, dut: &mut dyn AbstractCpu) {
         let mut rl = DefaultEditor::new().expect("failed to create readline editor");
 
-        while !self.stopped {
+        while self.state == State::Stop {
             match rl.readline("(sdb) ") {
                 Ok(line) => {
                     let line = line.trim().to_string();
@@ -110,30 +113,27 @@ impl Sdb {
                         self.last_cmd = Some(line.clone());
                         line
                     };
-                    self.execute_line(&input, cpu);
+                    self.execute_line(&input, dut); // this will change the state of the Sdb
                 }
                 Err(rustyline::error::ReadlineError::Eof) => {
-                    self.stopped = true;
+                    self.state = State::Quit;
                 }
                 Err(e) => {
                     eprintln!("readline error: {e}");
-                    self.stopped = true;
+                    self.state = State::Stop;
                 }
             }
         }
     }
 
-    fn execute_line(&mut self, input: &str, cpu: &mut dyn AbstractCpu) {
+    fn execute_line(&mut self, input: &str, dut: &mut dyn AbstractCpu) {
         let Some(cmd) = command::parse(input) else {
             return;
         };
 
         for def in COMMANDS {
             if def.names.contains(&cmd.name.as_str()) {
-                let action = (def.func)(&cmd.args, self, cpu);
-                if action == Action::Quit {
-                    self.stopped = true;
-                }
+                (def.func)(&cmd.args, self, dut); // this will change the state of the Sdb
                 return;
             }
         }
@@ -141,24 +141,24 @@ impl Sdb {
         eprintln!("unknown command: {}", cmd.name);
     }
 
-    fn execute_steps(&mut self, n: usize, cpu: &mut dyn AbstractCpu) {
+    fn execute_steps(&mut self, n: usize, dut: &mut dyn AbstractCpu) {
+        assert!(self.state == State::Running);
         for _ in 0..n {
-            cpu.step();
-
-            if self.check_breakpoints(cpu) {
-                return;
+            dut.step();
+            if self.check_breakpoints(dut) {
+                break;
             }
-
             let mut buf = String::new();
-            if self.watchpoints.check(cpu, &mut buf) {
+            if self.watchpoints.check(dut, &mut buf) {
                 print!("{buf}");
-                return;
+                break;
             }
         }
+        self.state = State::Stop;
     }
 
-    fn check_breakpoints(&self, cpu: &dyn AbstractCpu) -> bool {
-        let pc = cpu.pc();
+    fn check_breakpoints(&self, dut: &dyn AbstractCpu) -> bool {
+        let pc = dut.pc();
         for &bp in &self.breakpoints {
             if pc == bp {
                 println!("breakpoint hit at {pc:#010x}");
@@ -169,35 +169,24 @@ impl Sdb {
     }
 }
 
-fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
     println!("Commands:");
     for def in COMMANDS {
         let names = def.names.join(", ");
         println!("  {names:20} {}", def.help);
     }
-    Action::Continue
 }
 
-fn cmd_quit(_args: &str, _sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) -> Action {
-    Action::Quit
+fn cmd_quit(_args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
+    sdb.state = State::Quit;
 }
 
-fn cmd_continue(_args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
-    loop {
-        cpu.step();
-        if sdb.check_breakpoints(cpu) {
-            break;
-        }
-        let mut buf = String::new();
-        if sdb.watchpoints.check(cpu, &mut buf) {
-            print!("{buf}");
-            break;
-        }
-    }
-    Action::Continue
+fn cmd_continue(_args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+    sdb.state = State::Running;
+    sdb.execute_steps(usize::MAX, dut); // this will change the state of the Sdb
 }
 
-fn cmd_step(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     let n: usize = if args.is_empty() {
         1
     } else {
@@ -205,21 +194,21 @@ fn cmd_step(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
             Ok(v) => v,
             Err(_) => {
                 eprintln!("usage: step [N]");
-                return Action::Continue;
+                return;
             }
         }
     };
-    sdb.execute_steps(n, cpu);
-    Action::Continue
+    sdb.state = State::Running;
+    sdb.execute_steps(n, dut);
 }
 
-fn cmd_info(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     let sub = args.trim();
     match sub {
         "r" | "registers" | "reg" => {
-            println!("pc  = {:#010x}", cpu.pc());
+            println!("pc  = {:#010x}", dut.pc());
             for i in 0..32 {
-                print!("{:4} = {:#010x}  ", GPR_NAMES[i], cpu.gpr(i).unwrap());
+                print!("{:4} = {:#010x}  ", GPR_NAMES[i], dut.gpr(i).unwrap());
                 if (i + 1) % 4 == 0 {
                     println!();
                 }
@@ -241,27 +230,26 @@ fn cmd_info(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
         }
         _ => eprintln!("usage: info r|w|b"),
     }
-    Action::Continue
 }
 
-fn cmd_examine(args: &str, _sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     let parts: Vec<&str> = args.splitn(2, char::is_whitespace).collect();
     if parts.len() < 2 {
         eprintln!("usage: x N EXPR");
-        return Action::Continue;
+        return;
     }
     let n: usize = match parts[0].trim().parse() {
         Ok(v) => v,
         Err(_) => {
             eprintln!("bad count: {}", parts[0]);
-            return Action::Continue;
+            return;
         }
     };
-    let addr = match expression::eval(parts[1].trim(), cpu) {
+    let addr = match expression::eval(parts[1].trim(), dut) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("expression error: {e}");
-            return Action::Continue;
+            return;
         }
     };
 
@@ -270,7 +258,7 @@ fn cmd_examine(args: &str, _sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action 
         if i % 4 == 0 {
             print!("{a:#010x}:");
         }
-        match cpu.mem_load_u32(a) {
+        match dut.mem_load_u32(a) {
             Ok(val) => print!("  {val:#010x}"),
             Err(_) => print!("  ??????????"),
         }
@@ -278,40 +266,37 @@ fn cmd_examine(args: &str, _sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action 
             println!();
         }
     }
-    Action::Continue
 }
 
-fn cmd_print(args: &str, _sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     if args.trim().is_empty() {
         eprintln!("usage: p EXPR");
-        return Action::Continue;
+        return;
     }
-    match expression::eval(args.trim(), cpu) {
+    match expression::eval(args.trim(), dut) {
         Ok(val) => println!("{val:#010x} ({val})"),
         Err(e) => eprintln!("expression error: {e}"),
     }
-    Action::Continue
 }
 
-fn cmd_watch(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     let expr = args.trim();
     if expr.is_empty() {
         eprintln!("usage: w EXPR");
-        return Action::Continue;
+        return;
     }
-    match sdb.watchpoints.add(expr, cpu) {
+    match sdb.watchpoints.add(expr, dut) {
         Ok(id) => println!("watchpoint #{id}: {expr}"),
         Err(e) => eprintln!("expression error: {e}"),
     }
-    Action::Continue
 }
 
-fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu){
     let id: usize = match args.trim().parse() {
         Ok(v) => v,
         Err(_) => {
             eprintln!("usage: d N");
-            return Action::Continue;
+            return;
         }
     };
     if sdb.watchpoints.remove(id) {
@@ -319,14 +304,13 @@ fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) -> Action {
     } else {
         eprintln!("watchpoint #{id} not found");
     }
-    Action::Continue
 }
 
-fn cmd_break(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
+fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu){
     let expr = args.trim();
     if expr.is_empty() {
         eprintln!("usage: b ADDR");
-        return Action::Continue;
+        return;
     }
 
     let sub = expr.split_whitespace().next().unwrap();
@@ -339,7 +323,7 @@ fn cmd_break(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
                     println!("  #{}: {bp:#010x}", i + 1);
                 }
             }
-            return Action::Continue;
+            return;
         }
         "rm" | "remove" => {
             let rest = expr[sub.len()..].trim();
@@ -347,22 +331,21 @@ fn cmd_break(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
                 Ok(v) if v >= 1 && v <= sdb.breakpoints.len() => v - 1,
                 _ => {
                     eprintln!("usage: b rm N");
-                    return Action::Continue;
+                    return;
                 }
             };
             let addr = sdb.breakpoints.remove(idx);
             println!("deleted breakpoint #{} at {addr:#010x}", idx + 1);
-            return Action::Continue;
+            return;
         }
         _ => {}
     }
 
-    match expression::eval(expr, cpu) {
+    match expression::eval(expr, dut) {
         Ok(addr) => {
             sdb.breakpoints.push(addr);
             println!("breakpoint #{} at {addr:#010x}", sdb.breakpoints.len());
         }
         Err(e) => eprintln!("expression error: {e}"),
     }
-    Action::Continue
 }
