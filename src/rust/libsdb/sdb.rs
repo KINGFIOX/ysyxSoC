@@ -74,11 +74,6 @@ const COMMANDS: &[CommandDef] = &[
         help: "set breakpoint at address",
         func: cmd_break,
     },
-    CommandDef {
-        names: &["reset", "rst"],
-        help: "reset the CPU",
-        func: cmd_reset,
-    },
 ];
 
 pub struct Sdb {
@@ -369,11 +364,5 @@ fn cmd_break(args: &str, sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
         }
         Err(e) => eprintln!("expression error: {e}"),
     }
-    Action::Continue
-}
-
-fn cmd_reset(_args: &str, _sdb: &mut Sdb, cpu: &mut dyn AbstractCpu) -> Action {
-    cpu.reset();
-    println!("cpu reset");
     Action::Continue
 }
