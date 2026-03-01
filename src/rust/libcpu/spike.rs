@@ -67,13 +67,25 @@ impl Drop for SpikeCpu {
 }
 
 impl AbstractCpu for SpikeCpu {
-    fn gpr(&self, index: usize) -> u32 {
-        let gpr = unsafe { state_get_gpr(self.state, (index as i32).into()) };
-        gpr as u32
+    fn pc(&self) -> u32 {
+        let pc = unsafe { state_get_pc(self.state) };
+        pc as u32
     }
 
-    fn set_gpr(&mut self, index: usize, value: u32) {
+    fn gpr(&self, index: usize) -> miette::Result<u32> {
+        if index >= 32 {
+            return Err(miette::Error::msg("invalid register index"));
+        }
+        let gpr = unsafe { state_get_gpr(self.state, (index as i32).into()) };
+        Ok(gpr as u32)
+    }
+
+    fn set_gpr(&mut self, index: usize, value: u32) -> miette::Result<()> {
+        if index >= 32 {
+            return Err(miette::Error::msg("invalid register index"));
+        }
         unsafe { state_set_gpr(self.state, (index as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn mstatus(&self) -> u32 {

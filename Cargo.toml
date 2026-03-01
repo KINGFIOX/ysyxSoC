@@ -12,10 +12,11 @@ path = "src/rust/main.rs"
 
 [dependencies]
 autocxx = "0.26"
-cxx = "1.0"
+cxx = "1"
 miette = { version = "5", features = ["fancy"] }
+rustyline = "15"
 
 [build-dependencies]
 autocxx-build = "0.26"
-cc = "1.0"
+cc = "1"
 miette = { version = "5", features = ["fancy"] }

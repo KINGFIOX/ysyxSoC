@@ -25,8 +25,7 @@ impl AbstractDevice for ReadOnlyDevice {
         }
         Ok(self.data[offset as usize])
     }
-    #[allow(unused_variables)]
-    fn write(&mut self, offset: u32, value: u8) -> miette::Result<()> {
+    fn write(&mut self, _offset: u32, _value: u8) -> miette::Result<()> {
         Err(miette::Error::msg("write to read-only device"))
     }
     fn size(&self) -> u32 {

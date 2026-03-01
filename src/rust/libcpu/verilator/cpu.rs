@@ -85,12 +85,22 @@ impl Drop for VerilatorCpu {
 }
 
 impl AbstractCpu for VerilatorCpu {
-    fn gpr(&self, index: usize) -> u32 {
-        unsafe { vnpcsoc_get_debug_gpr(self.top, (index as i32).into()) }
+    fn pc(&self) -> u32 {
+        unsafe { vnpcsoc_get_debug_pc(self.top) }
     }
 
-    fn set_gpr(&mut self, _index: usize, _value: u32) {
-        panic!("dut should not call set_gpr");
+    fn gpr(&self, index: usize) -> miette::Result<u32> {
+        if index >= 32 {
+            return Err(miette::Error::msg("invalid register index"));
+        }
+        Ok(unsafe { vnpcsoc_get_debug_gpr(self.top, (index as i32).into()) })
+    }
+
+    fn set_gpr(&mut self, _index: usize, _value: u32) -> miette::Result<()> {
+        if _index >= 32 {
+            return Err(miette::Error::msg("invalid register index"));
+        }
+        Err(miette::Error::msg("dut should not call set_gpr"))
     }
 
     fn mstatus(&self) -> u32 {
@@ -229,5 +239,5 @@ impl AbstractCpu for VerilatorCpu {
             vnpcsoc_set_step(self.top, 0);
             vnpcsoc_eval(self.top);
         }
-    }
+    } 
 }
