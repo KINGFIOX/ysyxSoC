@@ -34,8 +34,6 @@ uint32_t vnpcsoc_get_debug_csr_mtval(const VNPCSoC* top);
 uint32_t vnpcsoc_get_debug_csr_mvendorid(const VNPCSoC* top);
 uint32_t vnpcsoc_get_debug_csr_marchid(const VNPCSoC* top);
 
-uint8_t* vnpcsoc_sram_ptr(VNPCSoC* top);
-
 // VCD trace
 class VerilatedVcdC;
 

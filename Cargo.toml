@@ -3,6 +3,9 @@ name = "npc"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+path = "src/rust/lib.rs"
+
 [[bin]]
 name = "npc"
 path = "src/rust/main.rs"
@@ -10,6 +13,7 @@ path = "src/rust/main.rs"
 [dependencies]
 autocxx = "0.26"
 cxx = "1.0"
+miette = { version = "5", features = ["fancy"] }
 
 [build-dependencies]
 autocxx-build = "0.26"

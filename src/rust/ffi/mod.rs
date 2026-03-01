@@ -1,7 +1,13 @@
+#[allow(ambiguous_glob_reexports)]
+pub use verilator::*;
+#[allow(ambiguous_glob_reexports)]
+pub use spike::*;
+
 use autocxx::prelude::*;
 
 include_cpp! {
     #include "verilator_bridge.h"
+    name!(verilator)
     safety!(unsafe)
     generate!("vl_context_new")
     generate!("vl_context_delete")
@@ -30,7 +36,6 @@ include_cpp! {
     generate!("vnpcsoc_get_debug_csr_mtval")
     generate!("vnpcsoc_get_debug_csr_mvendorid")
     generate!("vnpcsoc_get_debug_csr_marchid")
-    generate!("vnpcsoc_sram_ptr")
     generate!("vl_trace_ever_on")
     generate!("vl_vcd_new")
     generate!("vl_vcd_delete")
@@ -40,8 +45,6 @@ include_cpp! {
     generate!("vl_vcd_dump")
     generate!("vnpcsoc_trace")
 }
-
-pub use ffi::*;
 
 include_cpp! {
     #include "spike_bridge.h"
@@ -77,9 +80,7 @@ include_cpp! {
     generate!("mmu_load_u8")
     generate!("mmu_load_u16")
     generate!("mmu_load_u32")
-    generate!("mmu_load_u64")
     generate!("mmu_store_u8")
     generate!("mmu_store_u16")
     generate!("mmu_store_u32")
-    generate!("mmu_store_u64")
 }

@@ -71,9 +71,7 @@ void state_set_gpr(state_t* st, int index, uint64_t val) { st->XPR.write(index, 
 uint8_t  mmu_load_u8(mmu_t* mmu, uint64_t addr)  { return mmu->load<uint8_t>(addr); }
 uint16_t mmu_load_u16(mmu_t* mmu, uint64_t addr) { return mmu->load<uint16_t>(addr); }
 uint32_t mmu_load_u32(mmu_t* mmu, uint64_t addr) { return mmu->load<uint32_t>(addr); }
-uint64_t mmu_load_u64(mmu_t* mmu, uint64_t addr) { return mmu->load<uint64_t>(addr); }
 
 void mmu_store_u8(mmu_t* mmu, uint64_t addr, uint8_t val)   { mmu->store<uint8_t>(addr, val); }
 void mmu_store_u16(mmu_t* mmu, uint64_t addr, uint16_t val) { mmu->store<uint16_t>(addr, val); }
 void mmu_store_u32(mmu_t* mmu, uint64_t addr, uint32_t val) { mmu->store<uint32_t>(addr, val); }
-void mmu_store_u64(mmu_t* mmu, uint64_t addr, uint64_t val) { mmu->store<uint64_t>(addr, val); }

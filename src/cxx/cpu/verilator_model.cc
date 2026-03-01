@@ -177,7 +177,6 @@ public:
 
     StepResult result{};
     result.pc = top_->debug_pc;
-    result.dnpc = top_->debug_dnpc;
     result.inst = top_->debug_inst;
     result.is_mmio = top_->debug_isMMIO;
 

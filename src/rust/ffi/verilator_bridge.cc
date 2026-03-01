@@ -58,8 +58,6 @@ uint32_t vnpcsoc_get_debug_csr_mtval(const VNPCSoC* top)     { return top->debug
 uint32_t vnpcsoc_get_debug_csr_mvendorid(const VNPCSoC* top) { return top->debug_csr_mvendorid; }
 uint32_t vnpcsoc_get_debug_csr_marchid(const VNPCSoC* top)   { return top->debug_csr_marchid; }
 
-uint8_t* vnpcsoc_sram_ptr(VNPCSoC* top) { return reinterpret_cast<uint8_t*>( top->rootp->NPCSoC__DOT__dut__DOT__asic__DOT__axi4ram__DOT__mem_ext__DOT__Memory.data()); }
-
 // VCD trace
 
 void vl_trace_ever_on(bool flag) { Verilated::traceEverOn(flag); }
