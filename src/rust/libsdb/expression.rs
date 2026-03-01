@@ -330,7 +330,9 @@ mod tests {
             Ok(())
         }
         fn reset(&mut self) {}
-        fn step(&mut self) {}
+        fn step(&mut self) -> miette::Result<()> {
+            Ok(())
+        }
     }
 
     #[test]

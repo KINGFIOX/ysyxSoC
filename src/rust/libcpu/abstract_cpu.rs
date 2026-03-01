@@ -85,5 +85,5 @@ pub trait AbstractCpu {
     fn mem_store_u32(&mut self, addr: u32, value: u32) -> miette::Result<()>;
 
     fn reset(&mut self);
-    fn step(&mut self);
+    fn step(&mut self) -> miette::Result<()>;
 }

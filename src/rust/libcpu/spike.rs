@@ -174,7 +174,8 @@ impl AbstractCpu for SpikeCpu {
         unsafe { proc_reset(self.proc) };
     }
 
-    fn step(&mut self) {
-        unsafe { proc_step(self.proc, 1) };
+    fn step(&mut self) -> miette::Result<()> {
+        unsafe { proc_step(self.proc, 1) }; // always succeed
+        Ok(())
     }
 }

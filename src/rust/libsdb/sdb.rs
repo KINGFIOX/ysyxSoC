@@ -183,7 +183,11 @@ impl Sdb {
                 self.state = State::Stop;
                 return;
             }
-            dut.step();
+            if let Err(e) = dut.step() {
+                self.state = State::Abort;
+                eprintln!("step error: {e}");
+                return;
+            }
             if self.check_breakpoints(dut) {
                 self.state = State::Stop;
                 return;

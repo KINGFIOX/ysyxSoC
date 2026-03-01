@@ -219,7 +219,7 @@ impl AbstractCpu for VerilatorCpu {
         unsafe { vnpcsoc_set_reset(self.top, 0) };
     }
 
-    fn step(&mut self) {
+    fn step(&mut self) -> miette::Result<()> {
         unsafe { vnpcsoc_set_step(self.top, 1) };
 
         for i in 0..MAX_STEP_CYCLES {
@@ -228,16 +228,13 @@ impl AbstractCpu for VerilatorCpu {
                 break;
             }
             if i == MAX_STEP_CYCLES - 1 {
-                panic!(
-                    "step exceeded {} cycles without debug_valid",
-                    MAX_STEP_CYCLES
-                );
+                return Err(miette::Error::msg(format!("step exceeded {} cycles without debug_valid", MAX_STEP_CYCLES)));
             }
         }
-
         unsafe {
             vnpcsoc_set_step(self.top, 0);
             vnpcsoc_eval(self.top);
         }
+        Ok(())
     } 
 }
