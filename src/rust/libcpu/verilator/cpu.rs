@@ -33,7 +33,7 @@ pub struct VerilatorCpu {
 }
 
 impl VerilatorCpu {
-    pub fn new() -> Self {
+    pub fn new(flash_data: &[u8]) -> Self {
         let ctx = vl_context_new();
         let top = unsafe { vnpcsoc_new(ctx, TOP_NAME.as_ptr()) };
 
@@ -47,7 +47,7 @@ impl VerilatorCpu {
             top,
             tfp,
             sim_time: 0,
-            flash: ReadOnlyDevice::new(&[], FLASH_SIZE),
+            flash: ReadOnlyDevice::new(flash_data, FLASH_SIZE),
             mrom: ReadOnlyDevice::new(&[], MROM_SIZE),
             psram: ReadWriteDevice::new(PSRAM_SIZE),
             sram: ReadWriteDevice::new(SRAM_SIZE),
@@ -72,6 +72,20 @@ impl VerilatorCpu {
     }
 }
 
+impl VerilatorCpu {
+    pub fn is_mmio(&self) -> bool {
+        unsafe { vnpcsoc_get_debug_isMMIO(self.top) != 0 }
+    }
+
+    pub fn dnpc(&self) -> u32 {
+        unsafe { vnpcsoc_get_debug_dnpc(self.top) as u32 }
+    }
+
+    pub fn inst(&self) -> u32 {
+        unsafe { vnpcsoc_get_debug_inst(self.top) as u32 }
+    }
+}
+
 impl Drop for VerilatorCpu {
     fn drop(&mut self) {
         unsafe {
@@ -87,6 +101,10 @@ impl Drop for VerilatorCpu {
 impl AbstractCpu for VerilatorCpu {
     fn pc(&self) -> u32 {
         unsafe { vnpcsoc_get_debug_pc(self.top) }
+    }
+
+    fn set_pc(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_pc"))
     }
 
     fn gpr(&self, index: usize) -> miette::Result<u32> {
@@ -107,56 +125,56 @@ impl AbstractCpu for VerilatorCpu {
         unsafe { vnpcsoc_get_debug_csr_mstatus(self.top) }
     }
 
-    fn set_mstatus(&mut self, _value: u32) {
-        panic!("dut should not call set_mstatus");
+    fn set_mstatus(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_mstatus"))
     }
 
     fn mtvec(&self) -> u32 {
         unsafe { vnpcsoc_get_debug_csr_mtvec(self.top) }
     }
 
-    fn set_mtvec(&mut self, _value: u32) {
-        panic!("dut should not call set_mtvec");
+    fn set_mtvec(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_mtvec"))
     }
 
     fn mepc(&self) -> u32 {
         unsafe { vnpcsoc_get_debug_csr_mepc(self.top) }
     }
 
-    fn set_mepc(&mut self, _value: u32) {
-        panic!("dut should not call set_mepc");
+    fn set_mepc(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_mepc"))
     }
 
     fn mcause(&self) -> u32 {
         unsafe { vnpcsoc_get_debug_csr_mcause(self.top) }
     }
 
-    fn set_mcause(&mut self, _value: u32) {
-        panic!("dut should not call set_mcause");
+    fn set_mcause(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_mcause"))
     }
 
     fn mtval(&self) -> u32 {
         unsafe { vnpcsoc_get_debug_csr_mtval(self.top) }
     }
 
-    fn set_mtval(&mut self, _value: u32) {
-        panic!("dut should not call set_mtval");
+    fn set_mtval(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_mtval"))
     }
 
     fn mvendorid(&self) -> u32 {
         unsafe { vnpcsoc_get_debug_csr_mvendorid(self.top) }
     }
 
-    fn set_mvendorid(&mut self, _value: u32) {
-        panic!("dut should not call set_mvendorid");
+    fn set_mvendorid(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_mvendorid"))
     }
 
     fn marchid(&self) -> u32 {
         unsafe { vnpcsoc_get_debug_csr_marchid(self.top) }
     }
 
-    fn set_marchid(&mut self, _value: u32) {
-        panic!("dut should not call set_marchid");
+    fn set_marchid(&mut self, _value: u32) -> miette::Result<()> {
+        Err(miette::Error::msg("dut should not call set_marchid"))
     }
 
     fn mem_load_u8(&self, _addr: u32) -> miette::Result<u8> {

@@ -33,7 +33,7 @@ pub struct SpikeCpu {
 }
 
 impl SpikeCpu {
-    pub fn new() -> Self {
+    pub fn new(flash_data: &[u8]) -> Self {
         assert!(MEM_BASES.len() == MEM_SIZES.len());
         let mem_count: autocxx::c_int = (MEM_BASES.len() as i32).into();
         let sim = unsafe {
@@ -51,7 +51,12 @@ impl SpikeCpu {
 
         unsafe { state_set_pc(state, RESET_VECTOR) };
 
-        Self { sim, proc, state, mmu }
+        let mut cpu = Self { sim, proc, state, mmu };
+        for (i, &byte) in flash_data.iter().enumerate() {
+            let addr = RESET_VECTOR as u32 + i as u32;
+            cpu.mem_store_u8(addr, byte).unwrap();
+        }
+        cpu
     }
 }
 
@@ -65,6 +70,14 @@ impl AbstractCpu for SpikeCpu {
     fn pc(&self) -> u32 {
         let pc = unsafe { state_get_pc(self.state) };
         pc as u32
+    }
+
+    fn set_pc(&mut self, value: u32) -> miette::Result<()> {
+        if value % 4 != 0 {
+            return Err(miette::Error::msg("pc must be aligned to 4 bytes"));
+        }
+        unsafe { state_set_pc(self.state, value as u64) };
+        Ok(())
     }
 
     fn gpr(&self, index: usize) -> miette::Result<u32> {
@@ -88,8 +101,9 @@ impl AbstractCpu for SpikeCpu {
         mstatus as u32
     }
 
-    fn set_mstatus(&mut self, value: u32) {
+    fn set_mstatus(&mut self, value: u32) -> miette::Result<()> {
         unsafe { proc_put_csr(self.proc, (CSR_MSTATUS as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn mtvec(&self) -> u32 {
@@ -97,8 +111,9 @@ impl AbstractCpu for SpikeCpu {
         mtvec as u32
     }
 
-    fn set_mtvec(&mut self, value: u32) {
+    fn set_mtvec(&mut self, value: u32) -> miette::Result<()> {
         unsafe { proc_put_csr(self.proc, (CSR_MTVEC as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn mepc(&self) -> u32 {
@@ -106,8 +121,9 @@ impl AbstractCpu for SpikeCpu {
         mepc as u32
     }
 
-    fn set_mepc(&mut self, value: u32) {
+    fn set_mepc(&mut self, value: u32) -> miette::Result<()> {
         unsafe { proc_put_csr(self.proc, (CSR_MEPC as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn mcause(&self) -> u32 {
@@ -115,8 +131,9 @@ impl AbstractCpu for SpikeCpu {
         mcause as u32
     }
 
-    fn set_mcause(&mut self, value: u32) {
+    fn set_mcause(&mut self, value: u32) -> miette::Result<()> {
         unsafe { proc_put_csr(self.proc, (CSR_MCAUSE as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn mtval(&self) -> u32 {
@@ -124,8 +141,9 @@ impl AbstractCpu for SpikeCpu {
         mtval as u32
     }
 
-    fn set_mtval(&mut self, value: u32) {
+    fn set_mtval(&mut self, value: u32) -> miette::Result<()> {
         unsafe { proc_put_csr(self.proc, (CSR_MTVAL as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn mvendorid(&self) -> u32 {
@@ -133,8 +151,9 @@ impl AbstractCpu for SpikeCpu {
         mvendorid as u32
     }
 
-    fn set_mvendorid(&mut self, value: u32) {
+    fn set_mvendorid(&mut self, value: u32) -> miette::Result<()> {
         unsafe { proc_put_csr(self.proc, (CSR_MVENDORID as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn marchid(&self) -> u32 {
@@ -142,8 +161,9 @@ impl AbstractCpu for SpikeCpu {
         marchid as u32
     }
 
-    fn set_marchid(&mut self, value: u32) {
+    fn set_marchid(&mut self, value: u32) -> miette::Result<()> {
         unsafe { proc_put_csr(self.proc, (CSR_MARCHID as i32).into(), value as u64) };
+        Ok(())
     }
 
     fn mem_load_u8(&self, addr: u32) -> miette::Result<u8> {

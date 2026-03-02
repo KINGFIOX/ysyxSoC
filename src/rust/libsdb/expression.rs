@@ -277,6 +277,9 @@ mod tests {
         fn pc(&self) -> u32 {
             0x80000000
         }
+        fn set_pc(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn gpr(&self, index: usize) -> miette::Result<u32> {
             Ok((index as u32) * 10)
         }
@@ -286,31 +289,45 @@ mod tests {
         fn mstatus(&self) -> u32 {
             0
         }
-        fn set_mstatus(&mut self, _: u32) {}
+        fn set_mstatus(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn mtvec(&self) -> u32 {
             0
         }
-        fn set_mtvec(&mut self, _: u32) {}
+        fn set_mtvec(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn mepc(&self) -> u32 {
             0
         }
-        fn set_mepc(&mut self, _: u32) {}
+        fn set_mepc(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn mcause(&self) -> u32 {
             0
         }
-        fn set_mcause(&mut self, _: u32) {}
+        fn set_mcause(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn mtval(&self) -> u32 {
             0
         }
-        fn set_mtval(&mut self, _: u32) {}
+        fn set_mtval(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn mvendorid(&self) -> u32 {
             0
         }
-        fn set_mvendorid(&mut self, _: u32) {}
+        fn set_mvendorid(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn marchid(&self) -> u32 {
             0
         }
-        fn set_marchid(&mut self, _: u32) {}
+        fn set_marchid(&mut self, _: u32) -> miette::Result<()> {
+            Ok(())
+        }
         fn mem_load_u8(&self, _: u32) -> miette::Result<u8> {
             Ok(0)
         }

@@ -9,6 +9,7 @@ pub const CSR_MARCHID: u16 = 0x0F12;
 #[allow(dead_code)]
 pub trait AbstractCpu {
     fn pc(&self) -> u32;
+    fn set_pc(&mut self, value: u32) -> miette::Result<()>;
 
     fn gpr(&self, index: usize) -> miette::Result<u32>;
     fn set_gpr(&mut self, index: usize, value: u32) -> miette::Result<()>;
@@ -63,19 +64,19 @@ pub trait AbstractCpu {
     }
 
     fn mstatus(&self) -> u32;
-    fn set_mstatus(&mut self, value: u32);
+    fn set_mstatus(&mut self, value: u32) -> miette::Result<()>;
     fn mtvec(&self) -> u32;
-    fn set_mtvec(&mut self, value: u32);
+    fn set_mtvec(&mut self, value: u32) -> miette::Result<()>;
     fn mepc(&self) -> u32;
-    fn set_mepc(&mut self, value: u32);
+    fn set_mepc(&mut self, value: u32) -> miette::Result<()>;
     fn mcause(&self) -> u32;
-    fn set_mcause(&mut self, value: u32);
+    fn set_mcause(&mut self, value: u32) -> miette::Result<()>;
     fn mtval(&self) -> u32;
-    fn set_mtval(&mut self, value: u32);
+    fn set_mtval(&mut self, value: u32) -> miette::Result<()>;
     fn mvendorid(&self) -> u32;
-    fn set_mvendorid(&mut self, value: u32);
+    fn set_mvendorid(&mut self, value: u32) -> miette::Result<()>;
     fn marchid(&self) -> u32;
-    fn set_marchid(&mut self, value: u32);
+    fn set_marchid(&mut self, value: u32) -> miette::Result<()>;
 
     fn mem_load_u8(&self, addr: u32) -> miette::Result<u8>;
     fn mem_load_u16(&self, addr: u32) -> miette::Result<u16>;

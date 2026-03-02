@@ -11,10 +11,8 @@ pub struct ReadOnlyDevice {
 impl ReadOnlyDevice {
     pub fn new(img: &[u8], size: u32) -> Self {
         let mut data = vec![0; size as usize];
-        data.copy_from_slice(img);
-        Self {
-            data,
-        }
+        data[..img.len()].copy_from_slice(img);
+        Self { data }
     }
 }
 

@@ -1,12 +1,10 @@
+use super::*;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::libcpu::AbstractCpu;
+use crate::libcpu::{AbstractCpu, VerilatorCpu};
 use rustyline::DefaultEditor;
-
-use super::command;
-use super::expression;
-use super::watchpoint::WatchpointPool;
 
 struct SigIntGuard {
     flag: Arc<AtomicBool>,
@@ -41,7 +39,7 @@ const GPR_NAMES: &[&str] = &[
 struct CommandDef {
     names: &'static [&'static str],
     help: &'static str,
-    func: fn(&str, &mut Sdb, &mut dyn AbstractCpu),
+    func: fn(&str, &mut Sdb, &mut VerilatorCpu),
 }
 
 const COMMANDS: &[CommandDef] = &[
@@ -106,24 +104,37 @@ enum State {
     Abort,
 }
 
-pub struct Sdb {
+#[allow(unused)]
+pub struct Sdb<'a> {
     breakpoints: Vec<u32>,
     watchpoints: WatchpointPool,
     state: State,
     last_cmd: Option<String>,
+    batch: bool,
+    scoreboard: &'a mut ScoreBoard,
 }
 
-impl Sdb {
-    pub fn new() -> Self {
+impl<'a> Sdb<'a> {
+    pub fn new(scoreboard: &'a mut ScoreBoard, batch: bool) -> Self {
         Self {
             breakpoints: Vec::new(),
             watchpoints: WatchpointPool::new(),
             state: State::Stop,
             last_cmd: None,
+            batch,
+            scoreboard,
         }
     }
 
-    pub fn mainloop(&mut self, dut: &mut dyn AbstractCpu) -> miette::Result<()> {
+    pub fn mainloop(&mut self, dut: &mut VerilatorCpu) -> miette::Result<()> {
+        if self.batch {
+            self.execute_steps(usize::MAX, dut);
+            return match self.state {
+                State::Abort => Err(miette::Error::msg("abort")),
+                _ => Ok(()),
+            };
+        }
+
         let mut rl = DefaultEditor::new().expect("failed to create readline editor");
 
         loop {
@@ -159,7 +170,7 @@ impl Sdb {
         }
     }
 
-    fn execute_line(&mut self, input: &str, dut: &mut dyn AbstractCpu) {
+    fn execute_line(&mut self, input: &str, dut: &mut VerilatorCpu) {
         let Some(cmd) = command::parse(input) else {
             return;
         };
@@ -174,7 +185,7 @@ impl Sdb {
         eprintln!("unknown command: {}", cmd.name);
     }
 
-    fn execute_steps(&mut self, n: usize, dut: &mut dyn AbstractCpu) {
+    fn execute_steps(&mut self, n: usize, dut: &mut VerilatorCpu) {
         self.state = State::Running;
         let guard = SigIntGuard::new();
 
@@ -186,6 +197,11 @@ impl Sdb {
             if let Err(e) = dut.step() {
                 self.state = State::Abort;
                 eprintln!("step error: {e}");
+                return;
+            }
+            if !self.scoreboard.scoreboard(dut) {
+                self.state = State::Abort;
+                eprintln!("scoreboard error");
                 return;
             }
             if self.check_breakpoints(dut) {
@@ -201,7 +217,7 @@ impl Sdb {
 
     }
 
-    fn check_breakpoints(&self, dut: &dyn AbstractCpu) -> bool {
+    fn check_breakpoints(&self, dut: &VerilatorCpu) -> bool {
         let pc = dut.pc();
         for &bp in &self.breakpoints {
             if pc == bp {
@@ -213,7 +229,7 @@ impl Sdb {
     }
 }
 
-fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
+fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
     println!("Commands:");
     for def in COMMANDS {
         let names = def.names.join(", ");
@@ -221,16 +237,16 @@ fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
     }
 }
 
-fn cmd_quit(_args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
+fn cmd_quit(_args: &str, sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
     sdb.state = State::Quit;
 }
 
-fn cmd_continue(_args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+fn cmd_continue(_args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     sdb.execute_steps(usize::MAX, dut); // this will change the state of the Sdb
     assert!(sdb.state != State::Running)
 }
 
-fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let n: usize = if args.is_empty() {
         1
     } else {
@@ -246,7 +262,7 @@ fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     assert!(sdb.state != State::Running)
 }
 
-fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let sub = args.trim();
     match sub {
         "r" | "registers" | "reg" => {
@@ -276,7 +292,7 @@ fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     }
 }
 
-fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let parts: Vec<&str> = args.splitn(2, char::is_whitespace).collect();
     if parts.len() < 2 {
         eprintln!("usage: x N EXPR");
@@ -312,7 +328,7 @@ fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     }
 }
 
-fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     if args.trim().is_empty() {
         eprintln!("usage: p EXPR");
         return;
@@ -323,7 +339,7 @@ fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     }
 }
 
-fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let expr = args.trim();
     if expr.is_empty() {
         eprintln!("usage: w EXPR");
@@ -335,7 +351,7 @@ fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
     }
 }
 
-fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
+fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
     let id: usize = match args.trim().parse() {
         Ok(v) => v,
         Err(_) => {
@@ -350,7 +366,7 @@ fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut dyn AbstractCpu) {
     }
 }
 
-fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut dyn AbstractCpu) {
+fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let expr = args.trim();
     if expr.is_empty() {
         eprintln!("usage: b ADDR");

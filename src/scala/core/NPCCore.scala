@@ -132,7 +132,7 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
         mem_en_reg := false.B
         rf_wen_reg := false.B
         csr_wen_reg := false.B
-        isMMIO_reg := false.B
+        isMMIO_reg := false.B // reset
       }
     }
     is(State.ifu_valid_wait) {
