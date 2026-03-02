@@ -8,11 +8,6 @@
 use npc::libcpu::verilator::globals;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn exception_dpi(_en: i32, _pc: i32, _mcause: i32, _a0: i32, _tval: i32) {
-    // TODO: implement exception handling
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn mrom_read(addr: i32, data: *mut i32) {
     let offset = addr as u32;
     let b0 = globals::mrom_read(offset) as u32;

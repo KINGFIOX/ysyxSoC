@@ -9,6 +9,12 @@ const TRACE_CAPACITY: usize = 16;
 const LOAD_MNEMONICS: &[&str] = &["lb", "lh", "lw", "lbu", "lhu"];
 const STORE_MNEMONICS: &[&str] = &["sb", "sh", "sw"];
 
+pub enum StepResult {
+    Continue,
+    EBreak(u32),
+    DifftestFail,
+}
+
 const GPR_NAMES: &[&str] = &[
     "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
     "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
@@ -87,29 +93,33 @@ impl ScoreBoard {
 }
 
 impl ScoreBoard {
-    /// Returns true if scoreboard check passed, false on difftest failure.
-    pub fn scoreboard(&mut self, dut: &VerilatorCpu) -> bool {
+    pub fn scoreboard(&mut self, dut: &VerilatorCpu) -> StepResult {
         let pc = dut.pc();
         let inst = dut.inst();
         let (mnemonic, disasm) = self.disasm(inst, pc);
 
         self.itrace.push(ITraceEntry { pc, inst, disasm: disasm.clone() });
 
+        if mnemonic == "ebreak" {
+            let a0 = dut.gpr(10).unwrap_or(0);
+            return StepResult::EBreak(a0);
+        }
+
         if dut.is_mmio() {
             self.handle_mmio(dut, pc, inst, &mnemonic, &disasm);
         } else {
             self.golden.step().unwrap(); // FIXME: unwrap
-            if STORE_MNEMONICS.contains(&mnemonic.as_str()) { // check store memory
+            if STORE_MNEMONICS.contains(&mnemonic.as_str()) {
                 if !self.check_store_mem(dut, inst, &mnemonic) {
-                    return false;
+                    return StepResult::DifftestFail;
                 }
             }
         }
 
         if !self.difftest(dut) {
-            return false;
+            return StepResult::DifftestFail;
         }
-        true
+        StepResult::Continue
     }
 
     fn handle_mmio(&mut self, dut: &VerilatorCpu, pc: u32, inst: u32, mn_str: &str, disasm: &str) {

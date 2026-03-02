@@ -199,10 +199,24 @@ impl<'a> Sdb<'a> {
                 eprintln!("step error: {e}");
                 return;
             }
-            if !self.scoreboard.scoreboard(dut) {
-                self.state = State::Abort;
-                eprintln!("scoreboard error");
-                return;
+            match self.scoreboard.scoreboard(dut) {
+                StepResult::Continue => {}
+                StepResult::EBreak(a0) => {
+                    if a0 == 0 {
+                        println!("program exited successfully");
+                        self.state = State::Quit;
+                    } else {
+                        eprintln!("program exited with failure (a0 = {a0:#x})");
+                        self.state = State::Abort;
+                    }
+                    return;
+                }
+                StepResult::DifftestFail => {
+                    self.scoreboard.dump_traces(dut);
+                    self.state = State::Abort;
+                    eprintln!("difftest failed");
+                    return;
+                }
             }
             if self.check_breakpoints(dut) {
                 self.state = State::Stop;

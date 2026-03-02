@@ -3,7 +3,6 @@ package ysyx.core.component
 import chisel3._
 import chisel3.util._
 import ysyx.core.common.HasCoreParameter
-import ysyx.core.dpi.ExceptionDpi
 
 class EXCPUOutputBundle extends Bundle with HasCoreParameter {
   val mcause = UInt(XLEN.W)
@@ -64,9 +63,6 @@ class EXCPU extends Module {
     ins.cuEn -> io.in.bits.cuXtval,
     ins.lsuEn -> io.in.bits.lsuXtval,
   ))
-
-  // DPI: 异常处理 (ebreak 时触发)
-  ExceptionDpi(ins.cuEn && (ins.cu === CUExceptionType.cu_BREAKPOINT), ins.pc, mcause, ins.a0, mtval)
 
   // 输出
   io.out.valid := hasException
