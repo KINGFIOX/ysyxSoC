@@ -138,6 +138,13 @@ impl<'a> Sdb<'a> {
         let mut rl = DefaultEditor::new().expect("failed to create readline editor");
 
         loop {
+            // check state after executing a line
+            match self.state {
+                State::Stop => { /*continue*/ }
+                State::Running => panic!("impossible to be in running state"),
+                State::Quit => return Ok(()),
+                State::Abort => return Err(miette::Error::msg("abort")),
+            }
             match rl.readline("(sdb) ") {
                 Ok(line) => {
                     let line = line.trim().to_string();
@@ -159,13 +166,6 @@ impl<'a> Sdb<'a> {
                 Err(e) => {
                     error!("readline error: {e}");
                 }
-            }
-            // check state after executing a line
-            match self.state {
-                State::Stop => { /*continue*/ }
-                State::Running => panic!("impossible to be in running state"),
-                State::Quit => return Ok(()),
-                State::Abort => return Err(miette::Error::msg("abort")),
             }
         }
     }
