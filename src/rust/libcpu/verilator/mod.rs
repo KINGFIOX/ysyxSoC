@@ -1,8 +1,6 @@
 use super::*;
 
 pub mod cpu;
-pub mod device;
+pub mod globals;
 
 pub use cpu::*;
-#[allow(unused_imports)]
-pub use device::*;
