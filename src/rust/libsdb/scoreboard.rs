@@ -2,7 +2,7 @@ use capstone::prelude::*;
 use log::error;
 
 use crate::libcpu::{AbstractCpu, SpikeCpu, VerilatorCpu};
-use crate::tracer::{DTraceEntry, ITraceEntry, MTraceEntry, MemDir, RingBuf};
+use crate::tracer::{DTraceEntry, FuncTracer, ITraceEntry, MTraceEntry, MemDir, RingBuf};
 
 const TRACE_CAPACITY: usize = 16;
 
@@ -59,10 +59,11 @@ pub struct ScoreBoard {
     itrace: RingBuf<ITraceEntry>,
     dtrace: RingBuf<DTraceEntry>,
     mtrace: RingBuf<MTraceEntry>,
+    ftrace: Box<FuncTracer>,
 }
 
 impl ScoreBoard {
-    pub fn new(flash_data: &[u8]) -> Self {
+    pub fn new(flash_data: &[u8], ftrace: Box<FuncTracer>) -> Self {
         let cs = Capstone::new()
             .riscv()
             .mode(arch::riscv::ArchMode::RiscV32)
@@ -74,6 +75,7 @@ impl ScoreBoard {
             itrace: RingBuf::new(TRACE_CAPACITY),
             dtrace: RingBuf::new(TRACE_CAPACITY),
             mtrace: RingBuf::new(TRACE_CAPACITY),
+            ftrace
         }
     }
 
@@ -141,7 +143,11 @@ impl ScoreBoard {
                     width,
                     &disasm,
                 ));
-            } // else: no memory access instruction
+            } else if (mnemonic == "jal" || mnemonic == "jalr") && rd(inst) == 1 {
+                self.ftrace.push_call(pc, dut.dnpc(), &disasm);
+            } else if mnemonic == "ret" {
+                self.ftrace.push_ret(pc, dut.dnpc(), &disasm);
+            }
         }
 
         if !self.difftest(dut) {
@@ -301,5 +307,8 @@ impl ScoreBoard {
             let mark = if d != r { "  <--- MISMATCH" } else { "" };
             error!("{:4}   {d:#012x}  {r:#012x}{mark}", GPR_NAMES[i]);
         }
+
+        error!("===== FTrace (recent calls) =====");
+        error!("{}", self.ftrace.ring_buf.dump());
     }
 }

@@ -200,6 +200,7 @@ impl<'a> Sdb<'a> {
             if let Err(e) = dut.step() {
                 self.state = State::Abort;
                 error!("step error: {e}");
+                self.scoreboard.dump_traces(dut);
                 return;
             }
             match self.scoreboard.scoreboard(dut) {
