@@ -158,6 +158,9 @@ impl ScoreBoard {
         } else {
             panic!("unexpected MMIO instruction: {}", disasm);
         }
+
+        self.golden.set_pc( dut.dnpc() ).unwrap();
+
     }
 
     fn difftest(&self, dut: &VerilatorCpu) -> bool {

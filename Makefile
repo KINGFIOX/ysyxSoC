@@ -100,7 +100,7 @@ verilate: $(VERILATOR_LIB)
 BINARY := target/debug/npc
 
 build:
-	cargo build
+	unset CC CXX && cargo build
 
 # =============================== make all ===============================
 # 完整流程: verilog → verilate → build
