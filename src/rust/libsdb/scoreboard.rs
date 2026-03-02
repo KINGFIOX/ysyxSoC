@@ -1,5 +1,6 @@
 use capstone::prelude::*;
-use log::error;
+#[allow(unused_imports)]
+use log::{error, info};
 
 use crate::libcpu::{AbstractCpu, SpikeCpu, VerilatorCpu};
 use crate::tracer::{DTraceEntry, FuncTracer, ITraceEntry, MTraceEntry, MemDir, RingBuf};
@@ -134,7 +135,7 @@ impl ScoreBoard {
                 let base_val = self.golden.gpr(rs1(inst)).unwrap();
                 let addr = (base_val as i32).wrapping_add(imm_i(inst)) as u32;
                 let width = mem_width(&mnemonic);
-                let data = dut.mem_load_u32(addr).unwrap();
+                let data = dut.mem_load_u32(addr).unwrap_or(0); // FIXME: mtrace 仅做个记录, 但是似乎有错 ?
                 self.mtrace.push(MTraceEntry::new(
                     pc,
                     MemDir::Read,

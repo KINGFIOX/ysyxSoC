@@ -113,29 +113,26 @@ pub struct Sdb<'a> {
     watchpoints: WatchpointPool,
     state: State,
     last_cmd: Option<String>,
-    batch: bool,
     scoreboard: &'a mut ScoreBoard,
 }
 
 impl<'a> Sdb<'a> {
-    pub fn new(scoreboard: &'a mut ScoreBoard, batch: bool) -> Self {
+    pub fn new(scoreboard: &'a mut ScoreBoard) -> Self {
         Self {
             breakpoints: Vec::new(),
             watchpoints: WatchpointPool::new(),
             state: State::Stop,
             last_cmd: None,
-            batch,
             scoreboard,
         }
     }
 
-    pub fn mainloop(&mut self, dut: &mut VerilatorCpu) -> miette::Result<()> {
-        if self.batch {
+    pub fn mainloop(&mut self, dut: &mut VerilatorCpu, batch: bool) -> miette::Result<()> {
+        if batch {
             self.execute_steps(usize::MAX, dut);
-            return match self.state {
-                State::Abort => Err(miette::Error::msg("abort")),
-                _ => Ok(()),
-            };
+            if self.state == State::Abort {
+                return Err(miette::Error::msg("abort"))
+            }
         }
 
         let mut rl = DefaultEditor::new().expect("failed to create readline editor");
@@ -200,7 +197,6 @@ impl<'a> Sdb<'a> {
             if let Err(e) = dut.step() {
                 self.state = State::Abort;
                 error!("step error: {e}");
-                self.scoreboard.dump_traces(dut);
                 return;
             }
             match self.scoreboard.scoreboard(dut) {
@@ -216,7 +212,6 @@ impl<'a> Sdb<'a> {
                     return;
                 }
                 StepResult::DifftestFail => {
-                    self.scoreboard.dump_traces(dut);
                     self.state = State::Abort;
                     error!("difftest failed");
                     return;
