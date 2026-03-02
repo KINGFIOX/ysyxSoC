@@ -21,7 +21,7 @@ fn main() {
 
     let flash_data = std::fs::read(&bin_path).unwrap();
     globals::init(&flash_data);
-    let mut dut = VerilatorCpu::new();
+    let mut dut = VerilatorCpu::new(args.wave, args.nvboard);
     let mut scoreboard = ScoreBoard::new(&flash_data, ftrace);
     let mut sdb = Sdb::new(&mut scoreboard);
     sdb.mainloop(&mut dut, args.batch).unwrap();

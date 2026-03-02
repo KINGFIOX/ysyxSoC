@@ -14,24 +14,32 @@ const MAX_STEP_CYCLES: usize = 1_000_000;
 pub struct VerilatorCpu {
     ctx: *mut VerilatedContext,
     top: *mut VNPCSoC,
-    tfp: *mut VerilatedVcdC,
+    tfp: Option<*mut VerilatedVcdC>,
     sim_time: u64,
+    nvboard: bool,
 }
 
 impl VerilatorCpu {
     /// globals::init() must be called before this constructor.
-    pub fn new() -> Self {
+    pub fn new(wave: bool, nvboard: bool) -> Self {
         let ctx = vl_context_new();
         let top = unsafe { vnpcsoc_new(ctx, TOP_NAME.as_ptr()) };
 
         vl_trace_ever_on(true);
-        let tfp = vl_vcd_new();
-        unsafe { vnpcsoc_trace(top, tfp, autocxx::c_int(99)) };
-        unsafe { vl_vcd_open(tfp, VCD_PATH.as_ptr()) };
+        let tfp = if wave {
+            let tfp = vl_vcd_new();
+            unsafe { vnpcsoc_trace(top, tfp, autocxx::c_int(99)) };
+            unsafe { vl_vcd_open(tfp, VCD_PATH.as_ptr()) };
+            Some(tfp)
+        } else {
+            None
+        };
 
-        unsafe { nvboard_bridge_init(top as *mut c_void, autocxx::c_int(1)) };
+        if nvboard {
+            unsafe { nvboard_bridge_init(top as *mut c_void, autocxx::c_int(1)) };
+        }
 
-        let mut cpu = Self { ctx, top, tfp, sim_time: 0 };
+        let mut cpu = Self { ctx, top, tfp, sim_time: 0, nvboard };
         cpu.reset();
         cpu
     }
@@ -40,15 +48,21 @@ impl VerilatorCpu {
         unsafe {
             vnpcsoc_set_clock(self.top, 0);
             vnpcsoc_eval(self.top);
-            vl_vcd_dump(self.tfp, self.sim_time);
+            if let Some(tfp) = self.tfp {
+                vl_vcd_dump(tfp, self.sim_time);
+            }
             self.sim_time += 1;
 
             vnpcsoc_set_clock(self.top, 1);
             vnpcsoc_eval(self.top);
-            vl_vcd_dump(self.tfp, self.sim_time);
+            if let Some(tfp) = self.tfp {
+                vl_vcd_dump(tfp, self.sim_time);
+            }
             self.sim_time += 1;
 
-            crate::ffi::nvboard_bridge_update();
+            if self.nvboard {
+                nvboard_bridge_update();
+            }
         }
     }
 }
@@ -69,11 +83,15 @@ impl VerilatorCpu {
 
 impl Drop for VerilatorCpu {
     fn drop(&mut self) {
-        nvboard_bridge_quit();
+        if self.nvboard {
+            nvboard_bridge_quit();
+        }
         unsafe {
-            vl_vcd_flush(self.tfp);
-            vl_vcd_close(self.tfp);
-            vl_vcd_delete(self.tfp);
+            if let Some(tfp) = self.tfp {
+                vl_vcd_flush(tfp);
+                vl_vcd_close(tfp);
+                vl_vcd_delete(tfp);
+            }
             vnpcsoc_delete(self.top);
             vl_context_delete(self.ctx);
         }

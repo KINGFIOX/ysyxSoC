@@ -112,7 +112,7 @@ all: verilate build
 override ARGS ?= --log=$(BUILD_DIR)/npc-log.txt
 IMG ?=
 
-NPC_EXEC = $(BINARY) $(ARGS) $(IMG)
+NPC_EXEC = $(BINARY) $(ARGS) -i $(IMG)
 
 run: all
 	RUST_LOG=info $(NPC_EXEC)
