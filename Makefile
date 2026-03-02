@@ -27,9 +27,6 @@ $(MESON_BDIR)/build.ninja:
 
 meson-setup: $(MESON_BDIR)/build.ninja
 
-meson-reconfigure:
-	meson setup --reconfigure $(MESON_BDIR) $(NPC_HOME)
-
 # =============================== Step 0: SoCConfig.scala ===============================
 
 SOC_CONFIG_SCALA := $(NPC_HOME)/src/scala/SoCConfig.scala
@@ -130,13 +127,6 @@ menuconfig: $(MESON_BDIR)/build.ninja
 
 # =============================== 开发工具 ===============================
 
-# clang-tidy: 使用 C++ Core Guidelines 检查 C++ 代码 (需先 make build)
-# 用法: make clang-tidy
-#       make clang-tidy FILES="src/cxx/utils/log.cc src/cxx/cpu/core.cc"
-clang-tidy: $(MESON_BDIR)/build.ninja
-	@chmod +x scripts/run-clang-tidy.sh 2>/dev/null || true
-	@./scripts/run-clang-tidy.sh $(FILES)
-
 wave:
 	@gtkwave $(BUILD_DIR)/npc_core.vcd
 
@@ -184,19 +174,14 @@ help:
 	@echo ""
 	@echo "配置:"
 	@echo "  menuconfig         — 查看/修改 meson 选项"
-	@echo "  meson-reconfigure  — 重新配置 meson"
-	@echo ""
-	@echo "代码质量:"
-	@echo "  clang-tidy         — C++ Core Guidelines 静态检查 (需先 make build)"
-	@echo "  make clang-tidy FILES=\"src/cxx/utils/log.cc\"  — 检查指定文件"
 	@echo ""
 	@echo "清理:"
 	@echo "  clean              — 清理构建目录"
 	@echo "  distclean          — 清理所有生成文件"
 
 .PHONY: verilog verilate build all
-.PHONY: meson-setup meson-reconfigure
+.PHONY: meson-setup
 .PHONY: run gdb wave
 .PHONY: menuconfig
-.PHONY: dev-init bsp idea reformat checkformat clang-tidy
+.PHONY: dev-init bsp idea reformat checkformat
 .PHONY: clean distclean clean-all help

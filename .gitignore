@@ -15,8 +15,6 @@
 !build.sc
 !meson.build
 !meson_options.txt
-!.clang-tidy
-!.clangd
 !Cargo.toml
 !Cargo.lock
 !scripts/**
@@ -38,9 +36,6 @@
 !*.patch
 !*.rs
 
-# 子目录中的 meson.build
-!**/meson.build
-
 # =============================================================================
 # 不跟踪
 # =============================================================================
@@ -54,14 +49,6 @@ out/
 .metals/
 .bloop/
 .vscode/
-
-# Flex/Bison 生成
-src/cxx/monitor/sdb/expr.tab.c
-src/cxx/monitor/sdb/expr.lex.c
-src/cxx/monitor/sdb/expr.tab.h
-
-# meson 生成 (在 build 目录, 但旧文件可能残留在源码树)
-include/generated/autoconf.h
 
 # meson 生成的 Scala 配置 (从 .in 模板生成)
 src/scala/SoCConfig.scala

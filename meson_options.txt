@@ -1,29 +1,6 @@
 # ISA
 option('guest_isa', type: 'combo', choices: ['riscv32'], value: 'riscv32', description: 'Guest ISA')
 
-# Trace
-option('trace',     type: 'boolean', value: true,  description: 'Enable tracer')
-option('itrace',    type: 'boolean', value: true,  description: 'Enable instruction tracer')
-option('itrace_cond', type: 'string', value: 'true', description: 'Itrace condition expression')
-option('iringbuf_size', type: 'integer', value: 16, description: 'Instruction ring buffer size')
-option('ftrace',    type: 'boolean', value: false, description: 'Enable function tracer')
-option('ftrace_stack_max', type: 'integer', value: 64, description: 'Max function call stack depth')
-option('ftrace_log_size',  type: 'integer', value: 512, description: 'Function trace log buffer size')
-option('mtrace',    type: 'boolean', value: true,  description: 'Enable memory tracer')
-option('mtrace_cond', type: 'string', value: 'true', description: 'Mtrace condition expression')
-option('etrace',    type: 'boolean', value: true,  description: 'Enable exception tracer')
-option('etrace_buf_size', type: 'integer', value: 16, description: 'Exception trace buffer size')
-option('verilator_trace', type: 'boolean', value: false, description: 'Enable Verilator VCD waveform')
-option('trace_start', type: 'integer', value: 0,     description: 'When tracing starts (inst count)')
-option('trace_end',   type: 'integer', value: 10000, description: 'When tracing ends (inst count)')
-
-# Debugging
-option('watchpoint', type: 'boolean', value: true,  description: 'Enable watchpoints')
-option('difftest',   type: 'boolean', value: true, description: 'Enable differential testing')
-option('spike_path', type: 'string', value: '../tools/spike', description: 'Path to riscv-isa-sim (spike) source, relative to project root')
-option('spike_build_dir', type: 'string', value: 'build', description: 'Spike meson build dir name (build)')
-option('rt_check',   type: 'boolean', value: true,  description: 'Enable runtime checking')
-
 # SoC Address Map
 option('soc_reset_vector',   type: 'string', value: '0x30000000')
 option('soc_uart_base',      type: 'string', value: '0x10000000')
