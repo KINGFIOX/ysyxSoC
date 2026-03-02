@@ -60,6 +60,31 @@ fn main() -> miette::Result<()> {
     println!("cargo:rustc-link-lib=dylib=riscv");
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", spike_build.display());
 
+    // NVBoard bridge (optional)
+    let nvboard_home = env_path("NVBOARD_HOME");
+    cc::Build::new()
+        .cpp(true)
+        .std("c++17")
+        .file(ffi_dir.join("nvboard_bridge.cc"))
+        .include(&ffi_dir)
+        .include(&verilator_mdir)
+        .include(verilator_root.join("include"))
+        .include(verilator_root.join("include/vltstd"))
+        .include(nvboard_home.join("usr/include"))
+        .compile("npc-nvboard-bridge");
+
+    println!(
+        "cargo:rustc-link-search=native={}",
+        nvboard_home.join("build").display()
+    );
+    println!("cargo:rustc-link-lib=static=nvboard");
+    println!("cargo:rustc-link-lib=SDL2");
+    println!("cargo:rustc-link-lib=SDL2_image");
+    println!("cargo:rustc-link-lib=SDL2_ttf");
+
+    println!("cargo:rerun-if-changed=src/rust/ffi/nvboard_bridge.h");
+    println!("cargo:rerun-if-changed=src/rust/ffi/nvboard_bridge.cc");
+
     // System libraries
     println!("cargo:rustc-link-lib=stdc++");
     println!("cargo:rustc-link-lib=dl");

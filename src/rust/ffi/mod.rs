@@ -2,6 +2,8 @@
 pub use verilator::*;
 #[allow(ambiguous_glob_reexports)]
 pub use spike::*;
+#[allow(ambiguous_glob_reexports)]
+pub use nvboard::*;
 
 use autocxx::prelude::*;
 
@@ -44,6 +46,15 @@ include_cpp! {
     generate!("vl_vcd_flush")
     generate!("vl_vcd_dump")
     generate!("vnpcsoc_trace")
+}
+
+include_cpp! {
+    #include "nvboard_bridge.h"
+    name!(nvboard)
+    safety!(unsafe)
+    generate!("nvboard_bridge_init")
+    generate!("nvboard_bridge_quit")
+    generate!("nvboard_bridge_update")
 }
 
 include_cpp! {

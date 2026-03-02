@@ -10,8 +10,5 @@ pub struct MonitorArgs {
     #[arg(short, long)]
     pub log: Option<PathBuf>,
 
-    #[arg(short, long)]
-    pub flash: Option<PathBuf>,
-
     pub image: PathBuf,
 }

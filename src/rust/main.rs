@@ -10,7 +10,7 @@ use npc::tracer::FuncTracer;
 
 fn main() {
     let args = MonitorArgs::parse();
-    env_logger::init();
+    env_logger::init(); // TODO: args.log 暂时还没用到
 
     let bin_path = args.image.clone();
     info!("bin_path: {:?}", bin_path);

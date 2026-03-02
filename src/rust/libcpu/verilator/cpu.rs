@@ -1,3 +1,5 @@
+use autocxx::c_void;
+
 use super::*;
 use crate::ffi::*;
 use super::globals;
@@ -27,6 +29,8 @@ impl VerilatorCpu {
         unsafe { vnpcsoc_trace(top, tfp, autocxx::c_int(99)) };
         unsafe { vl_vcd_open(tfp, VCD_PATH.as_ptr()) };
 
+        unsafe { nvboard_bridge_init(top as *mut c_void, autocxx::c_int(1)) };
+
         let mut cpu = Self { ctx, top, tfp, sim_time: 0 };
         cpu.reset();
         cpu
@@ -43,6 +47,8 @@ impl VerilatorCpu {
             vnpcsoc_eval(self.top);
             vl_vcd_dump(self.tfp, self.sim_time);
             self.sim_time += 1;
+
+            crate::ffi::nvboard_bridge_update();
         }
     }
 }
@@ -63,6 +69,7 @@ impl VerilatorCpu {
 
 impl Drop for VerilatorCpu {
     fn drop(&mut self) {
+        nvboard_bridge_quit();
         unsafe {
             vl_vcd_flush(self.tfp);
             vl_vcd_close(self.tfp);
