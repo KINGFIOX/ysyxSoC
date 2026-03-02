@@ -1,7 +1,10 @@
 use super::*;
 
+use std::fmt::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
+use log::{error, info, warn};
 
 use crate::libcpu::{AbstractCpu, VerilatorCpu};
 use rustyline::DefaultEditor;
@@ -157,7 +160,7 @@ impl<'a> Sdb<'a> {
                     self.state = State::Quit;
                 }
                 Err(e) => {
-                    eprintln!("readline error: {e}"); // self.state still be Stop
+                    error!("readline error: {e}");
                 }
             }
             // check state after executing a line
@@ -182,7 +185,7 @@ impl<'a> Sdb<'a> {
             }
         }
 
-        eprintln!("unknown command: {}", cmd.name);
+        warn!("unknown command: {}", cmd.name);
     }
 
     fn execute_steps(&mut self, n: usize, dut: &mut VerilatorCpu) {
@@ -196,17 +199,17 @@ impl<'a> Sdb<'a> {
             }
             if let Err(e) = dut.step() {
                 self.state = State::Abort;
-                eprintln!("step error: {e}");
+                error!("step error: {e}");
                 return;
             }
             match self.scoreboard.scoreboard(dut) {
                 StepResult::Continue => {}
                 StepResult::EBreak(a0) => {
                     if a0 == 0 {
-                        println!("program exited successfully");
+                        info!("program exited successfully");
                         self.state = State::Quit;
                     } else {
-                        eprintln!("program exited with failure (a0 = {a0:#x})");
+                        error!("program exited with failure (a0 = {a0:#x})");
                         self.state = State::Abort;
                     }
                     return;
@@ -214,7 +217,7 @@ impl<'a> Sdb<'a> {
                 StepResult::DifftestFail => {
                     self.scoreboard.dump_traces(dut);
                     self.state = State::Abort;
-                    eprintln!("difftest failed");
+                    error!("difftest failed");
                     return;
                 }
             }
@@ -228,14 +231,14 @@ impl<'a> Sdb<'a> {
                 return;
             }
         }
-
+        self.state = State::Stop; // normal exit
     }
 
     fn check_breakpoints(&self, dut: &VerilatorCpu) -> bool {
         let pc = dut.pc();
         for &bp in &self.breakpoints {
             if pc == bp {
-                println!("breakpoint hit at {pc:#010x}");
+                info!("breakpoint hit at {pc:#010x}");
                 return true;
             }
         }
@@ -244,11 +247,12 @@ impl<'a> Sdb<'a> {
 }
 
 fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
-    println!("Commands:");
+    let mut buf = String::from("Commands:\n");
     for def in COMMANDS {
         let names = def.names.join(", ");
-        println!("  {names:20} {}", def.help);
+        let _ = writeln!(buf, "  {names:20} {}", def.help);
     }
+    info!("{buf}");
 }
 
 fn cmd_quit(_args: &str, sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
@@ -267,7 +271,7 @@ fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
         match args.trim().parse() {
             Ok(v) => v,
             Err(_) => {
-                eprintln!("usage: step [N]");
+                warn!("usage: step [N]");
                 return;
             }
         }
@@ -280,88 +284,93 @@ fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let sub = args.trim();
     match sub {
         "r" | "registers" | "reg" => {
-            println!("pc  = {:#010x}", dut.pc());
+            let mut buf = format!("pc  = {:#010x}\n", dut.pc());
             for i in 0..32 {
-                print!("{:4} = {:#010x}  ", GPR_NAMES[i], dut.gpr(i).unwrap());
+                let _ = write!(buf, "{:4} = {:#010x}  ", GPR_NAMES[i], dut.gpr(i).unwrap());
                 if (i + 1) % 4 == 0 {
-                    println!();
+                    buf.push('\n');
                 }
             }
+            info!("{buf}");
         }
         "w" | "watchpoints" | "wp" => {
             let mut buf = String::new();
             sdb.watchpoints.list(&mut buf);
-            print!("{buf}");
+            info!("{buf}");
         }
         "b" | "breakpoints" | "bp" => {
             if sdb.breakpoints.is_empty() {
-                println!("no breakpoints");
+                info!("no breakpoints");
             } else {
+                let mut buf = String::new();
                 for (i, &bp) in sdb.breakpoints.iter().enumerate() {
-                    println!("  #{}: {bp:#010x}", i + 1);
+                    let _ = writeln!(buf, "  #{}: {bp:#010x}", i + 1);
                 }
+                info!("{buf}");
             }
         }
-        _ => eprintln!("usage: info r|w|b"),
+        _ => warn!("usage: info r|w|b"),
     }
 }
 
 fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let parts: Vec<&str> = args.splitn(2, char::is_whitespace).collect();
     if parts.len() < 2 {
-        eprintln!("usage: x N EXPR");
+        warn!("usage: x N EXPR");
         return;
     }
     let n: usize = match parts[0].trim().parse() {
         Ok(v) => v,
         Err(_) => {
-            eprintln!("bad count: {}", parts[0]);
+            warn!("bad count: {}", parts[0]);
             return;
         }
     };
     let addr = match expression::eval(parts[1].trim(), dut) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("expression error: {e}");
+            error!("expression error: {e}");
             return;
         }
     };
 
+    let mut buf = String::new();
     for i in 0..n {
         let a = addr.wrapping_add((i as u32) * 4);
         if i % 4 == 0 {
-            print!("{a:#010x}:");
+            let _ = write!(buf, "{a:#010x}:");
         }
         match dut.mem_load_u32(a) {
-            Ok(val) => print!("  {val:#010x}"),
-            Err(_) => print!("  ??????????"),
+            Ok(val) => { let _ = write!(buf, "  {val:#010x}"); }
+            Err(_) => { let _ = write!(buf, "  ??????????"); }
         }
         if (i + 1) % 4 == 0 || i + 1 == n {
-            println!();
+            buf.push('\n');
         }
     }
+    info!("{buf}");
 }
 
 fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     if args.trim().is_empty() {
-        eprintln!("usage: p EXPR");
+        warn!("usage: p EXPR");
         return;
     }
     match expression::eval(args.trim(), dut) {
-        Ok(val) => println!("{val:#010x} ({val})"),
-        Err(e) => eprintln!("expression error: {e}"),
+        Ok(val) => info!("{val:#010x} ({val})"),
+        Err(e) => error!("expression error: {e}"),
     }
 }
 
 fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let expr = args.trim();
     if expr.is_empty() {
-        eprintln!("usage: w EXPR");
+        warn!("usage: w EXPR");
         return;
     }
     match sdb.watchpoints.add(expr, dut) {
-        Ok(id) => println!("watchpoint #{id}: {expr}"),
-        Err(e) => eprintln!("expression error: {e}"),
+        Ok(id) => info!("watchpoint #{id}: {expr}"),
+        Err(e) => error!("expression error: {e}"),
     }
 }
 
@@ -369,21 +378,21 @@ fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
     let id: usize = match args.trim().parse() {
         Ok(v) => v,
         Err(_) => {
-            eprintln!("usage: d N");
+            warn!("usage: d N");
             return;
         }
     };
     if sdb.watchpoints.remove(id) {
-        println!("deleted watchpoint #{id}");
+        info!("deleted watchpoint #{id}");
     } else {
-        eprintln!("watchpoint #{id} not found");
+        warn!("watchpoint #{id} not found");
     }
 }
 
 fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     let expr = args.trim();
     if expr.is_empty() {
-        eprintln!("usage: b ADDR");
+        warn!("usage: b ADDR");
         return;
     }
 
@@ -391,11 +400,13 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     match sub {
         "ls" | "list" => {
             if sdb.breakpoints.is_empty() {
-                println!("no breakpoints");
+                info!("no breakpoints");
             } else {
+                let mut buf = String::new();
                 for (i, &bp) in sdb.breakpoints.iter().enumerate() {
-                    println!("  #{}: {bp:#010x}", i + 1);
+                    let _ = writeln!(buf, "  #{}: {bp:#010x}", i + 1);
                 }
+                info!("{buf}");
             }
             return;
         }
@@ -404,12 +415,12 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
             let idx: usize = match rest.parse::<usize>() {
                 Ok(v) if v >= 1 && v <= sdb.breakpoints.len() => v - 1,
                 _ => {
-                    eprintln!("usage: b rm N");
+                    warn!("usage: b rm N");
                     return;
                 }
             };
             let addr = sdb.breakpoints.remove(idx);
-            println!("deleted breakpoint #{} at {addr:#010x}", idx + 1);
+            info!("deleted breakpoint #{} at {addr:#010x}", idx + 1);
             return;
         }
         _ => {}
@@ -418,8 +429,8 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
     match expression::eval(expr, dut) {
         Ok(addr) => {
             sdb.breakpoints.push(addr);
-            println!("breakpoint #{} at {addr:#010x}", sdb.breakpoints.len());
+            info!("breakpoint #{} at {addr:#010x}", sdb.breakpoints.len());
         }
-        Err(e) => eprintln!("expression error: {e}"),
+        Err(e) => error!("expression error: {e}"),
     }
 }

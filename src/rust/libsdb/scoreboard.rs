@@ -2,7 +2,7 @@ use capstone::prelude::*;
 use log::error;
 
 use crate::libcpu::{AbstractCpu, SpikeCpu, VerilatorCpu};
-use crate::tracer::{DTraceEntry, ITraceEntry, MemDir, RingBuf};
+use crate::tracer::{DTraceEntry, ITraceEntry, MTraceEntry, MemDir, RingBuf};
 
 const TRACE_CAPACITY: usize = 16;
 
@@ -16,10 +16,9 @@ pub enum StepResult {
 }
 
 const GPR_NAMES: &[&str] = &[
-    "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
-    "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
-    "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
-    "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+    "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+    "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5",
+    "t6",
 ];
 
 fn rd(inst: u32) -> usize {
@@ -59,6 +58,7 @@ pub struct ScoreBoard {
     cs: Capstone,
     itrace: RingBuf<ITraceEntry>,
     dtrace: RingBuf<DTraceEntry>,
+    mtrace: RingBuf<MTraceEntry>,
 }
 
 impl ScoreBoard {
@@ -73,6 +73,7 @@ impl ScoreBoard {
             cs,
             itrace: RingBuf::new(TRACE_CAPACITY),
             dtrace: RingBuf::new(TRACE_CAPACITY),
+            mtrace: RingBuf::new(TRACE_CAPACITY),
         }
     }
 
@@ -98,22 +99,49 @@ impl ScoreBoard {
         let inst = dut.inst();
         let (mnemonic, disasm) = self.disasm(inst, pc);
 
-        self.itrace.push(ITraceEntry { pc, inst, disasm: disasm.clone() });
+        self.itrace.push(ITraceEntry::new(pc, inst, &disasm)); // itrace
 
         if mnemonic == "ebreak" {
-            let a0 = dut.gpr(10).unwrap_or(0);
+            let a0 = dut.gpr(10).unwrap();
             return StepResult::EBreak(a0);
         }
 
         if dut.is_mmio() {
+            // dtrace
             self.handle_mmio(dut, pc, inst, &mnemonic, &disasm);
         } else {
-            self.golden.step().unwrap(); // FIXME: unwrap
+            self.golden.step().unwrap();
             if STORE_MNEMONICS.contains(&mnemonic.as_str()) {
+                // mtrace
+                let base_val = self.golden.gpr(rs1(inst)).unwrap();
+                let addr = (base_val as i32).wrapping_add(imm_s(inst)) as u32;
+                let data = self.golden.gpr(rs2(inst)).unwrap();
+                let width = mem_width(&mnemonic);
+                self.mtrace.push(MTraceEntry::new(
+                    pc,
+                    MemDir::Write,
+                    addr,
+                    data,
+                    width,
+                    &disasm,
+                ));
                 if !self.check_store_mem(dut, inst, &mnemonic) {
                     return StepResult::DifftestFail;
                 }
-            }
+            } else if LOAD_MNEMONICS.contains(&mnemonic.as_str()) {
+                let base_val = self.golden.gpr(rs1(inst)).unwrap();
+                let addr = (base_val as i32).wrapping_add(imm_i(inst)) as u32;
+                let width = mem_width(&mnemonic);
+                let data = dut.mem_load_u32(addr).unwrap();
+                self.mtrace.push(MTraceEntry::new(
+                    pc,
+                    MemDir::Read,
+                    addr,
+                    data,
+                    width,
+                    &disasm,
+                ));
+            } // else: no memory access instruction
         }
 
         if !self.difftest(dut) {
@@ -123,44 +151,42 @@ impl ScoreBoard {
     }
 
     fn handle_mmio(&mut self, dut: &VerilatorCpu, pc: u32, inst: u32, mn_str: &str, disasm: &str) {
-
         if LOAD_MNEMONICS.contains(&mn_str) {
-            let base_val = self.golden.gpr(rs1(inst)).unwrap_or(0);
+            let base_val = self.golden.gpr(rs1(inst)).unwrap();
             let addr = (base_val as i32).wrapping_add(imm_i(inst)) as u32;
             let rd_idx = rd(inst);
-            let data = dut.gpr(rd_idx).unwrap_or(0);
+            let data = dut.gpr(rd_idx).unwrap();
 
             if rd_idx != 0 {
                 self.golden.set_gpr(rd_idx, data).unwrap();
             }
 
-            self.dtrace.push(DTraceEntry {
+            self.dtrace.push(DTraceEntry::new(
                 pc,
-                dir: MemDir::Read,
+                MemDir::Read,
                 addr,
                 data,
-                width: mem_width(mn_str),
-                disasm: disasm.to_string(),
-            });
+                mem_width(mn_str),
+                disasm,
+            ));
         } else if STORE_MNEMONICS.contains(&mn_str) {
-            let base_val = self.golden.gpr(rs1(inst)).unwrap_or(0);
+            let base_val = self.golden.gpr(rs1(inst)).unwrap();
             let addr = (base_val as i32).wrapping_add(imm_s(inst)) as u32;
-            let data = self.golden.gpr(rs2(inst)).unwrap_or(0);
+            let data = self.golden.gpr(rs2(inst)).unwrap();
 
-            self.dtrace.push(DTraceEntry {
+            self.dtrace.push(DTraceEntry::new(
                 pc,
-                dir: MemDir::Write,
+                MemDir::Write,
                 addr,
                 data,
-                width: mem_width(mn_str),
-                disasm: disasm.to_string(),
-            });
+                mem_width(mn_str),
+                disasm,
+            ));
         } else {
             panic!("unexpected MMIO instruction: {}", disasm);
         }
 
-        self.golden.set_pc( dut.dnpc() ).unwrap();
-
+        self.golden.set_pc(dut.dnpc()).unwrap();
     }
 
     fn difftest(&self, dut: &VerilatorCpu) -> bool {
@@ -172,8 +198,8 @@ impl ScoreBoard {
         }
 
         for i in 1..32 {
-            let dut_val = dut.gpr(i).unwrap_or(0);
-            let ref_val = self.golden.gpr(i).unwrap_or(0);
+            let dut_val = dut.gpr(i).unwrap();
+            let ref_val = self.golden.gpr(i).unwrap();
             if dut_val != ref_val {
                 error!(
                     "difftest FAIL: {} (x{i})  dut={dut_val:#010x}  ref={ref_val:#010x}",
@@ -204,14 +230,14 @@ impl ScoreBoard {
     }
 
     fn check_store_mem(&self, dut: &VerilatorCpu, inst: u32, mnemonic: &str) -> bool {
-        let base_val = self.golden.gpr(rs1(inst)).unwrap_or(0);
+        let base_val = self.golden.gpr(rs1(inst)).unwrap();
         let addr = (base_val as i32).wrapping_add(imm_s(inst)) as u32;
         let width = mem_width(mnemonic);
 
         match width {
             1 => {
-                let dut_val = dut.mem_load_u8(addr).unwrap_or(0);
-                let ref_val = self.golden.mem_load_u8(addr).unwrap_or(0);
+                let dut_val = dut.mem_load_u8(addr).unwrap();
+                let ref_val = self.golden.mem_load_u8(addr).unwrap();
                 if dut_val != ref_val {
                     error!(
                         "difftest FAIL: mem[{addr:#010x}] (u8)  dut={dut_val:#04x}  ref={ref_val:#04x}"
@@ -220,8 +246,8 @@ impl ScoreBoard {
                 }
             }
             2 => {
-                let dut_val = dut.mem_load_u16(addr).unwrap_or(0);
-                let ref_val = self.golden.mem_load_u16(addr).unwrap_or(0);
+                let dut_val = dut.mem_load_u16(addr).unwrap();
+                let ref_val = self.golden.mem_load_u16(addr).unwrap();
                 if dut_val != ref_val {
                     error!(
                         "difftest FAIL: mem[{addr:#010x}] (u16)  dut={dut_val:#06x}  ref={ref_val:#06x}"
@@ -230,8 +256,8 @@ impl ScoreBoard {
                 }
             }
             4 => {
-                let dut_val = dut.mem_load_u32(addr).unwrap_or(0);
-                let ref_val = self.golden.mem_load_u32(addr).unwrap_or(0);
+                let dut_val = dut.mem_load_u32(addr).unwrap();
+                let ref_val = self.golden.mem_load_u32(addr).unwrap();
                 if dut_val != ref_val {
                     error!(
                         "difftest FAIL: mem[{addr:#010x}] (u32)  dut={dut_val:#010x}  ref={ref_val:#010x}"
@@ -245,10 +271,16 @@ impl ScoreBoard {
     }
 
     pub fn dump_traces(&self, dut: &VerilatorCpu) {
-        error!("===== ITrace (recent {} instructions) =====", TRACE_CAPACITY);
+        error!(
+            "===== ITrace (recent {} instructions) =====",
+            TRACE_CAPACITY
+        );
         error!("{}", self.itrace.dump());
 
-        error!("===== DTrace (recent {} MMIO accesses) =====", TRACE_CAPACITY);
+        error!(
+            "===== DTrace (recent {} MMIO accesses) =====",
+            TRACE_CAPACITY
+        );
         error!("{}", self.dtrace.dump());
 
         error!("===== Register State =====");
@@ -257,11 +289,15 @@ impl ScoreBoard {
             "pc     {:#012x}  {:#012x}{}",
             dut.dnpc(),
             self.golden.pc(),
-            if dut.dnpc() != self.golden.pc() { "  <--- MISMATCH" } else { "" }
+            if dut.dnpc() != self.golden.pc() {
+                "  <--- MISMATCH"
+            } else {
+                ""
+            }
         );
         for i in 1..32 {
-            let d = dut.gpr(i).unwrap_or(0);
-            let r = self.golden.gpr(i).unwrap_or(0);
+            let d = dut.gpr(i).unwrap();
+            let r = self.golden.gpr(i).unwrap();
             let mark = if d != r { "  <--- MISMATCH" } else { "" };
             error!("{:4}   {d:#012x}  {r:#012x}{mark}", GPR_NAMES[i]);
         }

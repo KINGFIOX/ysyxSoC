@@ -115,7 +115,7 @@ IMG ?=
 NPC_EXEC = $(BINARY) $(ARGS) $(IMG)
 
 run: all
-	$(NPC_EXEC)
+	RUST_LOG=info $(NPC_EXEC)
 
 gdb: all
 	gdb -s $(BINARY) --args $(NPC_EXEC)

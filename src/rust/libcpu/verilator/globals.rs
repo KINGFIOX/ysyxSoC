@@ -47,7 +47,7 @@ pub fn init(flash_data: &[u8]) {
 
 fn read_byte(cell: &SyncCell<Vec<u8>>, offset: u32) -> u8 {
     let v = unsafe { &*cell.get() };
-    v.get(offset as usize).copied().unwrap_or(0)
+    v.get(offset as usize).copied().unwrap()
 }
 
 fn write_byte(cell: &SyncCell<Vec<u8>>, offset: u32, val: u8) {
