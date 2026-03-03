@@ -314,6 +314,11 @@ impl ScoreBoard {
             let mark = if d != r { "  <--- MISMATCH" } else { "" };
             error!("{:4}   {d:#012x}  {r:#012x}{mark}", GPR_NAMES[i]);
         }
-
+        error!("===== CSR State =====");
+        error!("       {:>12}  {:>12}", "DUT", "REF");
+        error!("mtvec {:#012x}  {:#012x}", dut.mtvec(), self.golden.mtvec());
+        error!("mepc {:#012x}  {:#012x}", dut.mepc(), self.golden.mepc());
+        error!("mcause {:#012x}  {:#012x}", dut.mcause(), self.golden.mcause());
+        error!("mtval {:#012x}  {:#012x}", dut.mtval(), self.golden.mtval());
     }
 }

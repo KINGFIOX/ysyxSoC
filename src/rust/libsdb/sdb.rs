@@ -1,8 +1,9 @@
 use super::*;
 
 use std::fmt::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::panic;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{error, info, warn};
 
@@ -130,8 +131,11 @@ impl<'a> Sdb<'a> {
     pub fn mainloop(&mut self, dut: &mut VerilatorCpu, batch: bool) -> miette::Result<()> {
         if batch {
             self.execute_steps(usize::MAX, dut);
-            if self.state == State::Abort {
-                return Err(miette::Error::msg("abort"))
+            match self.state {
+                State::Stop => { /*do nothing*/ }
+                State::Running => panic!("impossible"),
+                State::Quit => return Ok(()),
+                State::Abort => return Err(miette::Error::msg("abort")),
             }
         }
 
@@ -337,8 +341,12 @@ fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
             let _ = write!(buf, "{a:#010x}:");
         }
         match dut.mem_load_u32(a) {
-            Ok(val) => { let _ = write!(buf, "  {val:#010x}"); }
-            Err(_) => { let _ = write!(buf, "  ??????????"); }
+            Ok(val) => {
+                let _ = write!(buf, "  {val:#010x}");
+            }
+            Err(_) => {
+                let _ = write!(buf, "  ??????????");
+            }
         }
         if (i + 1) % 4 == 0 || i + 1 == n {
             buf.push('\n');
