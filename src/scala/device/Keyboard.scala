@@ -43,7 +43,7 @@ class PS2KeybrdCore(val p: PS2KeybrdParams = PS2KeybrdParams()) extends Module {
   private val samplingW = ps2clk2Q && !ps2clk1Q
 
   // io
-  io.data := queue.io.deq.bits
+  io.data := Mux(queue.io.deq.valid, queue.io.deq.bits, 0.U)
   io.valid := queue.io.deq.valid
   // overflow
   // enq.valid -> !enq.ready
