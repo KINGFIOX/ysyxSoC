@@ -22,12 +22,12 @@ class DebugBundle extends Bundle with HasCoreParameter with HasRegFileParameter 
 
 class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with HasCSRParameter {
   val io = IO(new Bundle {
-    val step   = Input(Bool())
     val probe  = Output(Probe(new DebugBundle))
     val icache = AXI4Bundle(CPUAXI4BundleParameters())
     val dcache = AXI4Bundle(CPUAXI4BundleParameters())
   })
 
+  // --- modules ---
   private val ifu = Module(new IFU)
   private val cu = Module(new CU)
   private val igu = Module(new IGU)
@@ -38,189 +38,195 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   private val lsu = Module(new LSU)
   private val excpu = Module(new EXCPU)
 
-  private val inst = ifu.io.out.bits.inst
-  private val pc = ifu.io.out.bits.pc
-  private val snpc = ifu.io.out.bits.pc + 4.U
-  private val rd = inst(11, 7)
-  private val rs1 = inst(19, 15)
-  private val rs2 = inst(24, 20)
+  // --- wire alias ---
+  private val instW = ifu.io.out.bits.inst
+  private val pcW = ifu.io.out.bits.pc
+  private val snpcW = ifu.io.out.bits.pc + 4.U
+  private val rdW = instW(11, 7)
+  private val rs1W = instW(19, 15)
+  private val rs2W = instW(24, 20)
 
-  cu.io.in.inst := inst
+  // --- connect: cu ---
+  cu.io.in.inst := instW
 
-  igu.io.in.inst_31_7 := inst(InstLen - 1, OpcodeLen)
+  // --- connect: igu ---
+  igu.io.in.inst_31_7 := instW(InstLen - 1, OpcodeLen)
   igu.io.in.immType := cu.io.out.immType
-  private val imm = igu.io.out.imm
+  private val immW = igu.io.out.imm
 
-  rfu.io.in.rs1_i := rs1
-  rfu.io.in.rs2_i := rs2
-  private val rs1Data = rfu.io.out.rs1_v
-  private val rs2Data = rfu.io.out.rs2_v
+  // --- connect: rfu ---
+  rfu.io.in.rs1_i := rs1W
+  rfu.io.in.rs2_i := rs2W
+  private val rs1DataW = rfu.io.out.rs1_v
+  private val rs2DataW = rfu.io.out.rs2_v
 
-  private val csr_read = csru.io.rdata
+  // --- connect: rfu ---
+  private val csrRDataW = csru.io.rdata
 
+  // --- connect: alu ---
   alu.io.in.op1 := MuxCase(
     0.U,
     Seq(
-      (cu.io.out.aluSel1 === ALUOp1Sel.OP1_RS1) -> rs1Data,
-      (cu.io.out.aluSel1 === ALUOp1Sel.OP1_PC) -> pc,
+      (cu.io.out.aluSel1 === ALUOp1Sel.OP1_RS1) -> rs1DataW,
+      (cu.io.out.aluSel1 === ALUOp1Sel.OP1_PC) -> pcW,
       (cu.io.out.aluSel1 === ALUOp1Sel.OP1_ZERO) -> 0.U
     )
   )
   alu.io.in.op2 := MuxCase(
     0.U,
     Seq(
-      (cu.io.out.aluSel2 === ALUOp2Sel.OP2_RS2) -> rs2Data,
-      (cu.io.out.aluSel2 === ALUOp2Sel.OP2_IMM) -> imm
+      (cu.io.out.aluSel2 === ALUOp2Sel.OP2_RS2) -> rs2DataW,
+      (cu.io.out.aluSel2 === ALUOp2Sel.OP2_IMM) -> immW
     )
   )
   alu.io.in.aluOp := cu.io.out.aluOp
-  private val aluResult = alu.io.out.result
+  private val aluResultW = alu.io.out.result
 
-  bru.io.in.rs1_v := rs1Data
-  bru.io.in.rs2_v := rs2Data
+  // --- connect: bru ---
+  bru.io.in.rs1_v := rs1DataW
+  bru.io.in.rs2_v := rs2DataW
   bru.io.in.op := cu.io.out.bruOp
-  private val brTaken = bru.io.out.br_flag
+  private val brTakenW = bru.io.out.br_flag
 
-  private val dnpc = MuxCase(
-    snpc,
+  private val dnpcW = MuxCase(
+    snpcW,
     Seq(
-      (cu.io.out.npcOp === NPCOpType.NPC_JAL) -> aluResult,
-      (cu.io.out.npcOp === NPCOpType.NPC_JALR) -> (aluResult & (~1.U(XLEN.W))),
-      (cu.io.out.npcOp === NPCOpType.NPC_BR && brTaken) -> aluResult,
+      (cu.io.out.npcOp === NPCOpType.NPC_JAL) -> aluResultW,
+      (cu.io.out.npcOp === NPCOpType.NPC_JALR) -> (aluResultW & (~1.U(XLEN.W))),
+      (cu.io.out.npcOp === NPCOpType.NPC_BR && brTakenW) -> aluResultW,
       (cu.io.out.npcOp === NPCOpType.NPC_MRET) -> csru.io.xepc
     )
   )
 
-  private val rd_v = MuxCase(0.U, Seq(
-    (cu.io.out.wbSel === WBSel.WB_CSR) -> csr_read,
-    (cu.io.out.wbSel === WBSel.WB_ALU) -> aluResult,
-    (cu.io.out.wbSel === WBSel.WB_PC4) -> snpc,
+  private val rdValW = MuxCase(0.U, Seq(
+    (cu.io.out.wbSel === WBSel.WB_CSR) -> csrRDataW,
+    (cu.io.out.wbSel === WBSel.WB_ALU) -> aluResultW,
+    (cu.io.out.wbSel === WBSel.WB_PC4) -> snpcW,
   ))
 
-  private val mem_addr_reg = RegInit(0.U(XLEN.W))
-  private val mem_wdata_reg = RegInit(0.U(XLEN.W))
-  private val mem_op_reg = Reg(MemUOpType())
-  private val mem_en_reg = RegInit(false.B)
-  private val rd_i_reg = RegInit(0.U(NRRegbits.W))
-  private val rd_v_reg = RegInit(0.U(XLEN.W))
-  private val rf_wen_reg = RegInit(false.B)
-  private val dnpc_reg = RegInit(0.U(XLEN.W))
-  private val pc_reg = RegInit(0.U(XLEN.W))
-  private val inst_reg = RegInit(0.U(InstLen.W))
-  private val csr_wen_reg = RegInit(false.B)
-  private val csr_wdata_reg = RegInit(0.U(XLEN.W))
-  private val csr_wop_reg = Reg(CSROpType())
-  private val csr_waddr_reg = RegInit(0.U(XLEN.W))
-  private val csr_xcuase_reg = RegInit(0.U(XLEN.W))
-  private val csr_xtval_reg = RegInit(0.U(XLEN.W))
-  private val isMMIO_reg = RegInit(false.B)
+  // --- connect: registers ---
+  private val memAddrQ = RegInit(0.U(XLEN.W))
+  private val memWdataQ = RegInit(0.U(XLEN.W))
+  private val memOpQ = Reg(MemUOpType())
+  private val memEnQ = RegInit(false.B)
+  private val rdIdxQ = RegInit(0.U(NRRegbits.W))
+  private val rdValQ = RegInit(0.U(XLEN.W))
+  private val rfWenQ = RegInit(false.B)
+  private val dnpcQ = RegInit(0.U(XLEN.W))
+  private val pcQ = RegInit(0.U(XLEN.W))
+  private val instQ = RegInit(0.U(InstLen.W))
+  private val csrWenQ = RegInit(false.B)
+  private val csrWdataQ = RegInit(0.U(XLEN.W))
+  private val csrWopQ = Reg(CSROpType())
+  private val csrWaddrQ = RegInit(0.U(XLEN.W))
+  private val csrMcauseQ = RegInit(0.U(XLEN.W))
+  private val csrMtvalQ = RegInit(0.U(XLEN.W))
+  private val isMmioQ = RegInit(false.B)
 
-  private val isMem = cu.io.out.memEn
+  private val isMemW = cu.io.out.memEn
 
   object State extends ChiselEnum {
-    val idle, ifu_valid_wait, writeback, exception, mem_ready_wait, mem_valid_wait, ifu_ready_wait = Value
+    val ifu_valid_wait, writeback, exception, mem_ready_wait, mem_valid_wait, ifu_ready_wait = Value
   }
-  private val state = RegInit(State.idle)
-  
-  // step signal from external control
-  private val step = io.step
-  
-  switch(state) {
-    is(State.idle) {
-      when(step) {
-        state := State.ifu_valid_wait
-        mem_en_reg := false.B
-        rf_wen_reg := false.B
-        csr_wen_reg := false.B
-        isMMIO_reg := false.B // reset
-      }
-    }
+  private val stateQ = RegInit(State.ifu_valid_wait)
+
+  switch(stateQ) {
+
     is(State.ifu_valid_wait) {
+      memEnQ := false.B // reset
+      rfWenQ := false.B
+      csrWenQ := false.B
+      isMmioQ := false.B
       when(ifu.io.out.fire) {
-        rf_wen_reg := cu.io.out.rfWen
-        rd_i_reg := rd
-        dnpc_reg := dnpc
-        pc_reg := pc
-        inst_reg := inst
+        rfWenQ := cu.io.out.rfWen // latch
+        rdIdxQ := rdW
+        dnpcQ := dnpcW
+        pcQ := pcW
+        instQ := instW
         when(excpu.io.out.fire) {
-          state := State.exception
-          csr_xcuase_reg := excpu.io.out.bits.mcause
-          csr_xtval_reg := excpu.io.out.bits.mtval
-        } .elsewhen(isMem) {
-          state := State.mem_ready_wait
-          mem_op_reg := cu.io.out.memOp
-          mem_en_reg := cu.io.out.memEn
-          mem_addr_reg := aluResult
-          mem_wdata_reg := rs2Data
+          stateQ := State.exception
+          csrMcauseQ := excpu.io.out.bits.mcause
+          csrMtvalQ := excpu.io.out.bits.mtval
+        } .elsewhen(isMemW) {
+          stateQ := State.mem_ready_wait
+          memOpQ := cu.io.out.memOp
+          memEnQ := cu.io.out.memEn
+          memAddrQ := aluResultW
+          memWdataQ := rs2DataW
         } .otherwise {
-          state := State.writeback
-          rd_v_reg := rd_v
-          csr_wen_reg := cu.io.out.csrWen
-          csr_wdata_reg := rs1Data
-          csr_wop_reg := cu.io.out.csrOp
-          csr_waddr_reg := imm
+          stateQ := State.writeback
+          rdValQ := rdValW
+          csrWenQ := cu.io.out.csrWen
+          csrWdataQ := rs1DataW
+          csrWopQ := cu.io.out.csrOp
+          csrWaddrQ := immW
         }
       }
     }
+
     is(State.mem_ready_wait) {
       when(lsu.io.in.fire) {
-        state := State.mem_valid_wait
+        stateQ := State.mem_valid_wait
       }
     }
+
     is(State.mem_valid_wait) {
       when(lsu.io.out.fire) {
-        isMMIO_reg := lsu.io.isMMIO
+        isMmioQ := lsu.io.isMMIO
         when(excpu.io.out.fire) {
-          state := State.exception
-          csr_xcuase_reg := excpu.io.out.bits.mcause
-          csr_xtval_reg := excpu.io.out.bits.mtval
+          stateQ := State.exception
+          csrMcauseQ := excpu.io.out.bits.mcause
+          csrMtvalQ := excpu.io.out.bits.mtval
         } .otherwise {
-          state := State.writeback
-          rd_v_reg := lsu.io.out.bits.rdata
+          stateQ := State.writeback
+          rdValQ := lsu.io.out.bits.rdata
         }
       }
     }
+
     is(State.writeback) {
-      state := State.ifu_ready_wait
+      stateQ := State.ifu_ready_wait
     }
+
     is(State.exception) {
-      state := State.ifu_ready_wait
-      dnpc_reg := csru.io.xtvec
+      stateQ := State.ifu_ready_wait
+      dnpcQ := csru.io.xtvec
     }
+
     is(State.ifu_ready_wait) {
       when(ifu.io.in.fire) {
-        state := State.idle
+        stateQ := State.ifu_valid_wait
       }
     }
+
   }
 
-  ifu.io.out.ready := (state === State.ifu_valid_wait)
-  ifu.io.in.valid := (state === State.ifu_ready_wait)
-  ifu.io.in.bits.dnpc := dnpc_reg
+  ifu.io.out.ready := (stateQ === State.ifu_valid_wait)
+  ifu.io.in.valid := (stateQ === State.ifu_ready_wait)
+  ifu.io.in.bits.dnpc := dnpcQ
   ifu.io.icache <> io.icache
-  ifu.io.step := step
 
-  rfu.io.in.wen := rf_wen_reg && (state === State.writeback)
-  rfu.io.in.wdata := rd_v_reg
-  rfu.io.in.rd_i := rd_i_reg
+  rfu.io.in.wen := rfWenQ && (stateQ === State.writeback)
+  rfu.io.in.wdata := rdValQ
+  rfu.io.in.rd_i := rdIdxQ
 
-  csru.io.addr := Mux(state === State.ifu_valid_wait, imm, csr_waddr_reg)
-  csru.io.wdata := csr_wdata_reg
-  csru.io.wen := csr_wen_reg && (state === State.writeback)
-  csru.io.wop := csr_wop_reg
-  csru.io.commit.xcause := csr_xcuase_reg
-  csru.io.commit.xcause_wen := (state === State.exception)
-  csru.io.commit.xepc := pc_reg
-  csru.io.commit.xepc_wen := (state === State.exception)
-  csru.io.commit.xtval := csr_xtval_reg
-  csru.io.commit.xtval_wen := (state === State.exception)
+  csru.io.addr := Mux(stateQ === State.ifu_valid_wait, immW, csrWaddrQ)
+  csru.io.wdata := csrWdataQ
+  csru.io.wen := csrWenQ && (stateQ === State.writeback)
+  csru.io.wop := csrWopQ
+  csru.io.commit.xcause := csrMcauseQ
+  csru.io.commit.xcause_wen := (stateQ === State.exception)
+  csru.io.commit.xepc := pcQ
+  csru.io.commit.xepc_wen := (stateQ === State.exception)
+  csru.io.commit.xtval := csrMtvalQ
+  csru.io.commit.xtval_wen := (stateQ === State.exception)
 
-  lsu.io.in.valid := (state === State.mem_ready_wait)
-  lsu.io.in.bits.op := mem_op_reg
-  lsu.io.in.bits.en := mem_en_reg
-  lsu.io.in.bits.addr := mem_addr_reg
-  lsu.io.in.bits.wdata := mem_wdata_reg
-  lsu.io.out.ready := (state === State.mem_valid_wait)
+  lsu.io.in.valid := (stateQ === State.mem_ready_wait)
+  lsu.io.in.bits.op := memOpQ
+  lsu.io.in.bits.en := memEnQ
+  lsu.io.in.bits.addr := memAddrQ
+  lsu.io.in.bits.wdata := memWdataQ
+  lsu.io.out.ready := (stateQ === State.mem_valid_wait)
   lsu.io.dcache <> io.dcache
 
   excpu.io.in.bits.ifu := ifu.io.out.bits.exception
@@ -231,19 +237,19 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   excpu.io.in.bits.cuXtval := cu.io.out.xtval
   excpu.io.in.bits.lsu := lsu.io.out.bits.exception
   excpu.io.in.bits.lsuEn := lsu.io.out.fire && lsu.io.out.bits.exceptionEn
-  excpu.io.in.bits.lsuXtval := mem_addr_reg
-  excpu.io.in.bits.pc := Mux(state === State.ifu_valid_wait, ifu.io.out.bits.pc, pc_reg)
+  excpu.io.in.bits.lsuXtval := memAddrQ
+  excpu.io.in.bits.pc := Mux(stateQ === State.ifu_valid_wait, ifu.io.out.bits.pc, pcQ)
   excpu.io.in.bits.a0 := rfu.io.out.debug.gpr(10)
-  excpu.io.in.valid := (state === State.ifu_valid_wait) || (state === State.mem_valid_wait)
-  excpu.io.out.ready := (state === State.ifu_valid_wait) || (state === State.mem_valid_wait)
+  excpu.io.in.valid := (stateQ === State.ifu_valid_wait) || (stateQ === State.mem_valid_wait)
+  excpu.io.out.ready := (stateQ === State.ifu_valid_wait) || (stateQ === State.mem_valid_wait)
 
   /* ========== Debug Output (Probe) ========== */
   val debugWire = Wire(new DebugBundle)
   debugWire.valid  := ifu.io.in.fire
-  debugWire.pc     := pc_reg
-  debugWire.dnpc   := dnpc_reg
-  debugWire.inst   := inst_reg
-  debugWire.isMMIO := isMMIO_reg
+  debugWire.pc     := pcQ
+  debugWire.dnpc   := dnpcQ
+  debugWire.inst   := instQ
+  debugWire.isMMIO := isMmioQ
   debugWire.gpr    := rfu.io.out.debug.gpr
   debugWire.csr    := csru.io.debug
   define(io.probe, ProbeValue(debugWire))

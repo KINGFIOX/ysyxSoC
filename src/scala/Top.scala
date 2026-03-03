@@ -32,7 +32,6 @@ class ysyxSoCTop extends Module {
   val mdut = Module(dut.module)
   mdut.dontTouchPorts() // mark all ports as don't touch
   mdut.externalPins := DontCare
-  mdut.step := true.B  // always step
 }
 
 class NPCSoCInterface extends Bundle {
@@ -63,7 +62,6 @@ class NPCSoC
   val mdut = Module(dut.module)
   mdut.externalPins <> io.externalPins
 
-  mdut.step := io.step
   io.debug := read(mdut.probe)
 }
 

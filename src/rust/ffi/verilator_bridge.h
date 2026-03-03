@@ -18,7 +18,6 @@ void vnpcsoc_final(VNPCSoC* top);
 
 void vnpcsoc_set_clock(VNPCSoC* top, uint8_t val);
 void vnpcsoc_set_reset(VNPCSoC* top, uint8_t val);
-void vnpcsoc_set_step(VNPCSoC* top, uint8_t val);
 
 uint8_t  vnpcsoc_get_debug_valid(const VNPCSoC* top);
 uint8_t  vnpcsoc_get_debug_isMMIO(const VNPCSoC* top);

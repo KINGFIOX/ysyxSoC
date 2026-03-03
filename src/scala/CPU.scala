@@ -147,12 +147,10 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     val interrupt = IO(Input(Bool()))
     val slave = IO(Flipped(AXI4Bundle(CPUAXI4BundleParameters())))
 
-    val step  = IO(Input(Bool()))
     val probe = IO(Output(Probe(new DebugBundle)))
 
     val cpu = Module(new NPCCore)
 
-    cpu.io.step := step
     define(probe, cpu.io.probe)
 
     // Instantiate arbiter to merge icache and dcache

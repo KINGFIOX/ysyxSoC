@@ -91,9 +91,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val intr_from_chipSlave = IO(Input(Bool()))
     cpu.module.interrupt := intr_from_chipSlave
 
-    val step = IO(Input(Bool()))
     val probe = IO(Output(Probe(new DebugBundle)))
-    cpu.module.step := step
     define(probe, cpu.module.probe)
 
     val sdramBundle = if (Config.sdramUseAXI) lsdram_axi.get.module.sdram_bundle
@@ -175,9 +173,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     externalPins.uart <> masic.uart
 
     // expose step and debug for simulation
-    val step = IO(Input(Bool()))
     val probe = IO(Output(Probe(new DebugBundle)))
-    masic.step := step
     define(probe, masic.probe)
   }
 }

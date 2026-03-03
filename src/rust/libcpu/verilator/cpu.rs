@@ -222,7 +222,6 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn step(&mut self) -> miette::Result<()> {
-        unsafe { vnpcsoc_set_step(self.top, 1) };
 
         for i in 0..MAX_STEP_CYCLES {
             self.tick();
@@ -234,9 +233,8 @@ impl AbstractCpu for VerilatorCpu {
             }
         }
         unsafe {
-            vnpcsoc_set_step(self.top, 0);
             vnpcsoc_eval(self.top);
         }
         Ok(())
-    } 
+    }
 }
