@@ -97,10 +97,14 @@ verilate: $(VERILATOR_LIB)
 # =============================== Step 3: make build ===============================
 # Rust + C++ FFI → 仿真可执行文件 (cargo build)
 
-BINARY := target/debug/npc
+RELEASE ?= 1
+BINARY := $(if $(findstring 1,$(RELEASE)),target/release/npc,target/debug/npc)
 
 build:
-	unset CC CXX && cargo build
+	unset CC CXX && cargo build $(if $(findstring 1,$(RELEASE)),--release,)
+
+release: verilate
+	$(MAKE) build RELEASE=1
 
 # =============================== make all ===============================
 # 完整流程: verilog → verilate → build
@@ -164,7 +168,8 @@ help:
 	@echo "三步构建:"
 	@echo "  verilog            — Step 1: Chisel → SystemVerilog"
 	@echo "  verilate           — Step 2: SystemVerilog → Verilator C++ 库"
-	@echo "  build              — Step 3: Rust + C++ FFI → 仿真可执行文件 (cargo)"
+	@echo "  build              — Step 3: Rust + C++ FFI → 仿真可执行文件 (cargo, debug)"
+	@echo "  release            — verilate + build (release 模式，性能更优)"
 	@echo "  all                — 执行 Step 1-3"
 	@echo ""
 	@echo "运行与调试:"
@@ -179,7 +184,7 @@ help:
 	@echo "  clean              — 清理构建目录"
 	@echo "  distclean          — 清理所有生成文件"
 
-.PHONY: verilog verilate build all
+.PHONY: verilog verilate build release all
 .PHONY: meson-setup
 .PHONY: run gdb wave
 .PHONY: menuconfig

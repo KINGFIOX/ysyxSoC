@@ -85,6 +85,8 @@ fn main() -> miette::Result<()> {
     println!("cargo:rerun-if-changed=src/rust/ffi/nvboard_bridge.h");
     println!("cargo:rerun-if-changed=src/rust/ffi/nvboard_bridge.cc");
 
+    println!("cargo:rerun-if-changed=build/obj-verilator/VNPCSoC__ALL.a");
+
     // System libraries
     println!("cargo:rustc-link-lib=stdc++");
     println!("cargo:rustc-link-lib=dl");

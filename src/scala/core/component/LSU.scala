@@ -344,7 +344,10 @@ class LSU extends Module with HasCoreParameter {
   // ---------- Narrow Device Detection ----------
   private val addr = io.in.bits.addr
   private val isNarrowDevice = (SoCConfig.uartBase.U <= addr) && (addr < (SoCConfig.uartBase + SoCConfig.uartSize).U) ||
-    (SoCConfig.gpioBase.U <= addr) && (addr < (SoCConfig.gpioBase + SoCConfig.gpioSize).U)
+    (SoCConfig.gpioBase.U <= addr) && (addr < (SoCConfig.gpioBase + SoCConfig.gpioSize).U) ||
+    (SoCConfig.vgaBase.U <= addr) && (addr < (SoCConfig.vgaBase + SoCConfig.vgaSize).U) ||
+    (SoCConfig.keyboardBase.U <= addr) && (addr < (SoCConfig.keyboardBase + SoCConfig.keyboardSize).U) ||
+    (SoCConfig.spiCtrlBase.U <= addr) && (addr < (SoCConfig.spiCtrlBase + SoCConfig.spiCtrlSize).U)
 
   // ---------- Alignment Check ----------
   // 窄传输设备使用实际 size/addr，不需要对齐检查

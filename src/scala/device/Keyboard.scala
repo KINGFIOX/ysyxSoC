@@ -27,20 +27,20 @@ class PS2KeybrdCore(val p: PS2KeybrdParams = PS2KeybrdParams()) extends Module {
   // buffer, hold one byte of data
   // one byte consist of 11bit
   // [start, b0, b1, b2, b3, b4, b5, b6, b7, parity, stop]
-  val buffer = Reg(Vec(10, Bool()))
-  val count = RegInit(0.U(4.W))
+  private val buffer = Reg(Vec(10, Bool()))
+  private val count = RegInit(0.U(4.W))
 
   // data queue
-  val queue = Module(new Queue(UInt(8.W), entries = p.entries))
+  private val queue = Module(new Queue(UInt(8.W), entries = p.entries))
   queue.io.enq.valid := false.B
   queue.io.enq.bits := Cat( buffer(8), buffer(7), buffer(6), buffer(5), buffer(4), buffer(3), buffer(2), buffer(1))
   queue.io.deq.ready := false.B
 
   // clock sync
-  val ps2clk0Q = RegNext(io.ps2.clk)
-  val ps2clk1Q = RegNext(ps2clk0Q)
-  val ps2clk2Q = RegNext(ps2clk1Q)
-  val samplingW = ps2clk2Q && !ps2clk1Q
+  private val ps2clk0Q = RegNext(io.ps2.clk)
+  private val ps2clk1Q = RegNext(ps2clk0Q)
+  private val ps2clk2Q = RegNext(ps2clk1Q)
+  private val samplingW = ps2clk2Q && !ps2clk1Q
 
   // io
   io.data := queue.io.deq.bits
@@ -92,43 +92,37 @@ class ps2_top_apb extends Module {
 
   // --- states ---
   object State extends ChiselEnum {
-    val idle, access, ready = Value
+    val idle, ready = Value
   }
-  val state = RegInit(State.idle)
+  private val stateQ = RegInit(State.idle)
 
   // --- registers ---
-  val rdataQ = RegInit(0.U(8.W))
+  private val rdataQ = RegInit(0.U(8.W))
 
   // --- modules ---
-  val core = Module(new PS2KeybrdCore)
+  private val core = Module(new PS2KeybrdCore)
   core.io.ps2 <> io.ps2
   core.io.nextdata := false.B
 
   // --- outputs ---
   io.in.prdata := rdataQ
   io.in.pslverr := false.B
-  io.in.pready := (state === State.ready)
+  io.in.pready := (stateQ === State.ready)
 
   // --- state machine ---
-  switch(state) {
+  switch(stateQ) {
 
     is(State.idle) {
       when(io.in.psel) {
-        state := State.access
+        stateQ := State.ready
+        rdataQ := core.io.data
+        core.io.nextdata := true.B
       }
-    }
-
-    is(State.access) {
-      // read only
-      rdataQ := core.io.data
-      core.io.nextdata := true.B
-
-      state := State.ready
     }
 
     is(State.ready) {
       when(io.in.penable) {
-        state := State.idle
+        stateQ := State.idle
       }
     }
 
