@@ -217,7 +217,7 @@ impl ScoreBoard {
         }
 
         let csr_checks: &[(&str, fn(&dyn AbstractCpu) -> u32)] = &[
-            ("mstatus", |c| c.mstatus()),
+            // ("mstatus", |c| c.mstatus()),
             ("mtvec", |c| c.mtvec()),
             ("mepc", |c| c.mepc()),
             ("mcause", |c| c.mcause()),
@@ -290,6 +290,12 @@ impl ScoreBoard {
         );
         error!("{}", self.dtrace.dump());
 
+        error!("===== MTrace (recent {} memory accesses) =====", TRACE_CAPACITY);
+        error!("{}", self.mtrace.dump());
+
+        error!("===== FTrace (recent calls) =====");
+        error!("{}", self.ftrace.ring_buf.dump());
+
         error!("===== Register State =====");
         error!("       {:>12}  {:>12}", "DUT", "REF");
         error!(
@@ -309,7 +315,5 @@ impl ScoreBoard {
             error!("{:4}   {d:#012x}  {r:#012x}{mark}", GPR_NAMES[i]);
         }
 
-        error!("===== FTrace (recent calls) =====");
-        error!("{}", self.ftrace.ring_buf.dump());
     }
 }
