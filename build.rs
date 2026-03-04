@@ -60,8 +60,10 @@ fn main() -> miette::Result<()> {
     println!("cargo:rustc-link-lib=dylib=riscv");
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", spike_build.display());
 
-    // NVBoard bridge (optional)
+    // NVBoard bridge: Nix 安装布局为 lib/libnvboard.a，源码构建为 build/libnvboard.a
     let nvboard_home = env_path("NVBOARD_HOME");
+    let nvboard_lib_dir = nvboard_home.join("lib");
+    let nvboard_a = nvboard_lib_dir.join("libnvboard.a");
     cc::Build::new()
         .cpp(true)
         .std("c++17")
@@ -73,11 +75,9 @@ fn main() -> miette::Result<()> {
         .include(nvboard_home.join("usr/include"))
         .compile("npc-nvboard-bridge");
 
-    println!(
-        "cargo:rustc-link-search=native={}",
-        nvboard_home.join("build").display()
-    );
-    println!("cargo:rustc-link-lib=static=nvboard");
+    // 显式链接 libnvboard.a（与 Verilator 的 VNPCSoC__ALL.a 一致），避免 -L/-l 搜索问题
+    println!("cargo:rustc-link-arg={}", nvboard_a.display());
+    println!("cargo:rustc-link-search=native={}", nvboard_lib_dir.display());
     println!("cargo:rustc-link-lib=SDL2");
     println!("cargo:rustc-link-lib=SDL2_image");
     println!("cargo:rustc-link-lib=SDL2_ttf");
