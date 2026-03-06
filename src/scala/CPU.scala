@@ -30,8 +30,8 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
       id   = IdRange(0, 1 << idBits))))))
 
   val masterNode = AXI4Xbar()
-  masterNode := icacheNode
-  masterNode := dcacheNode
+  masterNode := AXI4ICache() := icacheNode
+  masterNode := AXI4DCache() := dcacheNode
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {

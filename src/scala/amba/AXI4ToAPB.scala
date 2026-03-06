@@ -20,14 +20,14 @@ import freechips.rocketchip.util._
 
 
 case class AXI4ToAPBNode()(implicit valName: ValName) extends MixedAdapterNode(AXI4Imp, APBImp)(
-  dFn = { mp =>
+  dFn = { mp => // down
     APBMasterPortParameters(
       masters = mp.masters.map { m => APBMasterParameters(name = m.name, nodePath = m.nodePath) },
       requestFields = mp.requestFields.filter(!_.isInstanceOf[AMBAProtField]),
       responseKeys  = mp.responseKeys
     )
   },
-  uFn = { sp =>
+  uFn = { sp => // up
     val beatBytes = 4
     AXI4SlavePortParameters(
     slaves = sp.slaves.map { s =>
