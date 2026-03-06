@@ -10,7 +10,6 @@ import ysyx.core.DebugBundle
 
 object Config {
   def hasChipLink: Boolean = false
-  def sdramUseAXI: Boolean = false
 }
 
 // module ysyxSoCTop(

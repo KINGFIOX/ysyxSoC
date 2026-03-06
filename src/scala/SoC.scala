@@ -60,12 +60,10 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   List(apbxbar := APBDelayer() := AXI4ToAPB() := AXI4Buffer(), lmrom.node, sramNode).map(_ := xbar2)
 
   val sdramAddressSet = AddressSet.misaligned(SoCConfig.sdramBase, SoCConfig.sdramSize)
-  val lsdram_apb = if (!Config.sdramUseAXI) Some(LazyModule(new APBSDRAM (sdramAddressSet))) else None
-  val lsdram_axi = if ( Config.sdramUseAXI) Some(LazyModule(new AXI4SDRAM(sdramAddressSet))) else None
+  val lsdram_axi = LazyModule(new AXI4SDRAM(sdramAddressSet))
 
   xbar2 := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := xbar
-  if (Config.sdramUseAXI) lsdram_axi.get.node := ysyx.AXI4Delayer() := xbar
-  else                    lsdram_apb.get.node := apbxbar
+  lsdram_axi.node := ysyx.AXI4Delayer() := xbar
   if (Config.hasChipLink) chiplinkNode.get := xbar
   xbar := cpu.masterNode
 
@@ -94,8 +92,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val probe = IO(Output(Probe(new DebugBundle)))
     define(probe, cpu.module.probe)
 
-    val sdramBundle = if (Config.sdramUseAXI) lsdram_axi.get.module.sdram_bundle
-                      else                    lsdram_apb.get.module.sdram_bundle
+    val sdramBundle = lsdram_axi.module.sdram_bundle
 
     // expose slave I/O interface as ports
     val spi = IO(chiselTypeOf(lspi.module.spi_bundle))
