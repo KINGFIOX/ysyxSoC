@@ -8,12 +8,6 @@ fn main() -> miette::Result<()> {
     let npc_home = env_path("NPC_HOME");
     let ffi_dir = npc_home.join("src/rust/ffi");
 
-    let verilator_mdir = npc_home.join("build/obj-verilator");
-    let verilator_root = env_path("VERILATOR_ROOT");
-
-    let spike_src = env_path("SPIKE_HOME");
-    let spike_build = spike_src.join("build");
-
     // autocxx only sees the tiny bridge headers
     let autocxx_inc: Vec<&PathBuf> = vec![&ffi_dir];
     let mut b = autocxx_build::Builder::new("src/rust/ffi/mod.rs", autocxx_inc.as_slice())
@@ -22,6 +16,8 @@ fn main() -> miette::Result<()> {
     b.flag("-std=c++17").compile("npc-autocxx");
 
     // Verilator bridge
+    let verilator_mdir = npc_home.join("build/obj-verilator");
+    let verilator_root = env_path("VERILATOR_ROOT");
     cc::Build::new()
         .cpp(true)
         .std("c++17")
@@ -33,32 +29,31 @@ fn main() -> miette::Result<()> {
         .compile("npc-verilator-bridge");
 
     // Spike bridge
+    let spike_src = env_path("SPIKE_HOME");
+    let spike_lib = spike_src.join("lib");
+    let spike_inc = spike_src.join("include");
     cc::Build::new()
         .cpp(true)
         .std("c++17")
         .file(ffi_dir.join("spike_bridge.cc"))
         .include(&ffi_dir)
-        .include(&spike_src)
-        .include(spike_src.join("riscv"))
-        .include(spike_src.join("softfloat"))
-        .include(&spike_build)
+        .include(&spike_inc)
+        .include(spike_inc.join("riscv"))
+        .include(spike_inc.join("softfloat"))
         .compile("npc-spike-bridge");
 
     // Verilator libraries
-    println!(
-        "cargo:rustc-link-arg={}",
-        verilator_mdir.join("VNPCSoC__ALL.a").display()
-    );
-    println!(
-        "cargo:rustc-link-search=native={}",
-        verilator_mdir.display()
-    );
+    println!("cargo:rustc-link-arg={}", verilator_mdir.join("VNPCSoC__ALL.a").display());
+    println!("cargo:rustc-link-search=native={}", verilator_mdir.display());
     println!("cargo:rustc-link-lib=static=verilated");
 
     // Spike libraries
-    println!("cargo:rustc-link-search=native={}", spike_build.display());
-    println!("cargo:rustc-link-lib=dylib=riscv");
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", spike_build.display());
+    println!("cargo:rustc-link-search=native={}", spike_lib.display());
+    println!("cargo:rustc-link-lib=static=riscv");
+    println!("cargo:rustc-link-lib=static=fesvr");
+    println!("cargo:rustc-link-lib=static=disasm");
+    println!("cargo:rustc-link-lib=static=fdt");
+    println!("cargo:rustc-link-lib=static=softfloat");
 
     // NVBoard bridge: Nix 安装布局为 lib/libnvboard.a，源码构建为 build/libnvboard.a
     let nvboard_home = env_path("NVBOARD_HOME");
