@@ -13,7 +13,6 @@ class EXCPUInputBundle extends Bundle with HasCoreParameter {
   val ifu = IFUExceptionType(); val ifuEn = Bool(); val ifuXtval = UInt(XLEN.W)
   val cu = CUExceptionType(); val cuEn = Bool(); val cuXtval = UInt(XLEN.W)
   val lsu = MemUExceptionType(); val lsuEn = Bool(); val lsuXtval = UInt(XLEN.W)
-  val a0 = UInt(XLEN.W)
   val pc = UInt(XLEN.W)
 }
 

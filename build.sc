@@ -97,9 +97,4 @@ trait ysyxSoC extends ysyxSoCModule with HasThisChisel {
   override def millSourcePath = pwd
   override def sources = Task.Sources(millSourcePath / "src" / "scala")
   def rocketModule = rocketchip
-
-  /** 单元测试子模块，Metals 可识别并运行 (Run Test) */
-  object test extends ScalaTests with TestModule.ScalaTest {
-    override def ivyDeps = T(super.ivyDeps() ++ Agg(ivy"org.scalatest::scalatest:3.2.18"))
-  }
 }

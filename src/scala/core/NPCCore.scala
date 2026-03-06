@@ -2,7 +2,7 @@ package ysyx.core
 
 import chisel3._
 import chisel3.util._
-import chisel3.probe.{define, Probe, ProbeValue}
+import chisel3.probe.{define, Probe, ProbeValue, read}
 
 import ysyx.core.common.{HasCSRParameter, HasCoreParameter, HasRegFileParameter}
 import ysyx.core.component._
@@ -130,6 +130,8 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   }
   private val stateQ = RegInit(State.ifu_valid_wait)
 
+  private val cpiQ = RegInit(0.U(32.W)) //
+
   switch(stateQ) {
 
     is(State.ifu_valid_wait) {
@@ -239,18 +241,17 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   excpu.io.in.bits.lsuEn := lsu.io.out.fire && lsu.io.out.bits.exceptionEn
   excpu.io.in.bits.lsuXtval := memAddrQ
   excpu.io.in.bits.pc := Mux(stateQ === State.ifu_valid_wait, ifu.io.out.bits.pc, pcQ)
-  excpu.io.in.bits.a0 := rfu.io.out.debug.gpr(10)
   excpu.io.in.valid := (stateQ === State.ifu_valid_wait) || (stateQ === State.mem_valid_wait)
   excpu.io.out.ready := (stateQ === State.ifu_valid_wait) || (stateQ === State.mem_valid_wait)
 
   /* ========== Debug Output (Probe) ========== */
-  val debugWire = Wire(new DebugBundle)
-  debugWire.valid  := ifu.io.in.fire
-  debugWire.pc     := pcQ
-  debugWire.dnpc   := dnpcQ
-  debugWire.inst   := instQ
-  debugWire.isMMIO := isMmioQ
-  debugWire.gpr    := rfu.io.out.debug.gpr
-  debugWire.csr    := csru.io.debug
-  define(io.probe, ProbeValue(debugWire))
+  val debugBundle = Wire(new DebugBundle)
+  debugBundle.valid  := ifu.io.in.fire
+  debugBundle.pc     := pcQ
+  debugBundle.dnpc   := dnpcQ
+  debugBundle.inst   := instQ
+  debugBundle.isMMIO := isMmioQ
+  debugBundle.gpr    := read(rfu.io.probe)
+  debugBundle.csr    := read(csru.io.probe)
+  define(io.probe, ProbeValue(debugBundle))
 }

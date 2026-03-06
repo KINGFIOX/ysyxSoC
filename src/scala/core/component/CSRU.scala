@@ -5,6 +5,7 @@ import chisel3.util._
 import ysyx.core.common.HasCoreParameter
 import ysyx.core.common.HasRegFileParameter
 import ysyx.core.common.HasCSRParameter
+import chisel3.probe.{define, Probe, ProbeValue}
 
 // 指令执行完成、指令发生了异常, 需要 commit(交付)
 class CSRCommitIO extends Bundle with HasCoreParameter {
@@ -40,7 +41,7 @@ class CSRU extends Module with HasCoreParameter with HasCSRParameter {
     val xtvec = Output(UInt(XLEN.W))
 
     // for difftest
-    val debug = new CSRUDebugBundle
+    val probe = Output(Probe(new CSRUDebugBundle))
   })
 
   // ==================== CSR 寄存器定义 ====================
@@ -97,12 +98,14 @@ class CSRU extends Module with HasCoreParameter with HasCSRParameter {
     when(io.addr === MTVAL.U) { mtval := csrWdata }
   }
 
-  // ==================== debug 输出 ====================
-  io.debug.mstatus := mstatus
-  io.debug.mtvec := mtvec
-  io.debug.mepc := mepc
-  io.debug.mcause := mcause
-  io.debug.mtval := mtval
-  io.debug.mvendorid := mvendorid
-  io.debug.marchid   := marchid
+  // probe
+  val csrDebugBundle = Wire(new CSRUDebugBundle)
+  csrDebugBundle.mstatus := mstatus
+  csrDebugBundle.mtvec := mtvec
+  csrDebugBundle.mepc := mepc
+  csrDebugBundle.mcause := mcause
+  csrDebugBundle.mtval := mtval
+  csrDebugBundle.mvendorid := mvendorid
+  csrDebugBundle.marchid := marchid
+  define(io.probe, ProbeValue(csrDebugBundle))
 }
