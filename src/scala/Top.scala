@@ -39,8 +39,6 @@ class NPCSoCInterface extends Bundle {
   val reset = Input(Bool())
   val externalPins = new ExternalPins
 
-  // for simulation
-  val step  = Input(Bool())
   val debug = Output(new DebugBundle)
 }
 

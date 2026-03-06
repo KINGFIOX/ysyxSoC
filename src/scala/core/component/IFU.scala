@@ -37,8 +37,7 @@ class IFU extends Module with HasCoreParameter {
     val in = Flipped(DecoupledIO(new IFInputBundle))
     val icache = AXI4Bundle(CPUAXI4BundleParameters())
   })
-  private val (ar, r, aw, w, b) = {
-    val in = io.icache
+  private val (ar, r, aw, w, b) = { val in = io.icache
     (in.ar, in.r, in.aw, in.w, in.b)
   }
 
@@ -55,9 +54,9 @@ class IFU extends Module with HasCoreParameter {
 
   // --- state ---
   object State extends ChiselEnum {
-    val ar_wait, r_wait, allowin_wait, done_wait = Value
+    val idle, ar_wait, r_wait, allowin_wait, done_wait = Value
   }
-  private val stateQ = RegInit(State.ar_wait)
+  private val stateQ = RegInit(State.idle)
 
   // --- axi-ar-r ---
   ar.valid := (stateQ === State.ar_wait)
@@ -84,6 +83,10 @@ class IFU extends Module with HasCoreParameter {
 
   // --- state machine ---
   switch(stateQ) {
+
+    is(State.idle) {
+      stateQ := State.ar_wait
+    }
 
     is(State.ar_wait) {
       exceptEnQ := false.B // reset

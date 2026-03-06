@@ -126,13 +126,20 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   private val isMemW = cu.io.out.memEn
 
   object State extends ChiselEnum {
-    val ifu_valid_wait, writeback, exception, mem_ready_wait, mem_valid_wait, ifu_ready_wait = Value
+    val idle, ifu_valid_wait, writeback, exception, mem_ready_wait, mem_valid_wait, ifu_ready_wait = Value
   }
   private val stateQ = RegInit(State.ifu_valid_wait)
 
   private val cpiQ = RegInit(0.U(32.W)) //
 
   switch(stateQ) {
+
+    // reset state
+    // set this state along with the reset signal
+    // because of the differential reset signal between cpu and SoC
+    is(State.idle) {
+      stateQ := State.ifu_valid_wait
+    }
 
     is(State.ifu_valid_wait) {
       memEnQ := false.B // reset
