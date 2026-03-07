@@ -1,12 +1,11 @@
-mod dpi;
-
 use clap::Parser;
 use log::info;
+
 use npc::args::MonitorArgs;
-use npc::libcpu::VerilatorCpu;
-use npc::libcpu::verilator::globals;
-use npc::libsdb::{ScoreBoard, Sdb};
-use npc::tracer::FuncTracer;
+use npc::libcpu::verilator::cpu::VerilatorCpu;
+use npc::libsdb::scoreboard::ScoreBoard;
+use npc::libsdb::sdb::Sdb;
+use npc::tracer::ftrace::FuncTracer;
 
 fn main() -> miette::Result<()> {
     let args = MonitorArgs::parse();
@@ -20,8 +19,7 @@ fn main() -> miette::Result<()> {
     let ftrace = Box::new(FuncTracer::new(&elf_path));
 
     let flash_data = std::fs::read(&bin_path).map_err(|e| miette::Error::msg(format!("failed to read image file: {}", e)))?;
-    globals::init(&flash_data);
-    let mut dut = VerilatorCpu::new(true, args.nvboard); // default wave is true
+    let mut dut = VerilatorCpu::new(&flash_data, true, args.nvboard);
     let mut scoreboard = ScoreBoard::new(&flash_data, ftrace);
     let mut sdb = Sdb::new(&mut scoreboard);
     let result = sdb.mainloop(&mut dut, args.batch); // ignore the result

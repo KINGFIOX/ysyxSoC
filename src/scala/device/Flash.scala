@@ -3,15 +3,14 @@ package ysyx
 import chisel3._
 import chisel3.util._
 
-class flash_cmd extends BlackBox {
-  val io = IO(new Bundle {
-    val clock = Input(Clock())
-    val valid = Input(Bool())
-    val cmd = Input(UInt(8.W))
-    val addr = Input(UInt(32.W))
-    val data = Output(UInt(32.W))
-  })
-}
+class flash_cmd
+    extends FixedIOExtModule(new Bundle {
+      val clock = Input(Clock())
+      val valid = Input(Bool())
+      val cmd = Input(UInt(8.W))
+      val addr = Input(UInt(32.W))
+      val data = Output(UInt(32.W))
+    })
 
 // 考虑了 “窄传输” 的 Flash
 class flash extends RawModule {
@@ -44,7 +43,7 @@ class flash extends RawModule {
     switch(state) {
       is(State.cmd) {
         counter := counter + 1.U
-        cmd := Cat( cmd(6, 0), io.mosi )
+        cmd := Cat(cmd(6, 0), io.mosi)
         when(counter === 7.U) {
           counter := 0.U // suppress increment
           state := State.addr
@@ -52,7 +51,7 @@ class flash extends RawModule {
       }
       is(State.addr) {
         counter := counter + 1.U
-        val next_addr = Cat( addr(22, 0), io.mosi )
+        val next_addr = Cat(addr(22, 0), io.mosi)
         addr := next_addr
         when(counter === 23.U) {
           counter := 0.U
@@ -63,12 +62,12 @@ class flash extends RawModule {
       }
       is(State.data) {
         counter := counter + 1.U
-        data := Cat( data(6, 0), false.B )
+        data := Cat(data(6, 0), false.B)
         io.miso := data(7)
         when(counter === 0.U) {
           io.miso := rdata(7)
-          data := Cat( rdata(6, 0), false.B )
-        } .elsewhen( counter === 7.U ) {
+          data := Cat(rdata(6, 0), false.B)
+        }.elsewhen(counter === 7.U) {
           val next_addr = addr + 1.U
           addr := next_addr
           u0_flash_cmd.io.valid := true.B

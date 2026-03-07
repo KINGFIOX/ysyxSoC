@@ -17,23 +17,31 @@ class UARTIO extends Bundle {
   val tx = Output(Bool())
 }
 
-class uart_top_apb extends BlackBox {
-  val io = IO(new Bundle {
-    val clock = Input(Clock())
-    val reset = Input(Reset())
-    val in = Flipped(new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32)))
-    val uart = new UARTIO
-  })
-}
+class uart_top_apb
+    extends FixedIOExtModule(new Bundle {
+      val clock = Input(Clock())
+      val reset = Input(Reset())
+      val in = Flipped( new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32)))
+      val uart = new UARTIO
+    })
 
-class APBUart16550(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
-  val node = APBSlaveNode(Seq(APBSlavePortParameters(
-    Seq(APBSlaveParameters(
-      address       = address,
-      executable    = false,
-      supportsRead  = true,
-      supportsWrite = true)),
-    beatBytes  = 4)))
+class APBUart16550(address: Seq[AddressSet])(implicit p: Parameters)
+    extends LazyModule {
+  val node = APBSlaveNode(
+    Seq(
+      APBSlavePortParameters(
+        Seq(
+          APBSlaveParameters(
+            address = address,
+            executable = false,
+            supportsRead = true,
+            supportsWrite = true
+          )
+        ),
+        beatBytes = 4
+      )
+    )
+  )
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {

@@ -2,17 +2,21 @@ package ysyx
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.Analog
+import chisel3.experimental.{Analog, ExtModule}
 
-class TriStateInBuf(bits: Int) extends BlackBox(Map("width" -> bits)) with HasBlackBoxInline {
-  val io = IO(new Bundle {
-    val dio = Analog(bits.W)
-    val dout = Input(UInt(bits.W))
-    val out_en = Input(Bool())
-    val din = Output(UInt(bits.W))
-  })
+class TriStateInBuf(bits: Int)
+    extends FixedIOExtModule(
+      new Bundle {
+        val dio = Analog(bits.W)
+        val dout = Input(UInt(bits.W))
+        val out_en = Input(Bool())
+        val din = Output(UInt(bits.W))
+      },
+      Map("width" -> bits)
+    ) {
 
-  setInline("TriStateInBuf.sv",
+  setInline(
+    "TriStateInBuf.sv",
     """module TriStateInBuf #(
       |  parameter width = 1
       |)(
@@ -24,7 +28,8 @@ class TriStateInBuf(bits: Int) extends BlackBox(Map("width" -> bits)) with HasBl
       |  assign din = dio;
       |  assign dio = out_en ? dout : {width{1'bz}};
       |endmodule
-    """.stripMargin)
+    """.stripMargin
+  )
 }
 
 object TriStateInBuf {

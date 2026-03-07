@@ -1,10 +1,10 @@
 use autocxx::c_void;
 
-use super::*;
-use crate::ffi::*;
-use super::globals;
-
 use std::ffi::CStr;
+
+use crate::ffi::*;
+use crate::libcpu::abstract_cpu::AbstractCpu;
+use crate::libdpi::globals::Memory;
 
 const TOP_NAME: &CStr = c"TOP";
 const VCD_PATH: &CStr = c"build/npc_core.vcd";
@@ -17,11 +17,14 @@ pub struct VerilatorCpu {
     tfp: Option<*mut VerilatedVcdC>,
     sim_time: u64,
     nvboard: bool,
+    mem: Memory,
 }
 
 impl VerilatorCpu {
-    /// globals::init() must be called before this constructor.
-    pub fn new(wave: bool, nvboard: bool) -> Self {
+    pub fn new(flash_data: &[u8], wave: bool, nvboard: bool) -> Self {
+        let mem = Memory::new(flash_data);
+        mem.init_dpi();
+
         let ctx = vl_context_new();
         let top = unsafe { vnpcsoc_new(ctx, TOP_NAME.as_ptr()) };
 
@@ -39,7 +42,7 @@ impl VerilatorCpu {
             unsafe { nvboard_bridge_init(top as *mut c_void, autocxx::c_int(1)) };
         }
 
-        let mut cpu = Self { ctx, top, tfp, sim_time: 0, nvboard };
+        let mut cpu = Self { ctx, top, tfp, sim_time: 0, nvboard, mem };
         cpu.reset();
         cpu
     }
@@ -178,38 +181,38 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn mem_load_u8(&self, addr: u32) -> miette::Result<u8> {
-        globals::load_u8(addr)
+        self.mem.load_u8(addr)
     }
 
     fn mem_load_u16(&self, addr: u32) -> miette::Result<u16> {
-        let b0 = self.mem_load_u8(addr)? as u16;
-        let b1 = self.mem_load_u8(addr + 1)? as u16;
+        let b0 = self.mem.load_u8(addr)? as u16;
+        let b1 = self.mem.load_u8(addr + 1)? as u16;
         Ok(b0 | (b1 << 8))
     }
 
     fn mem_load_u32(&self, addr: u32) -> miette::Result<u32> {
-        let b0 = self.mem_load_u8(addr)? as u32;
-        let b1 = self.mem_load_u8(addr + 1)? as u32;
-        let b2 = self.mem_load_u8(addr + 2)? as u32;
-        let b3 = self.mem_load_u8(addr + 3)? as u32;
+        let b0 = self.mem.load_u8(addr)? as u32;
+        let b1 = self.mem.load_u8(addr + 1)? as u32;
+        let b2 = self.mem.load_u8(addr + 2)? as u32;
+        let b3 = self.mem.load_u8(addr + 3)? as u32;
         Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
     }
 
     fn mem_store_u8(&mut self, addr: u32, value: u8) -> miette::Result<()> {
-        globals::store_u8(addr, value)
+        self.mem.store_u8(addr, value)
     }
 
     fn mem_store_u16(&mut self, addr: u32, value: u16) -> miette::Result<()> {
-        self.mem_store_u8(addr, value as u8)?;
-        self.mem_store_u8(addr + 1, (value >> 8) as u8)?;
+        self.mem.store_u8(addr, value as u8)?;
+        self.mem.store_u8(addr + 1, (value >> 8) as u8)?;
         Ok(())
     }
 
     fn mem_store_u32(&mut self, addr: u32, value: u32) -> miette::Result<()> {
-        self.mem_store_u8(addr, value as u8)?;
-        self.mem_store_u8(addr + 1, (value >> 8) as u8)?;
-        self.mem_store_u8(addr + 2, (value >> 16) as u8)?;
-        self.mem_store_u8(addr + 3, (value >> 24) as u8)?;
+        self.mem.store_u8(addr, value as u8)?;
+        self.mem.store_u8(addr + 1, (value >> 8) as u8)?;
+        self.mem.store_u8(addr + 2, (value >> 16) as u8)?;
+        self.mem.store_u8(addr + 3, (value >> 24) as u8)?;
         Ok(())
     }
 

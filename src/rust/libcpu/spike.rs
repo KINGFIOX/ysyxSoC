@@ -1,6 +1,10 @@
-use super::*;
-use crate::ffi::*;
 use std::ffi::CStr;
+
+use crate::ffi::*;
+use crate::libcpu::abstract_cpu::{
+    AbstractCpu, CSR_MARCHID, CSR_MCAUSE, CSR_MEPC, CSR_MSTATUS, CSR_MTVAL, CSR_MTVEC,
+    CSR_MVENDORID,
+};
 
 const ISA: &CStr = c"RV32IMAFDC";
 const RESET_VECTOR: u64 = 0x30000000;
@@ -51,7 +55,12 @@ impl SpikeCpu {
 
         unsafe { state_set_pc(state, RESET_VECTOR) };
 
-        let mut cpu = Self { sim, proc, state, mmu };
+        let mut cpu = Self {
+            sim,
+            proc,
+            state,
+            mmu,
+        };
         for (i, &byte) in flash_data.iter().enumerate() {
             let addr = RESET_VECTOR as u32 + i as u32;
             cpu.mem_store_u8(addr, byte).unwrap();

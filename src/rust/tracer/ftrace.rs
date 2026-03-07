@@ -1,6 +1,7 @@
-use super::*;
 use object::{Object, ObjectSymbol, SymbolKind};
 use std::{collections::HashMap, fmt};
+
+use crate::tracer::ringbuf::RingBuf;
 
 const FTRACE_CAPACITY: usize = 32;
 

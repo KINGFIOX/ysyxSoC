@@ -1,9 +1,16 @@
 use capstone::prelude::*;
+
 #[allow(unused_imports)]
 use log::{error, info};
 
-use crate::libcpu::{AbstractCpu, SpikeCpu, VerilatorCpu};
-use crate::tracer::{DTraceEntry, FuncTracer, ITraceEntry, MTraceEntry, MemDir, RingBuf};
+use crate::libcpu::spike::SpikeCpu;
+use crate::libcpu::verilator::cpu::VerilatorCpu;
+use crate::libcpu::abstract_cpu::AbstractCpu;
+use crate::tracer::dtrace::{DTraceEntry, MemDir};
+use crate::tracer::ftrace::FuncTracer;
+use crate::tracer::itrace::ITraceEntry;
+use crate::tracer::mtrace::MTraceEntry;
+use crate::tracer::ringbuf::RingBuf;
 
 const TRACE_CAPACITY: usize = 16;
 

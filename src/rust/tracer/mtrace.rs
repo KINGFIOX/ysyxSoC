@@ -1,5 +1,6 @@
-use super::*;
 use std::fmt;
+
+use crate::tracer::dtrace::{DTraceEntry, MemDir};
 
 pub struct MTraceEntry(DTraceEntry);
 

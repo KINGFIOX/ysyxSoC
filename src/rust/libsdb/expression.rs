@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 use super::*;
 
-use crate::libcpu::AbstractCpu;
+use crate::libcpu::abstract_cpu::AbstractCpu;
 
 // ── Tokenizer ──
 

@@ -1,5 +1,3 @@
-use super::*;
-
 use std::fmt::Write;
 use std::panic;
 use std::sync::Arc;
@@ -7,8 +5,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{error, info, warn};
 
-use crate::libcpu::{AbstractCpu, VerilatorCpu};
 use rustyline::DefaultEditor;
+
+use crate::libcpu::abstract_cpu::AbstractCpu;
+use crate::libcpu::verilator::cpu::VerilatorCpu;
+use crate::libsdb::{command, expression};
+use crate::libsdb::scoreboard::{ScoreBoard, StepResult};
+use crate::libsdb::watchpoint::WatchpointPool;
 
 struct SigIntGuard {
     flag: Arc<AtomicBool>,

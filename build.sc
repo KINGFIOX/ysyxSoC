@@ -29,8 +29,6 @@ trait HasThisChisel extends SbtModule {
       // These are upstream issues that cannot be fixed in user code
       "-Wconf:cat=deprecation&origin=freechips\\.rocketchip\\..*:s",       // rocketchip deprecations
       "-Wconf:cat=deprecation&origin=chisel3\\..*:s",                      // Chisel deprecations
-      "-Wconf:cat=deprecation&msg=.*BlackBox.*:s",                         // BlackBox deprecations
-      "-Wconf:cat=deprecation&msg=.*HasBlackBox.*:s",                      // HasBlackBoxResource etc
       "-Wconf:cat=deprecation&msg=.*Diplomacy.*:s",                        // Diplomacy deprecations
       "-Wconf:cat=deprecation&msg=.*firrtl.*:s",                           // FIRRTL deprecations
       "-Wconf:cat=deprecation&msg=.*productHash.*:s",                      // Scala 2.13.17 MurmurHash3 deprecation
