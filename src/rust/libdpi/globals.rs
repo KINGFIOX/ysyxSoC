@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::libdpi::target::DpiTarget;
+use crate::libdpi::{icache::ICache, target::DpiTarget};
 
 pub const PSRAM_BASE: u32 = 0x80000000;
 pub const PSRAM_SIZE: u32 = 0x400000;
@@ -18,6 +18,7 @@ pub static DPI_MROM: DpiTarget<Vec<u8>> = DpiTarget::new();
 pub static DPI_PSRAM: DpiTarget<Vec<u8>> = DpiTarget::new();
 pub static DPI_SRAM: DpiTarget<Vec<u8>> = DpiTarget::new();
 pub static DPI_SDRAM: DpiTarget<Vec<u8>> = DpiTarget::new();
+pub static DPI_ICACHE: DpiTarget<ICache> = DpiTarget::new();
 
 pub struct Memory {
     flash: Arc<Mutex<Vec<u8>>>,
@@ -25,6 +26,7 @@ pub struct Memory {
     psram: Arc<Mutex<Vec<u8>>>,
     sram: Arc<Mutex<Vec<u8>>>,
     sdram: Arc<Mutex<Vec<u8>>>,
+    icache: Arc<Mutex<ICache>>,
 }
 
 impl Memory {
@@ -37,6 +39,7 @@ impl Memory {
             psram: Arc::new(Mutex::new(vec![0u8; PSRAM_SIZE as usize])),
             sram: Arc::new(Mutex::new(vec![0u8; SRAM_SIZE as usize])),
             sdram: Arc::new(Mutex::new(vec![0u8; SDRAM_SIZE as usize])),
+            icache: Arc::new(Mutex::new(ICache::new())),
         }
     }
 
@@ -46,6 +49,7 @@ impl Memory {
         DPI_PSRAM.init(Arc::clone(&self.psram));
         DPI_SRAM.init(Arc::clone(&self.sram));
         DPI_SDRAM.init(Arc::clone(&self.sdram));
+        DPI_ICACHE.init(Arc::clone(&self.icache));
     }
 
     pub fn load_u8(&self, addr: u32) -> miette::Result<u8> {

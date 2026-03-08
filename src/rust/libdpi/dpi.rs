@@ -4,8 +4,7 @@
 /// sources exactly. Verilator resolves them at link time.
 ///
 /// All addresses passed from RTL are device-relative offsets (base already stripped).
-
-use crate::libdpi::globals::{DPI_FLASH, DPI_MROM, DPI_PSRAM, DPI_SDRAM};
+use crate::libdpi::globals::{DPI_FLASH, DPI_ICACHE, DPI_MROM, DPI_PSRAM, DPI_SDRAM};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mrom_read(addr: i32, data: *mut i32) {
@@ -27,9 +26,28 @@ pub extern "C" fn flash_read(addr: i32, data: *mut i8) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn icache_refill(addr: i32, data: i32) {
+    DPI_ICACHE.with_mut(|icache| {
+        icache.refill(addr, data);
+    })
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn icache_lookup(addr: i32, hit: *mut i32, data: *mut i32) {
-    let _ = addr;
-    unsafe { *hit = 0; *data = 0; }
+    DPI_ICACHE.with_mut(|icache| {
+        let d = icache.lookup(addr as u32);
+        if let Some(d) = d {
+            unsafe {
+                *data = d as i32;
+                *hit = 1;
+            }
+        } else {
+            unsafe {
+                *data = 0;
+                *hit = 0;
+            }
+        }
+    });
 }
 
 #[unsafe(no_mangle)]

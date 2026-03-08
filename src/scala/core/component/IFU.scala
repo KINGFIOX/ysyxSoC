@@ -5,6 +5,7 @@ import chisel3.util._
 import ysyx.core.common.HasCoreParameter
 import freechips.rocketchip.amba.axi4._
 import ysyx.CPUAXI4BundleParameters
+import scala.annotation.meta.param
 
 class IFUOutputBundle extends Bundle with HasCoreParameter {
   val inst = UInt(InstLen.W)
@@ -32,6 +33,8 @@ object AXI4Resp {
 }
 
 class IFU extends Module with HasCoreParameter {
+  val axiParams = CPUAXI4BundleParameters()
+
   val io = IO(new Bundle {
     val out = DecoupledIO(new IFUOutputBundle)
     val in = Flipped(DecoupledIO(new IFInputBundle))
@@ -58,16 +61,19 @@ class IFU extends Module with HasCoreParameter {
   }
   private val stateQ = RegInit(State.idle)
 
+  private val idCntQ = RegInit(0.U(axiParams.idBits.W))
+  when(ar.fire) { idCntQ := idCntQ + 1.U }
+
   // --- axi-ar-r ---
   ar.valid := (stateQ === State.ar_wait)
-  ar.bits.id := 0.U
+  ar.bits.id := idCntQ
   ar.bits.addr := pcQ
   ar.bits.len := 0.U
   ar.bits.size := 2.U
   ar.bits.burst := 1.U
   ar.bits.lock := 0.U
   ar.bits.cache := 0.U
-  ar.bits.prot := Cat(true.B, false.B, true.B)
+  ar.bits.prot := 0.U
   ar.bits.qos := 0.U
   r.ready := (stateQ === State.r_wait)
 

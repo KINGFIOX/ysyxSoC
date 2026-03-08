@@ -143,8 +143,11 @@ class AXI4ReadPort extends Module with HasCoreParameter {
   private val ar_size = Mux(isNarrow_reg, ar_size_narrow, ar_size_wide)
   private val ar_addr = Mux(isNarrow_reg, ar_addr_narrow, ar_addr_wide)
 
+  private val idCntQ = RegInit(0.U(axiParams.idBits.W))
+  when(io.ar.fire) { idCntQ := idCntQ + 1.U }
+
   io.ar.valid      := (state === State.ar_wait)
-  io.ar.bits.id    := 0.U
+  io.ar.bits.id    := idCntQ
   io.ar.bits.addr  := ar_addr
   io.ar.bits.len   := 0.U
   io.ar.bits.size  := ar_size
@@ -280,8 +283,11 @@ class AXI4WritePort extends Module with HasCoreParameter {
   private val aw_size = aw_size_wide
   private val aw_addr = aw_addr_wide
 
+  private val idCntQ = RegInit(0.U(axiParams.idBits.W))
+  when(io.aw.fire) { idCntQ := idCntQ + 1.U }
+
   io.aw.valid      := (state === State.aw_w_wait) && !aw_sent
-  io.aw.bits.id    := 0.U
+  io.aw.bits.id    := idCntQ
   io.aw.bits.addr  := aw_addr
   io.aw.bits.len   := 0.U
   io.aw.bits.size  := aw_size
