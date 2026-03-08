@@ -26,7 +26,10 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
     val icache = AXI4Bundle(CPUAXI4BundleParameters())
     val dcache = AXI4Bundle(CPUAXI4BundleParameters())
     val interrupt = Input(Bool())
+    val fence_i = Output(Bool())
   })
+
+  io.fence_i := false.B
 
   // --- modules ---
   private val ifu = Module(new IFU)

@@ -40,6 +40,7 @@ class icache_refill(params: AXI4BundleParameters)
 
 class axi4_icache(params: AXI4BundleParameters) extends Module {
   val io = IO(new AXI4ICacheIO(params))
+  val fence_i = IO(Input(Bool()))
 
   // write related signals (in)
   io.in.aw.ready := false.B
@@ -205,19 +206,16 @@ class AXI4ICache(implicit p: Parameters) extends LazyModule {
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
+    val fence_i = IO(Input(Bool()))
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val params = edgeIn.bundle
       val cache = Module(new axi4_icache(params))
       cache.io.in <> in
       out <> cache.io.out
+
+      // fence_i
+      cache.fence_i := fence_i
     }
   }
 
-}
-
-object AXI4ICache {
-  def apply()(implicit p: Parameters): AXI4Node = {
-    val axi4cache = LazyModule(new AXI4ICache)
-    axi4cache.node
-  }
 }

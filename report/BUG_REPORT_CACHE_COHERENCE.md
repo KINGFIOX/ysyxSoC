@@ -4,7 +4,32 @@
 
 我的内存层次结构如下图所示:
 
-![](./8.png)
+```mermaid
+flowchart TB
+    subgraph cpu["cpu"]
+        subgraph core["core"]
+            ifu["ifu"]
+            lsu["lsu"]
+        end
+        icache["icache"]
+    end
+
+    xbar1["xbar"]
+    xbar2["xbar"]
+    xbar3["xbar2"]
+    sdram["sdram"]
+    apbxbar["apbxbar"]
+    flash["flash"]
+
+    ifu -->|取指| icache
+    icache --> xbar1
+    lsu --> xbar1
+    xbar1 --> xbar2
+    xbar2 --> xbar3
+    xbar3 --> sdram
+    xbar3 --> apbxbar
+    apbxbar --> flash
+```
 
 核心代码如下:
 

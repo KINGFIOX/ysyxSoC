@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use log::info;
 
 /// 64B cacheline
@@ -18,13 +19,14 @@ struct CacheSet {
 /// 16KB/32KB/64KB cache size
 pub struct ICache {
     sets: Vec<CacheSet>,
-    victim_line : Option<usize>
+    victim_line : Option<usize>,
+    counter: u32,
 }
 
 impl ICache {
     pub fn new() -> Self {
         let sets = vec![CacheSet::default(); 64];
-        Self { sets, victim_line: None }
+        Self { sets, victim_line: None, counter: 0 }
     }
 
     /// Parse address into tag, index, and offset
@@ -53,6 +55,8 @@ impl ICache {
             set.lines[hit].lru = 0;
             return Some(set.lines[hit].data[offset]);
         }
+        
+        // only icache miss case would be here
 
         let victim = set
             .lines
@@ -71,13 +75,14 @@ impl ICache {
         set.lines[victim].valid = true;
         set.lines[victim].lru = 0;
         self.victim_line = Some(victim);
+        self.counter = 16;
 
         None
     }
 
     pub fn refill(&mut self, addr: i32, data: i32) {
         let (tag, idx, offset) = Self::parse_addr(addr as u32);
-        info!("refill: addr={:08x}, data={:08x}, tag={:08x}, idx={}, offset={}", addr, data, tag, idx, offset);
+        // info!("refill: addr={:08x}, data={:08x}, tag={:08x}, idx={}, offset={}", addr, data, tag, idx, offset);
         let victim = self.victim_line.expect("refill: no victim line set");
         let line = &mut self.sets[idx].lines[victim];
 
@@ -87,7 +92,11 @@ impl ICache {
             addr, tag, idx, offset
         );
 
-        log::trace!("refill: write addr={:x} offset={} data={:x}", addr, offset, data);
+        // log::trace!("refill: write addr={:x} offset={} data={:x}", addr, offset, data);
         line.data[offset] = data as u32;
+        self.counter -= 1;
+        if self.counter == 0 {
+            self.victim_line = None;
+        }
     }
 }

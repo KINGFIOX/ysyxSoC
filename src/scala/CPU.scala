@@ -31,7 +31,10 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
 
   val masterNode = AXI4Xbar()
   // masterNode := icacheNode
-  masterNode := AXI4ICache() := icacheNode
+
+  val licache = LazyModule(new AXI4ICache)
+
+  masterNode := licache.node := icacheNode
   masterNode := AXI4DCache() := dcacheNode
 
   lazy val module = new Impl
@@ -44,13 +47,13 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     val probe = IO(Output(Probe(new DebugBundle)))
 
     // --- modules ---
-    val cpu = Module(new NPCCore)
+    val core = Module(new NPCCore)
 
     // --- connect ---
-    define(probe, cpu.io.probe)
+    define(probe, core.io.probe)
 
-    icache <> cpu.io.icache
-    dcache <> cpu.io.dcache
+    icache <> core.io.icache
+    dcache <> core.io.dcache
 
     // Slave interface is not used by NPCCore, tie off
     slave.ar.ready := false.B
@@ -61,7 +64,10 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     slave.b.valid := false.B
     slave.b.bits := DontCare
 
+    // fence_i
+    licache.module.fence_i := core.io.fence_i
+
     // Interrupt is not used yet
-    cpu.io.interrupt := interrupt
+    core.io.interrupt := interrupt
   }
 }

@@ -19,7 +19,7 @@ fn main() -> miette::Result<()> {
     let ftrace = Box::new(FuncTracer::new(&elf_path));
 
     let flash_data = std::fs::read(&bin_path).map_err(|e| miette::Error::msg(format!("failed to read image file: {}", e)))?;
-    let mut dut = VerilatorCpu::new(&flash_data, true, args.nvboard);
+    let mut dut = VerilatorCpu::new(&flash_data, false, args.nvboard);
     let mut scoreboard = ScoreBoard::new(&flash_data, ftrace);
     let mut sdb = Sdb::new(&mut scoreboard);
     let result = sdb.mainloop(&mut dut, args.batch); // ignore the result

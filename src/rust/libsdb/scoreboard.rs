@@ -1,7 +1,7 @@
 use capstone::prelude::*;
 
 #[allow(unused_imports)]
-use log::{error, info};
+use log::{error, info, warn};
 
 use crate::libcpu::spike::SpikeCpu;
 use crate::libcpu::verilator::cpu::VerilatorCpu;
@@ -158,7 +158,7 @@ impl ScoreBoard {
             }
         }
 
-        if !self.difftest(dut) {
+        if !self.check_regs(dut) {
             return StepResult::DifftestFail;
         }
         StepResult::Continue
@@ -203,7 +203,7 @@ impl ScoreBoard {
         self.golden.set_pc(dut.dnpc()).unwrap();
     }
 
-    fn difftest(&self, dut: &VerilatorCpu) -> bool {
+    fn check_regs(&self, dut: &VerilatorCpu) -> bool {
         let dut_pc = dut.dnpc();
         let ref_pc = self.golden.pc();
         if dut_pc != ref_pc {
@@ -211,6 +211,7 @@ impl ScoreBoard {
             return false;
         }
 
+        // check gprs
         for i in 1..32 {
             let dut_val = dut.gpr(i).unwrap();
             let ref_val = self.golden.gpr(i).unwrap();
@@ -223,6 +224,7 @@ impl ScoreBoard {
             }
         }
 
+        // check csrs
         let csr_checks: &[(&str, fn(&dyn AbstractCpu) -> u32)] = &[
             // ("mstatus", |c| c.mstatus()),
             ("mtvec", |c| c.mtvec()),
@@ -230,7 +232,6 @@ impl ScoreBoard {
             ("mcause", |c| c.mcause()),
             ("mtval", |c| c.mtval()),
         ];
-
         for &(name, getter) in csr_checks {
             let dut_val = getter(dut);
             let ref_val = getter(&self.golden);
@@ -285,27 +286,27 @@ impl ScoreBoard {
     }
 
     pub fn dump_traces(&self, dut: &VerilatorCpu) {
-        error!(
+        warn!(
             "===== ITrace (recent {} instructions) =====",
             TRACE_CAPACITY
         );
-        error!("{}", self.itrace.dump());
+        warn!("{}", self.itrace.dump());
 
-        error!(
+        warn!(
             "===== DTrace (recent {} MMIO accesses) =====",
             TRACE_CAPACITY
         );
-        error!("{}", self.dtrace.dump());
+        warn!("{}", self.dtrace.dump());
 
-        error!("===== MTrace (recent {} memory accesses) =====", TRACE_CAPACITY);
-        error!("{}", self.mtrace.dump());
+        warn!("===== MTrace (recent {} memory accesses) =====", TRACE_CAPACITY);
+        warn!("{}", self.mtrace.dump());
 
-        error!("===== FTrace (recent calls) =====");
-        error!("{}", self.ftrace.ring_buf.dump());
+        warn!("===== FTrace (recent calls) =====");
+        warn!("{}", self.ftrace.ring_buf.dump());
 
-        error!("===== Register State =====");
-        error!("       {:>12}  {:>12}", "DUT", "REF");
-        error!(
+        warn!("===== Register State =====");
+        warn!("       {:>12}  {:>12}", "DUT", "REF");
+        warn!(
             "pc     {:#012x}  {:#012x}{}",
             dut.dnpc(),
             self.golden.pc(),
@@ -319,13 +320,13 @@ impl ScoreBoard {
             let d = dut.gpr(i).unwrap();
             let r = self.golden.gpr(i).unwrap();
             let mark = if d != r { "  <--- MISMATCH" } else { "" };
-            error!("{:4}   {d:#012x}  {r:#012x}{mark}", GPR_NAMES[i]);
+            warn!("{:4}   {d:#012x}  {r:#012x}{mark}", GPR_NAMES[i]);
         }
-        error!("===== CSR State =====");
-        error!("       {:>12}  {:>12}", "DUT", "REF");
-        error!("mtvec {:#012x}  {:#012x}", dut.mtvec(), self.golden.mtvec());
-        error!("mepc {:#012x}  {:#012x}", dut.mepc(), self.golden.mepc());
-        error!("mcause {:#012x}  {:#012x}", dut.mcause(), self.golden.mcause());
-        error!("mtval {:#012x}  {:#012x}", dut.mtval(), self.golden.mtval());
+        warn!("===== CSR State =====");
+        warn!("       {:>12}  {:>12}", "DUT", "REF");
+        warn!("mtvec {:#012x}  {:#012x}", dut.mtvec(), self.golden.mtvec());
+        warn!("mepc {:#012x}  {:#012x}", dut.mepc(), self.golden.mepc());
+        warn!("mcause {:#012x}  {:#012x}", dut.mcause(), self.golden.mcause());
+        warn!("mtval {:#012x}  {:#012x}", dut.mtval(), self.golden.mtval());
     }
 }
