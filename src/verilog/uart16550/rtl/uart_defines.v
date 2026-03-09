@@ -141,8 +141,8 @@
 `define DATA_BUS_WIDTH_8
 
 `ifdef DATA_BUS_WIDTH_8
-`define UART_ADDR_WIDTH 3
-`define UART_DATA_WIDTH 8
+`define UART_ADDR_WIDTH 3 // ✅
+`define UART_DATA_WIDTH 8 // ✅
 `else
 `define UART_ADDR_WIDTH 5
 `define UART_DATA_WIDTH 32
