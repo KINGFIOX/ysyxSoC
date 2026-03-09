@@ -2,8 +2,11 @@ package ysyx.core.component
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.common.HasCoreParameter
+
 import freechips.rocketchip.amba.axi4._
+import freechips.rocketchip.util._
+
+import ysyx.core.common.HasCoreParameter
 import ysyx.CPUAXI4BundleParameters
 import ysyx.SoCConfig
 
@@ -47,6 +50,108 @@ object ZeroExt {
     Cat(0.U((width - data.getWidth).W), data)
   }
 }
+
+// signal shdirections are from the master's point-of-view
+class SRAMBundle(axiParams: AXI4BundleParameters) extends Bundle {
+  private val sizeBits = axiParams.sizeBits
+  private val dataBits = axiParams.dataBits
+  private val strbBits = axiParams.dataBits / 8
+  private val addrBits = axiParams.addrBits
+  private val respBits = axiParams.respBits
+  val req = Input(Bool()) // input stable when req asserted
+  val wr = Input(Bool()) // 0: read; 1: write
+  val size = Input(UInt(sizeBits.W)) // 2^size. 0:1; 1:2; 2:4
+  val addr = Input(UInt(addrBits.W))
+  val wstrb = Input(UInt(strbBits.W))
+  val wdata = Input(UInt(dataBits.W))
+  val addr_ok = Output(Bool())
+  val data_ok = Output(Bool()) // read valid; write done
+  val resp = Output(UInt(respBits.W))
+  val rdata = Output(UInt(dataBits.W))
+}
+
+
+// for write, addr_ok means: sucess of reading Addr, Data and size
+class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
+  val in = IO(Flipped(new SRAMBundle(axiParams)))
+  val aw = IO(Irrevocable(new AXI4BundleAW(axiParams)))
+  val w  = IO(Irrevocable(new AXI4BundleW(axiParams)))
+  val b  = IO(Flipped(Irrevocable(new AXI4BundleB(axiParams))))
+
+  // aw
+  aw.bits.id := id.U
+  aw.bits.addr := in.addr
+  aw.bits.len := 0.U
+  aw.bits.size := in.size
+  aw.bits.burst := 1.U
+  aw.bits.lock := 0.U
+  aw.bits.cache := 0.U // TODO:
+  aw.bits.prot := 0.U
+  aw.bits.qos := 0.U
+
+  // w
+  w.bits.data := in.wdata
+  w.bits.strb := in.wstrb
+  w.bits.last := true.B
+
+  // hardcode
+  in.rdata := 0.U
+
+  // latch resp when b.fire; output current resp when b.fire, else latched
+  in.resp := b.bits.resp holdUnless b.fire
+
+  object State extends ChiselEnum {
+    val idle, aw_w_wait, b_wait = Value
+  }
+  private val stateQ = RegInit(State.idle)
+
+  // state registers
+  private val aw_sent_q = RegInit(false.B)
+  private val w_sent_q = RegInit(false.B)
+
+  // defaults
+  in.addr_ok := false.B
+  in.data_ok := false.B
+  aw.valid := in.req && ! aw_sent_q
+  w.valid := in.req && ! w_sent_q
+  b.ready := (stateQ === State.b_wait)
+
+  switch(stateQ) {
+    is(State.idle) {
+      aw_sent_q := false.B
+      w_sent_q := false.B
+      when(in.req) {
+        when(aw.fire) { aw_sent_q := true.B }
+        when(w.fire) { w_sent_q := true.B }
+        val aw_done = aw_sent_q || aw.fire
+        val w_done = w_sent_q || w.fire
+        when( aw_done && w_done ) {
+          stateQ := State.b_wait
+          in.addr_ok := true.B
+        }
+        .otherwise { stateQ := State.aw_w_wait }
+      }
+    }
+    is(State.aw_w_wait) {
+      when(aw.fire) { aw_sent_q := true.B }
+      when(w.fire) { w_sent_q := true.B }
+      val aw_done = aw_sent_q || aw.fire
+      val w_done = w_sent_q || w.fire
+      when( aw_done && w_done ) {
+        stateQ := State.b_wait
+        in.addr_ok := true.B
+      }
+    }
+    is(State.b_wait) {
+      when( b.fire ) {
+        in.data_ok := true.B
+        stateQ := State.idle
+      }
+    }
+  }
+
+}
+
 
 // ============================================================
 // AXI4 Read Channel Controller
