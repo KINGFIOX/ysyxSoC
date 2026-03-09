@@ -70,6 +70,70 @@ class SRAMBundle(axiParams: AXI4BundleParameters) extends Bundle {
   val rdata = Output(UInt(dataBits.W))
 }
 
+class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
+  val in = IO(Flipped(new SRAMBundle(axiParams)))
+  val ar = IO(Irrevocable(new AXI4BundleAR(axiParams)))
+  val r  = IO(Flipped(Irrevocable(new AXI4BundleR(axiParams))))
+
+  // ar
+  ar.bits.id := id.U
+  ar.bits.addr := in.addr
+  ar.bits.len := 0.U
+  ar.bits.size := in.size
+  ar.bits.burst := 1.U
+  ar.bits.lock := 0.U
+  ar.bits.cache := 0.U
+  ar.bits.prot := 0.U
+  ar.bits.qos := 0.U
+  
+  // in
+  in.rdata := r.bits.data holdUnless r.fire
+  in.resp := r.bits.resp holdUnless r.fire
+  in.data_ok := r.fire
+
+  // in defaults
+  in.addr_ok := false.B
+
+  object State extends ChiselEnum {
+    val idle, ar_wait, r_wait = Value
+  }
+  private val stateQ = RegInit(State.idle)
+
+  private val ar_sent_q = RegInit(false.B)
+
+  ar.valid := in.req && ! ar_sent_q
+
+  r.ready := (stateQ === State.r_wait)
+
+  switch(stateQ) {
+    is(State.idle) {
+      ar_sent_q := false.B
+      when(in.req) {
+        when(ar.fire) {
+          ar_sent_q := true.B
+          in.addr_ok := true.B
+          stateQ := State.r_wait
+        } .otherwise {
+          stateQ := State.ar_wait
+        }
+      }
+    }
+    is(State.ar_wait) {
+      when(ar.fire) {
+        ar_sent_q := true.B
+        in.addr_ok := true.B
+        stateQ := State.r_wait
+      }
+    }
+    is(State.r_wait) {
+      when(r.fire) {
+        stateQ := State.idle
+      }
+    }
+  }
+
+}
+
 
 // for write, addr_ok means: sucess of reading Addr, Data and size
 class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
@@ -97,8 +161,9 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   // hardcode
   in.rdata := 0.U
 
-  // latch resp when b.fire; output current resp when b.fire, else latched
+  // in
   in.resp := b.bits.resp holdUnless b.fire
+  in.data_ok := b.fire
 
   object State extends ChiselEnum {
     val idle, aw_w_wait, b_wait = Value
@@ -111,7 +176,6 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 
   // defaults
   in.addr_ok := false.B
-  in.data_ok := false.B
   aw.valid := in.req && ! aw_sent_q
   w.valid := in.req && ! w_sent_q
   b.ready := (stateQ === State.b_wait)
@@ -128,8 +192,9 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
         when( aw_done && w_done ) {
           stateQ := State.b_wait
           in.addr_ok := true.B
+        } .otherwise {
+          stateQ := State.aw_w_wait
         }
-        .otherwise { stateQ := State.aw_w_wait }
       }
     }
     is(State.aw_w_wait) {
@@ -144,7 +209,6 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
     }
     is(State.b_wait) {
       when( b.fire ) {
-        in.data_ok := true.B
         stateQ := State.idle
       }
     }
