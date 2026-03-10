@@ -4,7 +4,6 @@ import chisel3._
 import chisel3.util._
 import ysyx.core.common.HasCoreParameter
 import freechips.rocketchip.amba.axi4._
-import ysyx.CPUAXI4BundleParameters
 import scala.annotation.meta.param
 
 class IFUOutputBundle extends Bundle with HasCoreParameter {
@@ -32,52 +31,53 @@ object AXI4Resp {
   val DECERR = 3.U(2.W)
 }
 
-class IFU extends Module with HasCoreParameter {
-  val axiParams = CPUAXI4BundleParameters()
+class IFU(axiParams: AXI4BundleParameters) extends Module {
 
+  private val dataBits = axiParams.dataBits
+  private val addrBits = axiParams.addrBits
+
+  // io
   val io = IO(new Bundle {
-    val out = DecoupledIO(new IFUOutputBundle)
-    val in = Flipped(DecoupledIO(new IFInputBundle))
-    val icache = AXI4Bundle(CPUAXI4BundleParameters())
+    val out = Irrevocable(new IFUOutputBundle)
+    val in = Flipped(Irrevocable(new IFInputBundle))
   })
-  private val (ar, r, aw, w, b) = { val in = io.icache
-    (in.ar, in.r, in.aw, in.w, in.b)
-  }
 
-  // --- write related ---
-  b.ready := false.B // impossible
-  aw.valid := false.B; aw.bits := DontCare
-  w.valid := false.B; w.bits := DontCare
+  val icache = IO(AXI4Bundle(axiParams))
 
-  // --- register ---
-  private val pcQ = RegInit(ysyx.SoCConfig.resetVector.U(XLEN.W))
-  private val instQ = RegInit(0.U(InstLen.W))
+  private val loadUnit = Module(new LoadUnit(axiParams, 0))
+
+  // connect LoadUnit AXI ports to icache
+  loadUnit.ar <> icache.ar
+  loadUnit.r <> icache.r
+
+  // aw, w, b not used for instruction fetch
+  icache.b.ready := false.B
+  icache.aw.valid := false.B
+  icache.aw.bits := DontCare
+  icache.w.valid := false.B
+  icache.w.bits := DontCare
+
+  // --- registers ---
+  private val pcQ = RegInit(ysyx.SoCConfig.resetVector.U(addrBits.W))
+  private val instQ = RegInit(0.U(dataBits.W))
   private val exceptQ = Reg(IFUExceptionType())
   private val exceptEnQ = RegInit(false.B)
 
   // --- state ---
   object State extends ChiselEnum {
-    val idle, ar_wait, r_wait, allowin_wait, done_wait = Value
+    val idle, addr_req, data_wait, allowin_wait, done_wait = Value
   }
   private val stateQ = RegInit(State.idle)
 
-  private val idCntQ = RegInit(0.U(axiParams.idBits.W))
-  when(ar.fire) { idCntQ := idCntQ + 1.U }
+  // --- LoadUnit SRAM interface ---
+  loadUnit.in.req := (stateQ === State.addr_req)
+  loadUnit.in.wr := false.B
+  loadUnit.in.size := 2.U
+  loadUnit.in.addr := pcQ
+  loadUnit.in.wstrb := 0.U
+  loadUnit.in.wdata := 0.U
 
-  // --- axi-ar-r ---
-  ar.valid := (stateQ === State.ar_wait)
-  ar.bits.id := idCntQ
-  ar.bits.addr := pcQ
-  ar.bits.len := 0.U
-  ar.bits.size := 2.U
-  ar.bits.burst := 1.U
-  ar.bits.lock := 0.U
-  ar.bits.cache := 0.U
-  ar.bits.prot := 0.U
-  ar.bits.qos := 0.U
-  r.ready := (stateQ === State.r_wait)
-
-  // --- in core: downstream ---
+  // --- downstream ---
   io.out.valid := (stateQ === State.allowin_wait)
   io.out.bits.inst := instQ
   io.out.bits.pc := pcQ
@@ -85,28 +85,29 @@ class IFU extends Module with HasCoreParameter {
   io.out.bits.exception := exceptQ
   io.out.bits.xtval := pcQ
   io.out.bits.exceptionEn := exceptEnQ
+
+  // --- upstream ---
   io.in.ready := (stateQ === State.done_wait)
 
   // --- state machine ---
   switch(stateQ) {
 
     is(State.idle) {
-      stateQ := State.ar_wait
+      stateQ := State.addr_req
     }
 
-    is(State.ar_wait) {
+    is(State.addr_req) {
       exceptEnQ := false.B // reset
-
-      when(ar.fire) {
-        stateQ := State.r_wait
+      when(loadUnit.in.addr_ok) {
+        stateQ := State.data_wait
       }
     }
 
-    is(State.r_wait) {
-      when(r.fire) {
+    is(State.data_wait) {
+      when(loadUnit.in.data_ok) {
         stateQ := State.allowin_wait
-        instQ := r.bits.data
-        when(r.bits.resp =/= AXI4Resp.OKAY) {
+        instQ := loadUnit.in.rdata
+        when(loadUnit.in.resp =/= AXI4Resp.OKAY) {
           exceptQ := IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT
           exceptEnQ := true.B
         }
@@ -121,7 +122,7 @@ class IFU extends Module with HasCoreParameter {
 
     is(State.done_wait) {
       when(io.in.fire) {
-        stateQ := State.ar_wait
+        stateQ := State.addr_req
         pcQ := io.in.bits.dnpc
       }
     }

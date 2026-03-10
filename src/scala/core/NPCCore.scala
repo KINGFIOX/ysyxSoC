@@ -20,11 +20,11 @@ class DebugBundle extends Bundle with HasCoreParameter with HasRegFileParameter 
   val csr    = new CSRUDebugBundle
 }
 
-class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with HasCSRParameter {
+class NPCCore(axiParams: AXI4BundleParameters) extends Module with HasCoreParameter with HasRegFileParameter with HasCSRParameter {
   val io = IO(new Bundle {
     val probe  = Output(Probe(new DebugBundle))
-    val icache = AXI4Bundle(CPUAXI4BundleParameters())
-    val dcache = AXI4Bundle(CPUAXI4BundleParameters())
+    val icache = AXI4Bundle(axiParams)
+    val dcache = AXI4Bundle(axiParams)
     val interrupt = Input(Bool())
     val fence_i = Output(Bool())
   })
@@ -32,7 +32,7 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   io.fence_i := false.B
 
   // --- modules ---
-  private val ifu = Module(new IFU)
+  private val ifu = Module(new IFU(axiParams))
   private val cu = Module(new CU)
   private val igu = Module(new IGU)
   private val rfu = Module(new RFU)
@@ -217,7 +217,7 @@ class NPCCore extends Module with HasCoreParameter with HasRegFileParameter with
   ifu.io.out.ready := (stateQ === State.ifu_valid_wait)
   ifu.io.in.valid := (stateQ === State.ifu_ready_wait)
   ifu.io.in.bits.dnpc := dnpcQ
-  ifu.io.icache <> io.icache
+  ifu.icache <> io.icache
 
   rfu.io.in.wen := rfWenQ && (stateQ === State.writeback)
   rfu.io.in.wdata := rdValQ

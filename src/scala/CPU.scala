@@ -19,6 +19,8 @@ object CPUAXI4BundleParameters {
 
 class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
 
+  private val axiParams = CPUAXI4BundleParameters()
+
   private val icacheNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(
     masters = Seq(AXI4MasterParameters(
       name = "icache",
@@ -43,11 +45,11 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     val (icache, _) = icacheNode.out(0)
     val (dcache, _) = dcacheNode.out(0)
     val interrupt = IO(Input(Bool()))
-    val slave = IO(Flipped(AXI4Bundle(CPUAXI4BundleParameters()))) // used for chiplink
+    val slave = IO(Flipped(AXI4Bundle(axiParams))) // used for chiplink
     val probe = IO(Output(Probe(new DebugBundle)))
 
     // --- modules ---
-    val core = Module(new NPCCore)
+    val core = Module(new NPCCore(axiParams))
 
     // --- connect ---
     define(probe, core.io.probe)

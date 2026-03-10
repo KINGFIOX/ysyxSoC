@@ -51,7 +51,7 @@ object ZeroExt {
   }
 }
 
-// signal shdirections are from the master's point-of-view
+// signal shdirections are from the slave's point-of-view
 class SRAMBundle(axiParams: AXI4BundleParameters) extends Bundle {
   private val sizeBits = axiParams.sizeBits
   private val dataBits = axiParams.dataBits
@@ -71,7 +71,7 @@ class SRAMBundle(axiParams: AXI4BundleParameters) extends Bundle {
 }
 
 class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
-  val in = IO(Flipped(new SRAMBundle(axiParams)))
+  val in = IO(new SRAMBundle(axiParams))
   val ar = IO(Irrevocable(new AXI4BundleAR(axiParams)))
   val r  = IO(Flipped(Irrevocable(new AXI4BundleR(axiParams))))
 
@@ -137,7 +137,7 @@ class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 
 // for write, addr_ok means: sucess of reading Addr, Data and size
 class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
-  val in = IO(Flipped(new SRAMBundle(axiParams)))
+  val in = IO(new SRAMBundle(axiParams))
   val aw = IO(Irrevocable(new AXI4BundleAW(axiParams)))
   val w  = IO(Irrevocable(new AXI4BundleW(axiParams)))
   val b  = IO(Flipped(Irrevocable(new AXI4BundleB(axiParams))))
