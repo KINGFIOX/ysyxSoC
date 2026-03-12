@@ -2,94 +2,224 @@ package ysyx.core.component
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.component.MemInfoBundle
-import ysyx.core.common.NPCModule
-import ysyx.core.common.HasCoreParameter
-import ysyx.core.common.HasRegFileParameter
-
-// Enqueue bundle — directions are from master (dispatch stage) point-of-view.
-// After Flipped(Irrevocable(...)), tag becomes Output from ROB, the rest become Input.
-class RobEnq extends Bundle with HasCoreParameter with HasRegFileParameter {
-  val tag = Input(UInt(robEntryBits.W))
-  val mem = Output(new MemInfoBundle)
-  val rd_def = Output(Bool())
-  val rd_idx = Output(UInt(NRRegbits.W))
-  val pc = Output(UInt(addrBits.W))
-}
+import ysyx.core.common._
 
 object EntryState extends ChiselEnum {
-  val not_ready, lsu_not_ready, lsu_access, ready = Value
+  val allocated, executed = Value
 }
 
 class RobEntry extends Bundle with HasCoreParameter with HasRegFileParameter {
-  val mem = new MemInfoBundle
+  val wbSel  = WBSel()
+  val mem    = new MemInfoBundle
+  val csrOp  = CSROpType()
+  val csrWen = Bool()
+  val rfWen  = Bool()
+  val npcOp  = NPCOpType()
+
+  val pc   = UInt(addrBits.W)
+  val inst = UInt(InstBits.W)
+  val imm  = UInt(dataBits.W)
+
   val rd_idx = UInt(NRRegbits.W)
-  val rd_val = UInt(dataBits.W)
   val rd_def = Bool()
-  val mcause = UInt(dataBits.W)
+
+  val alu_result  = UInt(dataBits.W)
+  val rd_val       = UInt(dataBits.W)
+  val rd_val_valid = Bool()
+
+  val rs1_val = UInt(dataBits.W)
+  val rs2_val = UInt(dataBits.W)
+
   val except_en = Bool()
-  val pc = UInt(addrBits.W)
-  val dnpc = UInt(addrBits.W)
-  val jump = Bool()
+  val mcause    = UInt(dataBits.W)
+  val xtval     = UInt(dataBits.W)
+
+  val mispredict = Bool()
+  val actual_npc = UInt(addrBits.W)
+
   val state = EntryState()
+}
+
+class RobEnqData extends Bundle with HasCoreParameter with HasRegFileParameter {
+  val wbSel  = WBSel()
+  val mem    = new MemInfoBundle
+  val csrOp  = CSROpType()
+  val csrWen = Bool()
+  val rfWen  = Bool()
+  val npcOp  = NPCOpType()
+
+  val pc   = UInt(addrBits.W)
+  val inst = UInt(InstBits.W)
+  val imm  = UInt(dataBits.W)
+
+  val rd_idx = UInt(NRRegbits.W)
+  val rd_def = Bool()
+
+  val except_en = Bool()
+  val mcause    = UInt(dataBits.W)
+  val xtval     = UInt(dataBits.W)
 }
 
 class Rob(val entries: Int = 32) extends NPCModule {
   require(isPow2(entries))
+  private val idxBits = log2Ceil(entries)
 
   val io = IO(new Bundle {
-    val enq = Flipped(Irrevocable(new RobEnq))
+    val enq = new Bundle {
+      val valid = Input(Bool())
+      val ready = Output(Bool())
+      val tag   = Output(UInt(robEntryBits.W))
+      val data  = Input(new RobEnqData)
+    }
+
+    val wb = new Bundle {
+      val valid      = Input(Bool())
+      val tag        = Input(UInt(robEntryBits.W))
+      val alu_result = Input(UInt(dataBits.W))
+      val rd_val       = Input(UInt(dataBits.W))
+      val rd_val_valid = Input(Bool())
+      val rs1_val    = Input(UInt(dataBits.W))
+      val rs2_val    = Input(UInt(dataBits.W))
+      val mispredict = Input(Bool())
+      val actual_npc = Input(UInt(addrBits.W))
+    }
+
+    val commit = new Bundle {
+      val valid = Output(Bool())
+      val deq   = Input(Bool())
+      val tag   = Output(UInt(robEntryBits.W))
+      val entry = Output(new RobEntry)
+    }
+
+    val commitWb = new Bundle {
+      val valid = Input(Bool())
+      val tag   = Input(UInt(robEntryBits.W))
+      val value = Input(UInt(dataBits.W))
+    }
+
+    val fwd1 = new Bundle {
+      val tag   = Input(UInt(robEntryBits.W))
+      val value = Output(UInt(dataBits.W))
+      val ready = Output(Bool())
+    }
+    val fwd2 = new Bundle {
+      val tag   = Input(UInt(robEntryBits.W))
+      val value = Output(UInt(dataBits.W))
+      val ready = Output(Bool())
+    }
+
+    val flush = Input(Bool())
   })
 
   // ---- storage ----
   val ram = Reg(Vec(entries, new RobEntry))
 
   // ---- pointers ----
-  val tail_ptr = Counter(entries)
-  val head_ptr = Counter(entries)
+  val head    = RegInit(0.U(idxBits.W))
+  val tail_q  = RegInit(0.U(idxBits.W))
+  val count_q = RegInit(0.U((idxBits + 1).W))
 
-  val ptr_match = tail_ptr.value === head_ptr.value
-  val maybe_full = RegInit(false.B)
-  val empty = ptr_match && !maybe_full
-  val full = ptr_match && maybe_full
+  val empty = count_q === 0.U
+  val full  = count_q === entries.U
 
-  val deq_valid = ! empty && ram(head_ptr.value).state === EntryState.ready
-  val deq_ready = true.B // TODO:
-  val deq_fire = deq_valid && deq_valid
+  private def idx(tag: UInt): UInt = tag(idxBits - 1, 0)
 
-
-  val do_enq = io.enq.fire
-  val do_deq = deq_fire
-
-  // ---- enqueue (allocate) ----
-  io.enq.ready := !full
-  io.enq.bits.tag := tail_ptr.value
-
-  when(do_enq) {
-    val mem = io.enq.bits.mem
-    ram(tail_ptr.value).mem := mem
-    ram(tail_ptr.value).rd_idx := io.enq.bits.rd_idx
-    ram(tail_ptr.value).rd_def := io.enq.bits.rd_def
-    ram(tail_ptr.value).pc := io.enq.bits.pc
-    ram(tail_ptr.value).rd_val := 0.U
-    ram(tail_ptr.value).mcause := 0.U
-    ram(tail_ptr.value).except_en := false.B
-    ram(tail_ptr.value).dnpc := 0.U
-    ram(tail_ptr.value).jump := false.B
-    ram(tail_ptr.value).state := Mux( mem.w_en || mem.r_en, EntryState.lsu_not_ready, EntryState.not_ready )
-    tail_ptr.inc()
+  // ============================================================
+  // Writeback from NPCCore (ALU result + computed values)
+  // ============================================================
+  when(io.wb.valid && !io.flush) {
+    val i = idx(io.wb.tag)
+    val e = ram(i)
+    e.alu_result  := io.wb.alu_result
+    e.rd_val       := io.wb.rd_val
+    e.rd_val_valid := io.wb.rd_val_valid
+    e.rs1_val     := io.wb.rs1_val
+    e.rs2_val     := io.wb.rs2_val
+    e.mispredict  := io.wb.mispredict
+    e.actual_npc  := io.wb.actual_npc
+    e.state       := EntryState.executed
   }
 
-  when(do_deq) {
-    head_ptr.inc()
+  // Commit-time writeback (load / CSR value)
+  when(io.commitWb.valid && !io.flush) {
+    val i = idx(io.commitWb.tag)
+    ram(i).rd_val       := io.commitWb.value
+    ram(i).rd_val_valid := true.B
   }
 
-  // ---- full / empty tracking ----
-  when(do_enq =/= do_deq) {
-    maybe_full := do_enq
+  // ============================================================
+  // Enqueue (after writeback so tail-slot writes take priority)
+  // ============================================================
+  val enq_fire = io.enq.valid && io.enq.ready
+  io.enq.ready := !full && !io.flush
+  io.enq.tag   := tail_q.pad(robEntryBits)
+
+  when(enq_fire) {
+    val d = io.enq.data
+    val e = ram(tail_q)
+    e.wbSel  := d.wbSel;  e.mem := d.mem
+    e.csrOp  := d.csrOp;  e.csrWen := d.csrWen
+    e.rfWen  := d.rfWen;  e.npcOp := d.npcOp
+    e.pc     := d.pc;     e.inst := d.inst; e.imm := d.imm
+    e.rd_idx := d.rd_idx; e.rd_def := d.rd_def
+
+    e.alu_result  := 0.U
+    e.rd_val       := 0.U
+    e.rd_val_valid := false.B
+    e.rs1_val     := 0.U
+    e.rs2_val     := 0.U
+
+    e.except_en := d.except_en
+    e.mcause    := d.mcause
+    e.xtval     := d.xtval
+
+    e.mispredict := false.B
+    e.actual_npc := 0.U
+
+    e.state := Mux(d.except_en, EntryState.executed, EntryState.allocated)
   }
 
-  // ---- occupancy count ----
-  val ptr_diff = tail_ptr.value - head_ptr.value
-  io.count := Mux(maybe_full && ptr_match, entries.U, 0.U) | ptr_diff
+  // ============================================================
+  // Commit — expose head entry
+  // ============================================================
+  val head_entry = ram(head)
+  io.commit.valid := !empty && head_entry.state === EntryState.executed
+  io.commit.tag   := head.pad(robEntryBits)
+  io.commit.entry := head_entry
+
+  val deq_fire = io.commit.deq && io.commit.valid
+  when(deq_fire && !io.flush) {
+    head := head + 1.U
+  }
+
+  // ============================================================
+  // Forward ports — for dispatch operand resolution
+  // ============================================================
+  io.fwd1.ready := ram(idx(io.fwd1.tag)).rd_val_valid
+  io.fwd1.value := ram(idx(io.fwd1.tag)).rd_val
+  io.fwd2.ready := ram(idx(io.fwd2.tag)).rd_val_valid
+  io.fwd2.value := ram(idx(io.fwd2.tag)).rd_val
+
+  // ============================================================
+  // Flush
+  // ============================================================
+  when(io.flush) {
+    head    := 0.U
+    tail_q  := 0.U
+    count_q := 0.U
+  }
+
+  // ============================================================
+  // Pointer / count tracking (normal operation)
+  // ============================================================
+  when(!io.flush) {
+    when(enq_fire && !deq_fire) {
+      tail_q  := tail_q + 1.U
+      count_q := count_q + 1.U
+    }.elsewhen(!enq_fire && deq_fire) {
+      count_q := count_q - 1.U
+    }.elsewhen(enq_fire && deq_fire) {
+      tail_q := tail_q + 1.U
+    }
+  }
 }

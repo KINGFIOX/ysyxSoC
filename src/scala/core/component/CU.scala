@@ -63,7 +63,7 @@ class CUOutputBundle extends Bundle with HasRegFileParameter {
   // exception
   val exception = CUExceptionType()
   val exceptionEn = Bool()
-  val xtval = Bool()
+  val mtval = Bool()
 }
 
 class MemInfoBundle extends Bundle {
@@ -209,7 +209,7 @@ object CU {
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_R | OP_I_ALU | OP_LOAD | OP_STORE | OP_JALR => bp(ALUOp1Sel.OP1_RS1)
       case OP_BRANCH | OP_JAL | OP_AUIPC                  => bp(ALUOp1Sel.OP1_PC)
-      case OP_LUI                                          => bp(ALUOp1Sel.OP1_ZERO)
+      case OP_LUI                                         => bp(ALUOp1Sel.OP1_ZERO)
       case _ => dc
     }
   }
@@ -310,7 +310,7 @@ object CU {
 
   // store
   object MemWenField extends BoolDecodeField[InstPattern] {
-    def name = "memRen"
+    def name = "memWen"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_STORE => y
       case _       => n
@@ -318,12 +318,12 @@ object CU {
   }
 
   object MemSignExtField extends BoolDecodeField[InstPattern] {
-    def name = "memRen"
+    def name = "memSignExt"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_LOAD => op.func3.rawString match {
-        case "100" => y // lbu
-        case "101" => y // lhu
-        case _ => n
+        case "100" => n // lbu — zero extend
+        case "101" => n // lhu — zero extend
+        case _ => y
       }
       case _ => n
     }
@@ -462,5 +462,5 @@ class CU extends Module with HasCoreParameter with HasRegFileParameter {
     invalidInst -> CUExceptionType.cu_ILLEGAL_INSTRUCTION
   ))
   io.out.exceptionEn := isEbreak || isEcall || invalidInst
-  io.out.xtval       := 0.U
+  io.out.mtval       := 0.U
 }
