@@ -7,8 +7,8 @@ import ysyx.core.common.HasCoreParameter
 import ysyx.core.common.HasRegFileParameter
 
 class RFUOutputBundle extends Bundle with HasCoreParameter with HasRegFileParameter {
-  val rs1_v  = UInt(XLEN.W)
-  val rs2_v  = UInt(XLEN.W)
+  val rs1_v  = UInt(dataBits.W)
+  val rs2_v  = UInt(dataBits.W)
 }
 
 class RFUInputBundle extends Bundle with HasRegFileParameter with HasCoreParameter {
@@ -16,7 +16,7 @@ class RFUInputBundle extends Bundle with HasRegFileParameter with HasCoreParamet
   val rs2_i = UInt(NRRegbits.W)
   val rd_i  = UInt(NRRegbits.W)
   // write
-  val wdata = UInt(XLEN.W)
+  val wdata = UInt(dataBits.W)
   val wen   = Bool()
 }
 
@@ -27,11 +27,11 @@ class RFU extends Module with HasCoreParameter with HasRegFileParameter {
   val io = IO(new Bundle {
     val in   = Flipped(new RFUInputBundle)
     val out  = new RFUOutputBundle
-    val probe = Output(Probe(Vec(NRReg, UInt(XLEN.W))))
+    val probe = Output(Probe(Vec(NRReg, UInt(dataBits.W))))
   })
 
   // 使用 RegInit 初始化为 0
-  private val rf = RegInit(VecInit(Seq.fill(NRReg)(0.U(XLEN.W))))
+  private val rf = RegInit(VecInit(Seq.fill(NRReg)(0.U(dataBits.W))))
 
   // 读取: x0 始终为 0
   io.out.rs1_v := Mux(io.in.rs1_i === 0.U, 0.U, rf(io.in.rs1_i))

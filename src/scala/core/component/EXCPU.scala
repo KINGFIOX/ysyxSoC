@@ -5,15 +5,15 @@ import chisel3.util._
 import ysyx.core.common.HasCoreParameter
 
 class EXCPUOutputBundle extends Bundle with HasCoreParameter {
-  val mcause = UInt(XLEN.W)
-  val mtval  = UInt(XLEN.W)
+  val mcause = UInt(dataBits.W)
+  val mtval  = UInt(dataBits.W)
 }
 
 class EXCPUInputBundle extends Bundle with HasCoreParameter {
-  val ifu = IFUExceptionType(); val ifuEn = Bool(); val ifuXtval = UInt(XLEN.W)
-  val cu = CUExceptionType(); val cuEn = Bool(); val cuXtval = UInt(XLEN.W)
-  val lsu = MemUExceptionType(); val lsuEn = Bool(); val lsuXtval = UInt(XLEN.W)
-  val pc = UInt(XLEN.W)
+  val ifu = IFUExceptionType(); val ifuEn = Bool(); val ifuXtval = UInt(dataBits.W)
+  val cu = CUExceptionType(); val cuEn = Bool(); val cuXtval = UInt(dataBits.W)
+  val lsu = MemUExceptionType(); val lsuEn = Bool(); val lsuXtval = UInt(dataBits.W)
+  val pc = UInt(dataBits.W)
 }
 
 

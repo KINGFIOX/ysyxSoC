@@ -54,7 +54,9 @@ class CUOutputBundle extends Bundle with HasRegFileParameter {
   val npcOp = NPCOpType()
   val bruOp = BRUOpType() // bru
 
-  val memOp = MemUOpType(); val memEn = Bool() // mem
+  // mem
+  val mem = new MemInfoBundle
+
   val wbSel = WBSel(); val rfWen = Bool() // write back
   val csrOp = CSROpType(); val csrWen = Bool() // csr
 
@@ -64,8 +66,15 @@ class CUOutputBundle extends Bundle with HasRegFileParameter {
   val xtval = Bool()
 }
 
+class MemInfoBundle extends Bundle {
+  val r_en = Bool()
+  val w_en = Bool()
+  val size = UInt(2.W) // 0, 1, 2
+  val sign_ext = Bool() // need sign extension ? only used when load
+}
+
 class CUInputBundle extends Bundle with HasCoreParameter {
-  val inst = UInt(InstLen.W)
+  val inst = UInt(InstBits.W)
 }
 
 /** CU 译码表: InstPattern 只描述编码结构, DecodeField 内推导控制信号 */
@@ -267,34 +276,56 @@ object CU {
     }
   }
 
-  object MemOpField extends DecodeField[InstPattern, UInt] {
-    def name = "memOp"
-    def chiselType = UInt(log2Ceil(MemUOpType.all.length).W)
-    private def bp(v: MemUOpType.Type): BitPat = litBP(v.litValue, width)
+  object MemSizeField extends DecodeField[InstPattern, UInt] {
+    def name = "memSize"
+    def chiselType = UInt(2.W)
+    private def bp(v: Int): BitPat = litBP(v, width)
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_LOAD => op.func3.rawString match {
-        case "000" => bp(MemUOpType.mem_LB)
-        case "001" => bp(MemUOpType.mem_LH)
-        case "010" => bp(MemUOpType.mem_LW)
-        case "100" => bp(MemUOpType.mem_LBU)
-        case "101" => bp(MemUOpType.mem_LHU)
+        case "000" => bp(0) // LB
+        case "001" => bp(1) // LH
+        case "010" => bp(2) // LW
+        case "100" => bp(0) // LBU
+        case "101" => bp(1) // LHU
         case _     => dc
       }
       case OP_STORE => op.func3.rawString match {
-        case "000" => bp(MemUOpType.mem_SB)
-        case "001" => bp(MemUOpType.mem_SH)
-        case "010" => bp(MemUOpType.mem_SW)
+        case "000" => bp(0) // SB
+        case "001" => bp(1) // SH
+        case "010" => bp(2) // SW
         case _     => dc
       }
       case _ => dc
     }
   }
 
-  object MemEnField extends BoolDecodeField[InstPattern] {
-    def name = "memEn"
+  // load
+  object MemRenField extends BoolDecodeField[InstPattern] {
+    def name = "memRen"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_LOAD | OP_STORE => y
-      case _                  => n
+      case OP_LOAD => y
+      case _       => n
+    }
+  }
+
+  // store
+  object MemWenField extends BoolDecodeField[InstPattern] {
+    def name = "memRen"
+    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
+      case OP_STORE => y
+      case _       => n
+    }
+  }
+
+  object MemSignExtField extends BoolDecodeField[InstPattern] {
+    def name = "memRen"
+    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
+      case OP_LOAD => op.func3.rawString match {
+        case "100" => y // lbu
+        case "101" => y // lhu
+        case _ => n
+      }
+      case _ => n
     }
   }
 
@@ -384,7 +415,8 @@ object CU {
   val allFields: Seq[DecodeField[InstPattern, _ <: Data]] = Seq(
     AluOpField, AluSel1Field, AluSel2Field, ImmTypeField,
     NpcOpField, BruOpField,
-    MemOpField, MemEnField, WbSelField, RfWenField,
+    MemRenField, MemWenField, MemSizeField, MemSignExtField,
+    WbSelField, RfWenField,
     CsrOpField, CsrWenField,
     EbreakField, EcallField, ValidField,
   )
@@ -410,8 +442,10 @@ class CU extends Module with HasCoreParameter with HasRegFileParameter {
   io.out.immType := ImmType.safe(decoded(ImmTypeField))._1
   io.out.npcOp   := NPCOpType.safe(decoded(NpcOpField))._1
   io.out.bruOp   := BRUOpType.safe(decoded(BruOpField))._1
-  io.out.memOp   := MemUOpType.safe(decoded(MemOpField))._1
-  io.out.memEn   := decoded(MemEnField)
+  io.out.mem.r_en := decoded(MemRenField)
+  io.out.mem.w_en := decoded(MemWenField)
+  io.out.mem.size := decoded(MemSizeField)
+  io.out.mem.sign_ext := decoded(MemSignExtField)
   io.out.wbSel   := WBSel.safe(decoded(WbSelField))._1
   io.out.rfWen   := decoded(RfWenField)
   io.out.csrOp   := CSROpType.safe(decoded(CsrOpField))._1

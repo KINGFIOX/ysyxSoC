@@ -2,21 +2,21 @@ package ysyx.core.component
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.common.HasCoreParameter
+import ysyx.core.common._
 import freechips.rocketchip.amba.axi4._
 import scala.annotation.meta.param
 
 class IFUOutputBundle extends Bundle with HasCoreParameter {
-  val inst = UInt(InstLen.W)
-  val pc = UInt(XLEN.W)
+  val inst = UInt(InstBits.W)
+  val pc = UInt(dataBits.W)
   val isValid = Bool()
   val exception = IFUExceptionType()
-  val xtval = UInt(XLEN.W)
+  val xtval = UInt(dataBits.W)
   val exceptionEn = Bool()
 }
 
 class IFInputBundle extends Bundle with HasCoreParameter {
-  val dnpc = UInt(XLEN.W)
+  val dnpc = UInt(dataBits.W)
 }
 
 object IFUExceptionType extends ChiselEnum {
@@ -31,10 +31,7 @@ object AXI4Resp {
   val DECERR = 3.U(2.W)
 }
 
-class IFU(axiParams: AXI4BundleParameters) extends Module {
-
-  private val dataBits = axiParams.dataBits
-  private val addrBits = axiParams.addrBits
+class IFU(axiParams: AXI4BundleParameters) extends NPCModule {
 
   // io
   val io = IO(new Bundle {

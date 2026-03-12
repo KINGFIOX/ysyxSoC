@@ -9,8 +9,8 @@ object BRUOpType extends ChiselEnum {
 }
 
 class BRUInBundle extends Bundle with HasCoreParameter {
-  val rs1_v  = UInt(XLEN.W)
-  val rs2_v  = UInt(XLEN.W)
+  val rs1_v  = UInt(dataBits.W)
+  val rs2_v  = UInt(dataBits.W)
   val op = BRUOpType()
 }
 

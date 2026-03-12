@@ -10,32 +10,11 @@ import ysyx.core.common.HasCoreParameter
 import ysyx.CPUAXI4BundleParameters
 import ysyx.SoCConfig
 
-// - read: 自然对齐即可 (符合 riscv 规范)
-// - write: 强制对齐到 4byte, 通过 waddr + wstrb 恢复原先的地址
-
-object MemUOpType extends ChiselEnum {
-  val mem_LB, mem_LH, mem_LW, mem_LBU, mem_LHU, mem_SB, mem_SH, mem_SW = Value
-}
-
 object MemUExceptionType extends ChiselEnum {
   val mem_LOAD_ADDRESS_MISALIGNED, mem_LOAD_ACCESS_FAULT,
     mem_STORE_ADDRESS_MISALIGNED, mem_STORE_ACCESS_FAULT,
     mem_LOAD_PAGE_FAULT, mem_STORE_PAGE_FAULT
     = Value
-}
-
-class MEMUInputBundle extends Bundle with HasCoreParameter {
-  val op    = MemUOpType()
-  val wdata = UInt(XLEN.W)
-  val addr  = UInt(XLEN.W)
-  val en = Bool()
-}
-
-class MEMUOutputBundle extends Bundle with HasCoreParameter {
-  val rdata = UInt(XLEN.W)
-  val exception = MemUExceptionType()
-  val exceptionEn = Bool()
-  val xtval = UInt(XLEN.W)
 }
 
 object SignExt {
@@ -58,20 +37,20 @@ class SRAMBundle(axiParams: AXI4BundleParameters) extends Bundle {
   private val strbBits = axiParams.dataBits / 8
   private val addrBits = axiParams.addrBits
   private val respBits = axiParams.respBits
-  val req = Input(Bool()) // input stable when req asserted
-  val wr = Input(Bool()) // 0: read; 1: write
-  val size = Input(UInt(sizeBits.W)) // 2^size. 0:1; 1:2; 2:4
-  val addr = Input(UInt(addrBits.W))
-  val wstrb = Input(UInt(strbBits.W))
-  val wdata = Input(UInt(dataBits.W))
-  val addr_ok = Output(Bool())
-  val data_ok = Output(Bool()) // read valid; write done
-  val resp = Output(UInt(respBits.W))
-  val rdata = Output(UInt(dataBits.W))
+  val req = Output(Bool()) // input stable when req asserted
+  val wr = Output(Bool()) // 0: read; 1: write
+  val size = Output(UInt(sizeBits.W)) // 2^size. 0:1; 1:2; 2:4
+  val addr = Output(UInt(addrBits.W))
+  val wstrb = Output(UInt(strbBits.W))
+  val wdata = Output(UInt(dataBits.W))
+  val addr_ok = Input(Bool())
+  val data_ok = Input(Bool()) // read valid; write done
+  val resp = Input(UInt(respBits.W))
+  val rdata = Input(UInt(dataBits.W))
 }
 
 class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
-  val in = IO(new SRAMBundle(axiParams))
+  val in = IO(Flipped(new SRAMBundle(axiParams)))
   val ar = IO(Irrevocable(new AXI4BundleAR(axiParams)))
   val r  = IO(Flipped(Irrevocable(new AXI4BundleR(axiParams))))
 
@@ -89,29 +68,21 @@ class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   // in
   in.rdata := r.bits.data holdUnless r.fire
   in.resp := r.bits.resp holdUnless r.fire
+  in.addr_ok := ar.fire
   in.data_ok := r.fire
-
-  // in defaults
-  in.addr_ok := false.B
 
   object State extends ChiselEnum {
     val idle, ar_wait, r_wait = Value
   }
-  private val stateQ = RegInit(State.idle)
+  val stateQ = RegInit(State.idle)
 
-  private val ar_sent_q = RegInit(false.B)
-
-  ar.valid := in.req && ! ar_sent_q
-
+  ar.valid := in.req && (stateQ === State.idle || stateQ === State.ar_wait)
   r.ready := (stateQ === State.r_wait)
 
   switch(stateQ) {
     is(State.idle) {
-      ar_sent_q := false.B
       when(in.req) {
         when(ar.fire) {
-          ar_sent_q := true.B
-          in.addr_ok := true.B
           stateQ := State.r_wait
         } .otherwise {
           stateQ := State.ar_wait
@@ -120,8 +91,6 @@ class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
     }
     is(State.ar_wait) {
       when(ar.fire) {
-        ar_sent_q := true.B
-        in.addr_ok := true.B
         stateQ := State.r_wait
       }
     }
@@ -134,10 +103,9 @@ class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 
 }
 
-
 // for write, addr_ok means: sucess of reading Addr, Data and size
 class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
-  val in = IO(new SRAMBundle(axiParams))
+  val in = IO(Flipped(new SRAMBundle(axiParams)))
   val aw = IO(Irrevocable(new AXI4BundleAW(axiParams)))
   val w  = IO(Irrevocable(new AXI4BundleW(axiParams)))
   val b  = IO(Flipped(Irrevocable(new AXI4BundleB(axiParams))))
@@ -168,14 +136,16 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   object State extends ChiselEnum {
     val idle, aw_w_wait, b_wait = Value
   }
-  private val stateQ = RegInit(State.idle)
+  val stateQ = RegInit(State.idle)
 
   // state registers
-  private val aw_sent_q = RegInit(false.B)
-  private val w_sent_q = RegInit(false.B)
+  val aw_sent_q = RegInit(false.B)
+  val w_sent_q = RegInit(false.B)
+  val aw_done = aw_sent_q || aw.fire
+  val w_done = w_sent_q || w.fire
 
   // defaults
-  in.addr_ok := false.B
+  in.addr_ok := (stateQ =/= State.b_wait) && aw_done && w_done
   aw.valid := in.req && ! aw_sent_q
   w.valid := in.req && ! w_sent_q
   b.ready := (stateQ === State.b_wait)
@@ -187,25 +157,13 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
       when(in.req) {
         when(aw.fire) { aw_sent_q := true.B }
         when(w.fire) { w_sent_q := true.B }
-        val aw_done = aw_sent_q || aw.fire
-        val w_done = w_sent_q || w.fire
-        when( aw_done && w_done ) {
-          stateQ := State.b_wait
-          in.addr_ok := true.B
-        } .otherwise {
-          stateQ := State.aw_w_wait
-        }
+        stateQ := Mux( aw_done && w_done, State.b_wait, State.aw_w_wait )
       }
     }
     is(State.aw_w_wait) {
       when(aw.fire) { aw_sent_q := true.B }
       when(w.fire) { w_sent_q := true.B }
-      val aw_done = aw_sent_q || aw.fire
-      val w_done = w_sent_q || w.fire
-      when( aw_done && w_done ) {
-        stateQ := State.b_wait
-        in.addr_ok := true.B
-      }
+      when( aw_done && w_done ) { stateQ := State.b_wait }
     }
     is(State.b_wait) {
       when( b.fire ) {
@@ -214,429 +172,4 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
     }
   }
 
-}
-
-
-// ============================================================
-// AXI4 Read Channel Controller
-// Handles AR/R channel state machine, address/size generation,
-// and read data extraction with sign/zero extension.
-// ============================================================
-class AXI4ReadPort extends Module with HasCoreParameter {
-  private val axiParams = CPUAXI4BundleParameters()
-  val io = IO(new Bundle {
-    // Control interface
-    val start          = Input(Bool())
-    val op             = Input(MemUOpType())
-    val addr           = Input(UInt(XLEN.W))
-    val isNarrowDevice = Input(Bool())
-    // Status interface
-    val idle           = Output(Bool())
-    val done           = Output(Bool())
-    val ack            = Input(Bool())
-    // Result interface
-    val rdata          = Output(UInt(XLEN.W))
-    val exception      = Output(MemUExceptionType())
-    val exceptionEn    = Output(Bool())
-    // AXI4 AR/R channels
-    val ar = Irrevocable(new AXI4BundleAR(axiParams))
-    val r  = Flipped(Irrevocable(new AXI4BundleR(axiParams)))
-  })
-
-  // ---------- State Machine ----------
-  object State extends ChiselEnum {
-    val idle, ar_wait, r_wait, done = Value
-  }
-  private val state = RegInit(State.idle)
-
-  // ---------- Latched Inputs ----------
-  private val op_reg       = RegInit(MemUOpType.mem_LB)
-  private val addr_reg     = RegInit(0.U(XLEN.W))
-  private val isNarrow_reg = RegInit(false.B)
-
-  // ---------- Result Registers ----------
-  private val rdata_reg       = RegInit(0.U(XLEN.W))
-  private val exception_reg   = Reg(MemUExceptionType())
-  private val exceptionEn_reg = RegInit(false.B)
-
-  // ---------- State Transitions ----------
-  switch(state) {
-    is(State.idle) {
-      when(io.start) {
-        op_reg          := io.op
-        addr_reg        := io.addr
-        isNarrow_reg    := io.isNarrowDevice
-        exceptionEn_reg := false.B // reset status
-        state := State.ar_wait
-      }
-    }
-    is(State.ar_wait) {
-      when(io.ar.fire) { state := State.r_wait }
-    }
-    is(State.r_wait) {
-      when(io.r.fire) {
-        when(io.r.bits.resp =/= AXI4Resp.OKAY) {
-          exception_reg   := MemUExceptionType.mem_LOAD_ACCESS_FAULT
-          exceptionEn_reg := true.B
-        }
-        state := State.done
-      }
-    }
-    is(State.done) {
-      when(io.ack) { state := State.idle }
-    }
-  }
-
-  // ---------- AR Channel: Address/Size Generation ----------
-  private val byte_offset = addr_reg(1, 0)
-
-  // 窄传输：使用实际的size和地址
-  private val ar_size_narrow = MuxLookup(op_reg, 2.U)(Seq(
-    MemUOpType.mem_LB  -> 0.U,
-    MemUOpType.mem_LBU -> 0.U,
-    MemUOpType.mem_LH  -> 1.U,
-    MemUOpType.mem_LHU -> 1.U,
-    MemUOpType.mem_LW  -> 2.U
-  ))
-  private val ar_addr_narrow = MuxLookup(op_reg, addr_reg)(Seq(
-    MemUOpType.mem_LB  -> addr_reg,
-    MemUOpType.mem_LBU -> addr_reg,
-    MemUOpType.mem_LH  -> Cat(addr_reg(XLEN - 1, 1), 0.U(1.W)),
-    MemUOpType.mem_LHU -> Cat(addr_reg(XLEN - 1, 1), 0.U(1.W)),
-    MemUOpType.mem_LW  -> Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
-  ))
-  // 宽传输：统一使用32位读取，从返回的word中按byte_offset提取数据
-  private val ar_size_wide = 2.U
-  private val ar_addr_wide = Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
-
-  private val ar_size = Mux(isNarrow_reg, ar_size_narrow, ar_size_wide)
-  private val ar_addr = Mux(isNarrow_reg, ar_addr_narrow, ar_addr_wide)
-
-  private val idCntQ = RegInit(0.U(axiParams.idBits.W))
-  when(io.ar.fire) { idCntQ := idCntQ + 1.U }
-
-  io.ar.valid      := (state === State.ar_wait)
-  io.ar.bits.id    := idCntQ
-  io.ar.bits.addr  := ar_addr
-  io.ar.bits.len   := 0.U
-  io.ar.bits.size  := ar_size
-  io.ar.bits.burst := 1.U
-  io.ar.bits.lock  := 0.U
-  io.ar.bits.cache := 0.U
-  io.ar.bits.prot  := 0.U
-  io.ar.bits.qos   := 0.U
-
-  // ---------- R Channel: Data Extraction ----------
-  io.r.ready := (state === State.r_wait)
-
-  private val rdata_raw = io.r.bits.data
-
-  // 宽传输：从返回的word中按byte_offset提取数据
-  private val rdata_byte_wide = (rdata_raw >> (byte_offset << 3.U))(7, 0)
-  private val rdata_half_wide = Mux(addr_reg(1), rdata_raw(31, 16), rdata_raw(15, 0))
-  // 窄传输：数据已经在低位
-  private val rdata_byte_narrow = rdata_raw(7, 0)
-  private val rdata_half_narrow = rdata_raw(15, 0)
-
-  private val rdata_byte = Mux(isNarrow_reg, rdata_byte_narrow, rdata_byte_wide)
-  private val rdata_half = Mux(isNarrow_reg, rdata_half_narrow, rdata_half_wide)
-
-  when(io.r.fire) {
-    rdata_reg := MuxLookup(op_reg, rdata_raw)(Seq(
-      MemUOpType.mem_LB  -> SignExt(rdata_byte, XLEN),
-      MemUOpType.mem_LBU -> ZeroExt(rdata_byte, XLEN),
-      MemUOpType.mem_LH  -> SignExt(rdata_half, XLEN),
-      MemUOpType.mem_LHU -> ZeroExt(rdata_half, XLEN),
-      MemUOpType.mem_LW  -> rdata_raw
-    ))
-  }
-
-  // ---------- Status/Result Outputs ----------
-  io.idle        := (state === State.idle)
-  io.done        := (state === State.done)
-  io.rdata       := rdata_reg
-  io.exception   := exception_reg
-  io.exceptionEn := exceptionEn_reg
-}
-
-// ============================================================
-// AXI4 Write Channel Controller
-// Handles AW/W/B channel state machine, address/size generation,
-// write data shifting and strobe generation.
-// ============================================================
-class AXI4WritePort extends Module with HasCoreParameter {
-  private val axiParams = CPUAXI4BundleParameters()
-  val io = IO(new Bundle {
-    // Control interface
-    val start          = Input(Bool())
-    val op             = Input(MemUOpType())
-    val addr           = Input(UInt(XLEN.W))
-    val wdata          = Input(UInt(XLEN.W))
-    val isNarrowDevice = Input(Bool())
-    // Status interface
-    val idle           = Output(Bool())
-    val done           = Output(Bool())
-    val ack            = Input(Bool())
-    // Result interface
-    val exception      = Output(MemUExceptionType())
-    val exceptionEn    = Output(Bool())
-    // AXI4 AW/W/B channels
-    val aw = Irrevocable(new AXI4BundleAW(axiParams))
-    val w  = Irrevocable(new AXI4BundleW(axiParams))
-    val b  = Flipped(Irrevocable(new AXI4BundleB(axiParams)))
-  })
-
-  // ---------- State Machine ----------
-  object State extends ChiselEnum {
-    val idle, aw_w_wait, b_wait, done = Value
-  }
-  private val state = RegInit(State.idle)
-
-  // ---------- Latched Inputs ----------
-  private val op_reg       = RegInit(MemUOpType.mem_SB)
-  private val addr_reg     = RegInit(0.U(XLEN.W))
-  private val wdata_reg    = RegInit(0.U(XLEN.W))
-  private val isNarrow_reg = RegInit(false.B)
-
-  // ---------- Result Registers ----------
-  private val exception_reg   = Reg(MemUExceptionType())
-  private val exceptionEn_reg = RegInit(false.B)
-
-  // ---------- AW/W Handshake Tracking ----------
-  private val aw_sent = RegInit(false.B)
-  private val w_sent  = RegInit(false.B)
-
-  // ---------- State Transitions ----------
-  switch(state) {
-    is(State.idle) {
-      when(io.start) {
-        op_reg          := io.op
-        addr_reg        := io.addr
-        wdata_reg       := io.wdata
-        isNarrow_reg    := io.isNarrowDevice
-        exceptionEn_reg := false.B // reset status
-        aw_sent := false.B
-        w_sent  := false.B
-        state := State.aw_w_wait
-      }
-    }
-    is(State.aw_w_wait) {
-      when(io.aw.fire) { aw_sent := true.B }
-      when(io.w.fire)  { w_sent  := true.B }
-      val aw_done = aw_sent || io.aw.fire
-      val w_done  = w_sent  || io.w.fire
-      when(aw_done && w_done) { state := State.b_wait }
-    }
-    is(State.b_wait) {
-      when(io.b.fire) {
-        when(io.b.bits.resp =/= AXI4Resp.OKAY) {
-          exception_reg   := MemUExceptionType.mem_STORE_ACCESS_FAULT
-          exceptionEn_reg := true.B
-        }
-        state := State.done
-      }
-    }
-    is(State.done) {
-      when(io.ack) { state := State.idle }
-    }
-  }
-
-  // ---------- AW Channel: Address/Size Generation ----------
-  private val byte_offset = addr_reg(1, 0)
-
-  // 宽传输：统一使用32位写入，用strb选择要写的字节
-  private val aw_size_wide = 2.U
-  private val aw_addr_wide = Cat(addr_reg(XLEN - 1, 2), 0.U(2.W))
-
-  // 写地址统一使用4字节对齐（AXI4ToAPB 要求写地址必须4字节对齐）
-  private val aw_size = aw_size_wide
-  private val aw_addr = aw_addr_wide
-
-  private val idCntQ = RegInit(0.U(axiParams.idBits.W))
-  when(io.aw.fire) { idCntQ := idCntQ + 1.U }
-
-  io.aw.valid      := (state === State.aw_w_wait) && !aw_sent
-  io.aw.bits.id    := idCntQ
-  io.aw.bits.addr  := aw_addr
-  io.aw.bits.len   := 0.U
-  io.aw.bits.size  := aw_size
-  io.aw.bits.burst := 1.U
-  io.aw.bits.lock  := 0.U
-  io.aw.bits.cache := 0.U
-  io.aw.bits.prot  := 0.U
-  io.aw.bits.qos   := 0.U
-
-  // ---------- W Channel: Data/Strb Generation ----------
-  // 宽传输：数据移位到对应位置，strb选择要写的字节
-  private val wstrb_wide = MuxLookup(op_reg, "b1111".U(4.W))(Seq(
-    MemUOpType.mem_SB -> ("b0001".U << byte_offset),
-    MemUOpType.mem_SH -> Mux(addr_reg(1), "b1100".U(4.W), "b0011".U(4.W)),
-    MemUOpType.mem_SW -> "b1111".U(4.W)
-  ))
-  private val wdata_wide = MuxLookup(op_reg, wdata_reg)(Seq(
-    MemUOpType.mem_SB -> (wdata_reg(7, 0) << (byte_offset << 3.U)),
-    MemUOpType.mem_SH -> Mux(addr_reg(1), wdata_reg(15, 0) << 16.U, wdata_reg(15, 0)),
-    MemUOpType.mem_SW -> wdata_reg
-  ))
-
-  io.w.valid     := (state === State.aw_w_wait) && !w_sent
-  io.w.bits.data := wdata_wide
-  io.w.bits.strb := wstrb_wide
-  io.w.bits.last := true.B
-
-  // ---------- B Channel ----------
-  io.b.ready := (state === State.b_wait)
-
-  // ---------- Status/Result Outputs ----------
-  io.idle        := (state === State.idle)
-  io.done        := (state === State.done)
-  io.exception   := exception_reg
-  io.exceptionEn := exceptionEn_reg
-}
-
-// ============================================================
-// LSU (Top Level)
-// Orchestrates read/write sub-modules, handles DecoupledIO
-// handshaking, alignment checks, and narrow device detection.
-// External interface is unchanged from the original LSU.
-// ============================================================
-class LSU extends Module with HasCoreParameter {
-  val io = IO(new Bundle {
-    val in     = Flipped(DecoupledIO(new MEMUInputBundle))
-    val out    = DecoupledIO(new MEMUOutputBundle)
-    val dcache = AXI4Bundle(CPUAXI4BundleParameters())
-    val isMMIO = Output(Bool())
-  })
-
-  // ---------- Sub-modules ----------
-  private val readPort  = Module(new AXI4ReadPort)
-  private val writePort = Module(new AXI4WritePort)
-
-  // ---------- Input Decode ----------
-  private val isLoad  = io.in.bits.op.isOneOf(MemUOpType.mem_LB, MemUOpType.mem_LH, MemUOpType.mem_LW, MemUOpType.mem_LBU, MemUOpType.mem_LHU)
-  private val isStore = io.in.bits.op.isOneOf(MemUOpType.mem_SB, MemUOpType.mem_SH, MemUOpType.mem_SW)
-
-  // ---------- Narrow Device Detection ----------
-  private val addr = io.in.bits.addr
-  private val isNarrowDevice = (SoCConfig.uartBase.U <= addr) && (addr < (SoCConfig.uartBase + SoCConfig.uartSize).U) ||
-    (SoCConfig.gpioBase.U <= addr) && (addr < (SoCConfig.gpioBase + SoCConfig.gpioSize).U) ||
-    (SoCConfig.vgaBase.U <= addr) && (addr < (SoCConfig.vgaBase + SoCConfig.vgaSize).U) ||
-    (SoCConfig.keyboardBase.U <= addr) && (addr < (SoCConfig.keyboardBase + SoCConfig.keyboardSize).U) ||
-    (SoCConfig.spiCtrlBase.U <= addr) && (addr < (SoCConfig.spiCtrlBase + SoCConfig.spiCtrlSize).U)
-
-  // ---------- Alignment Check ----------
-  // 窄传输设备使用实际 size/addr，不需要对齐检查
-  private val addrAlign2 = addr(0) === 0.U
-  private val addrAlign4 = addr(1, 0) === 0.U
-
-  private val loadMisaligned = !isNarrowDevice && MuxLookup(io.in.bits.op, false.B)(Seq(
-    MemUOpType.mem_LH  -> !addrAlign2,
-    MemUOpType.mem_LHU -> !addrAlign2,
-    MemUOpType.mem_LW  -> !addrAlign4
-  ))
-  private val storeMisaligned = !isNarrowDevice && MuxLookup(io.in.bits.op, false.B)(Seq(
-    MemUOpType.mem_SH -> !addrAlign2,
-    MemUOpType.mem_SW -> !addrAlign4
-  ))
-
-  // ---------- Top-level State Machine ----------
-  object State extends ChiselEnum {
-    val idle, reading, writing, exception_done = Value
-  }
-  private val state = RegInit(State.idle)
-
-  // Registers for misaligned exception (used only in exception_done state)
-  private val exception_reg   = Reg(MemUExceptionType())
-  private val exceptionEn_reg = RegInit(false.B)
-  private val addr_reg        = RegInit(0.U(XLEN.W))
-
-  // Register to track if current operation is MMIO (for difftest skip)
-  // 暂且认为: 所有的窄设备都是 MMIO 设备
-  private val isMMIO_reg = RegInit(false.B)
-
-  switch(state) {
-    is(State.idle) {
-      exceptionEn_reg := false.B // reset status
-      isMMIO_reg      := false.B
-      when(io.in.fire && io.in.bits.en) {
-        addr_reg   := io.in.bits.addr
-        isMMIO_reg := isNarrowDevice // latch MMIO status for difftest skip
-        when(isLoad) {
-          when(loadMisaligned) {
-            exception_reg   := MemUExceptionType.mem_LOAD_ADDRESS_MISALIGNED
-            exceptionEn_reg := true.B
-            state := State.exception_done
-          }.otherwise {
-            state := State.reading
-          }
-        }.elsewhen(isStore) {
-          when(storeMisaligned) {
-            exception_reg   := MemUExceptionType.mem_STORE_ADDRESS_MISALIGNED
-            exceptionEn_reg := true.B
-            state := State.exception_done
-          }.otherwise {
-            state := State.writing
-          }
-        }
-      }
-    }
-    is(State.reading) {
-      when(readPort.io.done && io.out.fire) {
-        state := State.idle
-      }
-    }
-    is(State.writing) {
-      when(writePort.io.done && io.out.fire) {
-        state := State.idle
-      }
-    }
-    is(State.exception_done) { // just for misaligned
-      when(io.out.fire) {
-        state := State.idle
-      }
-    }
-  }
-
-  // ---------- Input Handshake ----------
-  io.in.ready := (state === State.idle)
-
-  // ---------- Sub-module Control ----------
-  readPort.io.start          := io.in.fire && isLoad && io.in.bits.en && !loadMisaligned
-  readPort.io.op             := io.in.bits.op
-  readPort.io.addr           := io.in.bits.addr
-  readPort.io.isNarrowDevice := isNarrowDevice
-  readPort.io.ack            := io.out.fire && (state === State.reading)
-
-  writePort.io.start          := io.in.fire && isStore && io.in.bits.en && !storeMisaligned
-  writePort.io.op             := io.in.bits.op
-  writePort.io.addr           := io.in.bits.addr
-  writePort.io.wdata          := io.in.bits.wdata
-  writePort.io.isNarrowDevice := isNarrowDevice
-  writePort.io.ack            := io.out.fire && (state === State.writing)
-
-  // ---------- AXI4 Channel Connections ----------
-  io.dcache.ar <> readPort.io.ar
-  io.dcache.r  <> readPort.io.r
-  io.dcache.aw <> writePort.io.aw
-  io.dcache.w  <> writePort.io.w
-  io.dcache.b  <> writePort.io.b
-
-  // ---------- Output ----------
-  private val isReadDone      = (state === State.reading) && readPort.io.done
-  private val isWriteDone     = (state === State.writing) && writePort.io.done
-  private val isExceptionDone = (state === State.exception_done)
-
-  io.out.valid            := isReadDone || isWriteDone || isExceptionDone
-  io.out.bits.rdata       := Mux(isReadDone, readPort.io.rdata, 0.U)
-  io.out.bits.exception   := MuxCase(exception_reg, Seq(
-    isReadDone  -> readPort.io.exception,
-    isWriteDone -> writePort.io.exception
-  ))
-  io.out.bits.exceptionEn := MuxCase(exceptionEn_reg, Seq(
-    isReadDone  -> readPort.io.exceptionEn,
-    isWriteDone -> writePort.io.exceptionEn
-  ))
-  io.out.bits.xtval := addr_reg
-
-  io.isMMIO := isMMIO_reg
 }

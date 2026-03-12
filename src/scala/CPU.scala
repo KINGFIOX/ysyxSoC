@@ -52,10 +52,10 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     val core = Module(new NPCCore(axiParams))
 
     // --- connect ---
-    define(probe, core.io.probe)
+    define(probe, core.probe)
 
-    icache <> core.io.icache
-    dcache <> core.io.dcache
+    icache <> core.icache
+    dcache <> core.dcache
 
     // Slave interface is not used by NPCCore, tie off
     slave.ar.ready := false.B
@@ -67,9 +67,9 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     slave.b.bits := DontCare
 
     // fence_i
-    licache.module.fence_i := core.io.fence_i
+    licache.module.fence_i := core.fence_i
 
     // Interrupt is not used yet
-    core.io.interrupt := interrupt
+    core.interrupt := interrupt
   }
 }

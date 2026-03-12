@@ -14,13 +14,13 @@ object ALUOpType extends ChiselEnum {
 }
 
 class ALUInputBundle extends Bundle with HasCoreParameter {
-  val op1   = UInt(XLEN.W)
-  val op2   = UInt(XLEN.W)
+  val op1   = UInt(dataBits.W)
+  val op2   = UInt(dataBits.W)
   val aluOp = ALUOpType()
 }
 
 class ALUOutputBundle extends Bundle with HasCoreParameter {
-  val result = UInt(XLEN.W)
+  val result = UInt(dataBits.W)
 }
 
 class ALU extends Module with HasCoreParameter {
@@ -31,7 +31,7 @@ class ALU extends Module with HasCoreParameter {
 
   private val op1   = io.in.op1
   private val op2   = io.in.op2
-  private val shamt = op2(log2Up(XLEN) - 1, 0) // 移位量 (低 5 位)
+  private val shamt = op2(log2Up(dataBits) - 1, 0) // 移位量 (低 5 位)
 
   io.out.result := 0.U // default
 

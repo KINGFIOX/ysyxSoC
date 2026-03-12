@@ -825,4 +825,4 @@ class sdram_cmd_io extends Bundle {
   val rdata = Output(UInt(16.W))
 }
 
-class sdram_cmd extends FixedIOExtModule(new sdram_cmd_io) {}
+class sdram_cmd extends FixedIOExtModule(new sdram_cmd_io)
