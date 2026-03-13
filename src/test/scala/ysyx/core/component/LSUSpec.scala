@@ -1,11 +1,13 @@
-package ysyx.core.component
+package ysyx.core
 
 import chisel3._
-import chisel3.simulator.scalatest.ChiselSim
+import chisel3.simulator.scalatest._
+
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
-
 import freechips.rocketchip.amba.axi4._
+
+import ysyx.core.lsu._
 
 class LoadUnitSpec extends AnyFunSpec with Matchers with ChiselSim {
   val axiParams = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4)

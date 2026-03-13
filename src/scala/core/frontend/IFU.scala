@@ -9,16 +9,15 @@ import freechips.rocketchip.util._
 import ysyx.core.common._
 import ysyx.core.lsu._
 
-class IFUOutput extends Bundle with HasCoreParameter {
+class IFUOutput extends NPCBundle {
   val inst = UInt(InstBits.W)
   val pc = UInt(dataBits.W)
-  val isValid = Bool()
   val exception = IFUExceptionType()
   val mtval = UInt(dataBits.W) // access fault address
   val exceptionEn = Bool()
 }
 
-class RedirectBundle extends Bundle with HasCoreParameter {
+class RedirectBundle extends NPCBundle {
   val valid = Bool()
   val target = UInt(addrBits.W)
 }
@@ -76,7 +75,6 @@ class IFU extends NPCModule {
   io.out.valid := (stateQ === State.output_wait)
   io.out.bits.inst := instQ
   io.out.bits.pc := pcQ
-  io.out.bits.isValid := (stateQ === State.output_wait)
   io.out.bits.exception := exceptQ
   io.out.bits.mtval := pcQ
   io.out.bits.exceptionEn := exceptEnQ
