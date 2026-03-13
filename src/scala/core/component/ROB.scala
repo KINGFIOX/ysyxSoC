@@ -57,7 +57,7 @@ class RobEnqData extends Bundle with HasCoreParameter with HasRegFileParameter {
 
   val except_en = Bool()
   val mcause    = UInt(dataBits.W)
-  val xtval     = UInt(dataBits.W)
+  val mtval     = UInt(dataBits.W)
 
   val dispatch_executed = Bool()
   val rd_val            = UInt(dataBits.W)
@@ -133,12 +133,12 @@ class Rob(val entries: Int = 32) extends NPCModule {
   val ram = Reg(Vec(entries, new RobEntry))
 
   // ---- pointers ----
-  val head    = RegInit(0.U(idxBits.W))
+  val head_q    = RegInit(0.U(idxBits.W))
   val tail_q  = RegInit(0.U(idxBits.W))
   val count_q = RegInit(0.U((idxBits + 1).W))
 
-  val empty = count_q === 0.U
-  val full  = count_q === entries.U
+  val empty_w = count_q === 0.U
+  val full_w  = count_q === entries.U
 
   private def idx(tag: UInt): UInt = tag(idxBits - 1, 0)
 
@@ -184,7 +184,7 @@ class Rob(val entries: Int = 32) extends NPCModule {
   // Enqueue
   // ============================================================
   val enq_fire = io.enq.valid && io.enq.ready
-  io.enq.ready := !full && !io.flush
+  io.enq.ready := !full_w && !io.flush
   io.enq_tag   := tail_q.pad(robEntryBits)
 
   when(enq_fire) {
@@ -204,7 +204,7 @@ class Rob(val entries: Int = 32) extends NPCModule {
 
     e.except_en := d.except_en
     e.mcause    := d.mcause
-    e.xtval     := d.xtval
+    e.xtval     := d.mtval
 
     e.mispredict := d.mispredict
     e.target_npc := d.target_npc
@@ -216,14 +216,14 @@ class Rob(val entries: Int = 32) extends NPCModule {
   // ============================================================
   // Commit — expose head entry
   // ============================================================
-  val head_entry = ram(head)
-  io.commit.valid := !empty && head_entry.state === EntryState.executed
-  io.commit.tag   := head.pad(robEntryBits)
+  val head_entry = ram(head_q)
+  io.commit.valid := !empty_w && head_entry.state === EntryState.executed
+  io.commit.tag   := head_q.pad(robEntryBits)
   io.commit.entry := head_entry
 
   val deq_fire = io.commit.deq && io.commit.valid
   when(deq_fire && !io.flush) {
-    head := head + 1.U
+    head_q := head_q + 1.U
   }
 
   // ============================================================
@@ -238,7 +238,7 @@ class Rob(val entries: Int = 32) extends NPCModule {
   // Flush
   // ============================================================
   when(io.flush) {
-    head    := 0.U
+    head_q    := 0.U
     tail_q  := 0.U
     count_q := 0.U
   }
