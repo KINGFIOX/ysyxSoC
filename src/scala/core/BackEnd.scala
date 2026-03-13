@@ -138,7 +138,7 @@ class BackEnd extends NPCModule {
     rename_src1.tag   := 0.U
   }.otherwise {
     val fwd_tag = rat_.io.read1.tag
-    val fwd_rdy = rob_.io.fwd1.ready ||
+    val fwd_rdy = rob_.io.fwd1.valid ||
       (cdb1.valid && cdb1.tag === fwd_tag) ||
       (cdb2.valid && cdb2.tag === fwd_tag)
     val fwd_val = MuxCase(
@@ -167,7 +167,7 @@ class BackEnd extends NPCModule {
     rename_src2.tag   := 0.U
   }.otherwise {
     val fwd_tag = rat_.io.read2.tag
-    val fwd_rdy = rob_.io.fwd2.ready ||
+    val fwd_rdy = rob_.io.fwd2.valid ||
       (cdb1.valid && cdb1.tag === fwd_tag) ||
       (cdb2.valid && cdb2.tag === fwd_tag)
     val fwd_val = MuxCase(
@@ -315,13 +315,13 @@ class BackEnd extends NPCModule {
   val is_csr_wb        = alu_rob_entry.wbSel === WBSel.WB_CSR || alu_rob_entry.csr_wen
   val final_alu_result = Mux(is_csr_wb, alu_iq_.io.issue.bits.src1_v, alu_result)
 
-  rob_.io.wb.valid        := alu_issue_valid
-  rob_.io.wb.tag          := alu_issue_tag
-  rob_.io.wb.alu_result   := final_alu_result
-  rob_.io.wb.rd_val       := alu_rd_val
-  rob_.io.wb.rd_val_valid := alu_rd_val_valid
-  rob_.io.wb.mispredict   := alu_mispredict
-  rob_.io.wb.target_npc   := alu_target_npc
+  rob_.io.alu.valid             := alu_issue_valid
+  rob_.io.alu.bits.tag          := alu_issue_tag
+  rob_.io.alu.bits.alu_result   := final_alu_result
+  rob_.io.alu.bits.rd_val       := alu_rd_val
+  rob_.io.alu.bits.rd_val_valid := alu_rd_val_valid
+  rob_.io.alu.bits.mispredict   := alu_mispredict
+  rob_.io.alu.bits.target_npc   := alu_target_npc
 
   // --- BRU path ---
   bru_iq_.io.issue.ready := true.B
@@ -340,10 +340,10 @@ class BackEnd extends NPCModule {
   val bru_mispredict = br_flag
   val bru_actual_npc = Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
 
-  rob_.io.wb2.valid      := bru_issue_valid
-  rob_.io.wb2.tag        := bru_issue_tag
-  rob_.io.wb2.mispredict := bru_mispredict
-  rob_.io.wb2.actual_npc := bru_actual_npc
+  rob_.io.bru.valid      := bru_issue_valid
+  rob_.io.bru.bits.tag        := bru_issue_tag
+  rob_.io.bru.bits.mispredict := bru_mispredict
+  rob_.io.bru.bits.actual_npc := bru_actual_npc
 
   // --- AGU path ---
   agu_iq_.io.issue.ready := true.B
@@ -351,10 +351,10 @@ class BackEnd extends NPCModule {
   agu_.io.in.base   := agu_iq_.io.issue.bits.src1_v
   agu_.io.in.offset := agu_iq_.io.issue.bits.extra.imm
 
-  rob_.io.wb_agu.valid := agu_iq_.io.issue.fire
-  rob_.io.wb_agu.tag   := agu_iq_.io.issue.bits.rob_tag
-  rob_.io.wb_agu.addr  := agu_.io.out.addr
-  rob_.io.wb_agu.wdata := agu_iq_.io.issue.bits.src2_v
+  rob_.io.agu.valid := agu_iq_.io.issue.fire
+  rob_.io.agu.bits.tag   := agu_iq_.io.issue.bits.rob_tag
+  rob_.io.agu.bits.addr  := agu_.io.out.addr
+  rob_.io.agu.bits.wdata := agu_iq_.io.issue.bits.src2_v
 
   // --- CDB1 — ALU writeback broadcast ---
   cdb1.valid := alu_issue_valid && alu_rd_val_valid && alu_issue_rd_def && !flush
@@ -369,8 +369,8 @@ class BackEnd extends NPCModule {
   }
   val commitStateQ = RegInit(CommitState.idle)
 
-  val head       = rob_.io.commit.entry
-  val head_tag   = rob_.io.commit.tag
+  val head       = rob_.io.commit.bits.entry
+  val head_tag   = rob_.io.commit.bits.tag
   val head_valid = rob_.io.commit.valid
 
   val head_is_mem = head.mem.r_en || head.mem.w_en
@@ -382,11 +382,11 @@ class BackEnd extends NPCModule {
   cdb2.value := 0.U
 
   // Commit-time writeback to ROB defaults
-  rob_.io.commitWb.valid := false.B
-  rob_.io.commitWb.tag   := head_tag
-  rob_.io.commitWb.value := 0.U
+  rob_.io.wb_commit.valid := false.B
+  rob_.io.wb_commit.bits.tag   := head_tag
+  rob_.io.wb_commit.bits.value := 0.U
 
-  rob_.io.commit.deq := false.B
+  rob_.io.commit.ready := false.B
 
   // RFU write defaults
   rfu_.io.in.wen   := false.B
@@ -442,7 +442,7 @@ class BackEnd extends NPCModule {
           redirect.valid  := true.B
           redirect.target := csru_.io.xtvec
 
-          rob_.io.commit.deq := true.B
+          rob_.io.commit.ready := true.B
 
           commit_valid_dbg := true.B
           commit_pc_dbg    := head.pc
@@ -456,13 +456,13 @@ class BackEnd extends NPCModule {
               rfu_.io.in.wen   := true.B
               rfu_.io.in.wdata := lsu_.io.late.result
             }
-            rob_.io.commitWb.valid := head.rd_def
-            rob_.io.commitWb.value := lsu_.io.late.result
+            rob_.io.wb_commit.valid := head.rd_def
+            rob_.io.wb_commit.bits.value := lsu_.io.late.result
             cdb2.valid := head.rd_def
             cdb2.value := lsu_.io.late.result
 
             rat_.io.commit.en  := head.rd_def
-            rob_.io.commit.deq := true.B
+            rob_.io.commit.ready := true.B
 
             commit_valid_dbg := true.B
             commit_pc_dbg    := head.pc
@@ -482,8 +482,8 @@ class BackEnd extends NPCModule {
             rfu_.io.in.wdata := csr_rd
           }
 
-          rob_.io.commitWb.valid := head.rd_def
-          rob_.io.commitWb.value := csr_rd
+          rob_.io.wb_commit.valid := head.rd_def
+          rob_.io.wb_commit.bits.value := csr_rd
           cdb2.valid := head.rd_def
           cdb2.value := csr_rd
 
@@ -495,7 +495,7 @@ class BackEnd extends NPCModule {
             redirect.target := csru_.io.xepc
           }
 
-          rob_.io.commit.deq := true.B
+          rob_.io.commit.ready := true.B
 
           commit_valid_dbg := true.B
           commit_pc_dbg    := head.pc
@@ -520,7 +520,7 @@ class BackEnd extends NPCModule {
             redirect.target := head.target_npc
           }
 
-          rob_.io.commit.deq := true.B
+          rob_.io.commit.ready := true.B
 
           commit_valid_dbg := true.B
           commit_pc_dbg    := head.pc
@@ -538,13 +538,13 @@ class BackEnd extends NPCModule {
           rfu_.io.in.wdata := lsu_.io.late.result
         }
 
-        rob_.io.commitWb.valid := head.rd_def
-        rob_.io.commitWb.value := lsu_.io.late.result
+        rob_.io.wb_commit.valid := head.rd_def
+        rob_.io.wb_commit.bits.value := lsu_.io.late.result
         cdb2.valid := head.rd_def
         cdb2.value := lsu_.io.late.result
 
         rat_.io.commit.en  := head.rd_def
-        rob_.io.commit.deq := true.B
+        rob_.io.commit.ready := true.B
         commitStateQ       := CommitState.idle
 
         commit_valid_dbg := true.B
