@@ -44,26 +44,24 @@ object CUExceptionType extends ChiselEnum {
 }
 
 /** CU 输出的控制信号 */
-class CUOutput extends Bundle with HasRegFileParameter with HasCoreParameter {
-  val aluOp = ALUOpType(); val aluSel1 = ALUOp1Sel();
-  val aluSel2 = ALUOp2Sel() // ALU 控制
-  val immType = ImmType()
-  val npcOp = NPCOpType()
+class CUOutput extends NPCBundle {
+  val aluOp = ALUOpType() // ALU 控制
+  val aluSel1 = ALUOp1Sel()
+  val aluSel2 = ALUOp2Sel()
+  val immType = ImmType() // igu
+  val npcOp = NPCOpType() // next_pc
   val bruOp = BRUOpType() // bru
-
-  // mem
-  val mem = new MemInfoBundle
-
-  val wbSel = WBSel(); val rfWen = Bool() // write back
-  val csrOp = CSROpType(); val csrWen = Bool() // csr
-
-  // exception
-  val exception = CUExceptionType()
+  val mem = new MemInfoBundle // mem
+  val wbSel = WBSel() // write back
+  val rfWen = Bool()
+  val csrOp = CSROpType() // csr
+  val csrWen = Bool()
+  val exception = CUExceptionType() // exception
   val exceptionEn = Bool()
   val mtval = UInt(dataBits.W) // access fault address
 }
 
-class MemInfoBundle extends Bundle with HasCoreParameter {
+class MemInfoBundle extends NPCBundle {
   val size = UInt(2.W) // 0, 1, 2
   val r_en = Bool()
   val sign_ext = Bool() // need sign extension ? only used when load
@@ -72,116 +70,64 @@ class MemInfoBundle extends Bundle with HasCoreParameter {
   val wdata = UInt(dataBits.W)
 }
 
-class CUInput extends Bundle with HasCoreParameter {
+class CUInput extends NPCBundle {
   val inst = UInt(InstBits.W)
 }
 
-/** CU 译码表: InstPattern 只描述编码结构, DecodeField 内推导控制信号 */
 object CU {
-  private def litBP(value: BigInt, w: Int): BitPat =
-    BitPat("b" + value.toString(2).reverse.padTo(w, '0').reverse)
+  // format: off
+  private def litBP(value: BigInt, w: Int): BitPat = BitPat("b" + value.toString(2).reverse.padTo(w, '0').reverse)
+  // format: on
 
   // ==================== DecodePattern ====================
 
-  /** 按 RISC-V 编码字段拆分的指令模式, 不携带任何控制信号 */
+  // format: off
   case class InstPattern(
       func7: BitPat = BitPat.dontCare(7),
-      rs2: BitPat = BitPat.dontCare(5),
+      rs2: BitPat = BitPat.dontCare(5), // system
       func3: BitPat = BitPat.dontCare(3),
       opcode: BitPat
   ) extends DecodePattern {
-    def bitPat: BitPat =
-      func7 ## rs2 ## BitPat.dontCare(5) ## func3 ## BitPat.dontCare(
-        5
-      ) ## opcode
+    def bitPat: BitPat = func7 ## rs2 ## BitPat.dontCare(5) ## func3 ## BitPat.dontCare( 5) ## opcode
   }
+  // format: on
 
-  // RISC-V opcode 常量 (rawString 格式)
-  private val OP_R = "0110011" // R-type
-  private val OP_I_ALU = "0010011" // I-type ALU
-  private val OP_LOAD = "0000011" // Load
-  private val OP_STORE = "0100011" // Store
+  // format: off
+  private val OP_R      = "0110011" // R-type
+  private val OP_I_ALU  = "0010011" // I-type ALU
+  private val OP_LOAD   = "0000011" // Load
+  private val OP_STORE  = "0100011" // Store
   private val OP_BRANCH = "1100011" // Branch
-  private val OP_JAL = "1101111" // JAL
-  private val OP_JALR = "1100111" // JALR
-  private val OP_LUI = "0110111" // LUI
-  private val OP_AUIPC = "0010111" // AUIPC
+  private val OP_JAL    = "1101111" // JAL
+  private val OP_JALR   = "1100111" // JALR
+  private val OP_LUI    = "0110111" // LUI
+  private val OP_AUIPC  = "0010111" // AUIPC
   private val OP_SYSTEM = "1110011" // ECALL / EBREAK / MRET / CSR
+  // format: on
 
   // ==================== 指令表 (纯编码信息) ====================
 
+  // format: off
   val allInstructions: Seq[InstPattern] = Seq(
     // R-type (func7 + func3 + opcode)
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b000"),
-      opcode = BitPat("b0110011")
-    ), // ADD
-    InstPattern(
-      func7 = BitPat("b0100000"),
-      func3 = BitPat("b000"),
-      opcode = BitPat("b0110011")
-    ), // SUB
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b111"),
-      opcode = BitPat("b0110011")
-    ), // AND
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b110"),
-      opcode = BitPat("b0110011")
-    ), // OR
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b100"),
-      opcode = BitPat("b0110011")
-    ), // XOR
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b001"),
-      opcode = BitPat("b0110011")
-    ), // SLL
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b101"),
-      opcode = BitPat("b0110011")
-    ), // SRL
-    InstPattern(
-      func7 = BitPat("b0100000"),
-      func3 = BitPat("b101"),
-      opcode = BitPat("b0110011")
-    ), // SRA
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b010"),
-      opcode = BitPat("b0110011")
-    ), // SLT
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      func3 = BitPat("b011"),
-      opcode = BitPat("b0110011")
-    ), // SLTU
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b000"), opcode = BitPat("b0110011")), // ADD
+    InstPattern( func7 = BitPat("b0100000"), func3 = BitPat("b000"), opcode = BitPat("b0110011")), // SUB
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b111"), opcode = BitPat("b0110011")), // AND
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b110"), opcode = BitPat("b0110011")), // OR
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b100"), opcode = BitPat("b0110011")), // XOR
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b001"), opcode = BitPat("b0110011")), // SLL
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b101"), opcode = BitPat("b0110011")), // SRL
+    InstPattern( func7 = BitPat("b0100000"), func3 = BitPat("b101"), opcode = BitPat("b0110011")), // SRA
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b010"), opcode = BitPat("b0110011")), // SLT
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b011"), opcode = BitPat("b0110011")), // SLTU
     // I-type ALU (func3 + opcode, shift 需要 func7)
     InstPattern(func3 = BitPat("b000"), opcode = BitPat("b0010011")), // ADDI
     InstPattern(func3 = BitPat("b111"), opcode = BitPat("b0010011")), // ANDI
     InstPattern(func3 = BitPat("b110"), opcode = BitPat("b0010011")), // ORI
     InstPattern(func3 = BitPat("b100"), opcode = BitPat("b0010011")), // XORI
-    InstPattern(
-      func7 = BitPat("b000000?"),
-      func3 = BitPat("b001"),
-      opcode = BitPat("b0010011")
-    ), // SLLI
-    InstPattern(
-      func7 = BitPat("b000000?"),
-      func3 = BitPat("b101"),
-      opcode = BitPat("b0010011")
-    ), // SRLI
-    InstPattern(
-      func7 = BitPat("b010000?"),
-      func3 = BitPat("b101"),
-      opcode = BitPat("b0010011")
-    ), // SRAI
+    InstPattern( func7 = BitPat("b000000?"), func3 = BitPat("b001"), opcode = BitPat("b0010011")), // SLLI
+    InstPattern( func7 = BitPat("b000000?"), func3 = BitPat("b101"), opcode = BitPat("b0010011")), // SRLI
+    InstPattern( func7 = BitPat("b010000?"), func3 = BitPat("b101"), opcode = BitPat("b0010011")), // SRAI
     InstPattern(func3 = BitPat("b010"), opcode = BitPat("b0010011")), // SLTI
     InstPattern(func3 = BitPat("b011"), opcode = BitPat("b0010011")), // SLTIU
     // Load (func3 + opcode)
@@ -209,31 +155,18 @@ object CU {
     InstPattern(opcode = BitPat("b0110111")), // LUI
     InstPattern(opcode = BitPat("b0010111")), // AUIPC
     // System (func7 + rs2 + func3 + opcode)
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      rs2 = BitPat("b00000"),
-      func3 = BitPat("b000"),
-      opcode = BitPat("b1110011")
-    ), // ECALL
-    InstPattern(
-      func7 = BitPat("b0000000"),
-      rs2 = BitPat("b00001"),
-      func3 = BitPat("b000"),
-      opcode = BitPat("b1110011")
-    ), // EBREAK
-    InstPattern(
-      func7 = BitPat("b0011000"),
-      rs2 = BitPat("b00010"),
-      func3 = BitPat("b000"),
-      opcode = BitPat("b1110011")
-    ), // MRET
+    InstPattern( func7 = BitPat("b0000000"), rs2 = BitPat("b00000"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // ECALL
+    InstPattern( func7 = BitPat("b0000000"), rs2 = BitPat("b00001"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // EBREAK
+    InstPattern( func7 = BitPat("b0011000"), rs2 = BitPat("b00010"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // MRET
     // CSR (func3 + opcode)
     InstPattern(func3 = BitPat("b001"), opcode = BitPat("b1110011")), // CSRRW
     InstPattern(func3 = BitPat("b010"), opcode = BitPat("b1110011")) // CSRRS
   )
+  // format: on
 
   // ==================== DecodeField 对象 ====================
 
+  // format: off
   object AluOpField extends DecodeField[InstPattern, UInt] {
     def name = "aluOp"
     def chiselType = UInt(log2Ceil(ALUOpType.all.length).W)
@@ -266,39 +199,40 @@ object CU {
           case ("010000?", "101") => bp(ALUOpType.alu_SRA) // SRAI
           case _                  => dc
         }
-      case OP_LOAD | OP_STORE | OP_BRANCH | OP_JAL | OP_JALR | OP_LUI |
-          OP_AUIPC =>
-        bp(ALUOpType.alu_ADD)
+      case OP_LOAD | OP_STORE | OP_BRANCH | OP_JAL | OP_JALR | OP_LUI | OP_AUIPC => bp(ALUOpType.alu_ADD)
       case _ => dc
     }
   }
+  // format: on
 
+  // format: off
   object AluSel1Field extends DecodeField[InstPattern, UInt] {
     def name = "aluSel1"
     def chiselType = UInt(log2Ceil(ALUOp1Sel.all.length).W)
     private def bp(v: ALUOp1Sel.Type): BitPat = litBP(v.litValue, width)
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R | OP_I_ALU | OP_LOAD | OP_STORE | OP_JALR =>
-        bp(ALUOp1Sel.OP1_RS1)
-      case OP_BRANCH | OP_JAL | OP_AUIPC => bp(ALUOp1Sel.OP1_PC)
-      case OP_LUI                        => bp(ALUOp1Sel.OP1_ZERO)
-      case _                             => dc
+      case OP_R | OP_I_ALU | OP_LOAD | OP_STORE | OP_JALR => bp(ALUOp1Sel.OP1_RS1)
+      case OP_BRANCH | OP_JAL | OP_AUIPC                  => bp(ALUOp1Sel.OP1_PC)
+      case OP_LUI                                         => bp(ALUOp1Sel.OP1_ZERO)
+      case _                                              => dc
     }
   }
+  // format: on
 
+  // format: off
   object AluSel2Field extends DecodeField[InstPattern, UInt] {
     def name = "aluSel2"
     def chiselType = UInt(log2Ceil(ALUOp2Sel.all.length).W)
     private def bp(v: ALUOp2Sel.Type): BitPat = litBP(v.litValue, width)
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_R => bp(ALUOp2Sel.OP2_RS2)
-      case OP_I_ALU | OP_LOAD | OP_STORE | OP_BRANCH | OP_JAL | OP_JALR |
-          OP_LUI | OP_AUIPC =>
-        bp(ALUOp2Sel.OP2_IMM)
+      case OP_I_ALU | OP_LOAD | OP_STORE | OP_BRANCH | OP_JAL | OP_JALR | OP_LUI | OP_AUIPC => bp(ALUOp2Sel.OP2_IMM)
       case _ => dc
     }
   }
+  // format: on
 
+  // format: off
   object ImmTypeField extends DecodeField[InstPattern, UInt] {
     def name = "immType"
     def chiselType = UInt(log2Ceil(ImmType.all.length).W)
@@ -312,7 +246,9 @@ object CU {
       case _                                        => dc
     }
   }
+  // format: on
 
+  // format: off
   object NpcOpField extends DecodeField[InstPattern, UInt] {
     def name = "npcOp"
     def chiselType = UInt(log2Ceil(NPCOpType.all.length).W)
@@ -330,7 +266,9 @@ object CU {
       case _ => bp(NPCOpType.NPC_4)
     }
   }
+  // format: on
 
+  // format: off
   object BruOpField extends DecodeField[InstPattern, UInt] {
     def name = "bruOp"
     def chiselType = UInt(log2Ceil(BRUOpType.all.length).W)
@@ -350,7 +288,9 @@ object CU {
       case _ => bp(BRUOpType.bru_X)
     }
   }
+  // format: on
 
+  // format: off
   object MemSizeField extends DecodeField[InstPattern, UInt] {
     def name = "memSize"
     def chiselType = UInt(2.W)
@@ -375,8 +315,10 @@ object CU {
       case _ => dc
     }
   }
+  // format: on
 
   // load
+  // format: off
   object MemRenField extends BoolDecodeField[InstPattern] {
     def name = "memRen"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
@@ -384,8 +326,10 @@ object CU {
       case _       => n
     }
   }
+  // format: on
 
   // store
+  // format: off
   object MemWenField extends BoolDecodeField[InstPattern] {
     def name = "memWen"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
@@ -393,7 +337,9 @@ object CU {
       case _        => n
     }
   }
+  // format: on
 
+  // format: off
   object MemSignExtField extends BoolDecodeField[InstPattern] {
     def name = "memSignExt"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
@@ -406,7 +352,9 @@ object CU {
       case _ => n
     }
   }
+  // format: on
 
+  // format: off
   object WbSelField extends DecodeField[InstPattern, UInt] {
     def name = "wbSel"
     def chiselType = UInt(log2Ceil(WBSel.all.length).W)
@@ -423,7 +371,9 @@ object CU {
       case _ => dc
     }
   }
+  // format: on
 
+  // format: off
   object RfWenField extends BoolDecodeField[InstPattern] {
     def name = "rfWen"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
@@ -436,7 +386,9 @@ object CU {
       case _ => n
     }
   }
+  // format: on
 
+  // format: off
   object CsrOpField extends DecodeField[InstPattern, UInt] {
     def name = "csrOp"
     def chiselType = UInt(log2Ceil(CSROpType.all.length).W)
@@ -451,7 +403,9 @@ object CU {
       case _ => dc
     }
   }
+  // format: on
 
+  // format: off
   object CsrWenField extends BoolDecodeField[InstPattern] {
     def name = "csrWen"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
@@ -463,7 +417,9 @@ object CU {
       case _ => n
     }
   }
+  // format: on
 
+  // format: off
   object EbreakField extends BoolDecodeField[InstPattern] {
     def name = "ebreak"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
@@ -475,7 +431,9 @@ object CU {
       case _ => n
     }
   }
+  // format: on
 
+  // format: off
   object EcallField extends BoolDecodeField[InstPattern] {
     def name = "ecall"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
@@ -487,12 +445,15 @@ object CU {
       case _ => n
     }
   }
+  // format: on
 
+  // format: off
   object ValidField extends BoolDecodeField[InstPattern] {
     def name = "valid"
     override def default: BitPat = n
     def genTable(op: InstPattern): BitPat = y
   }
+  // format: on
 
   // ==================== DecodeTable ====================
 
@@ -519,7 +480,7 @@ object CU {
   val decodeTable = new DecodeTable[InstPattern](allInstructions, allFields)
 }
 
-class CU extends Module with HasCoreParameter with HasRegFileParameter {
+class CU extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(new CUInput)
     val out = new CUOutput
@@ -530,7 +491,6 @@ class CU extends Module with HasCoreParameter with HasRegFileParameter {
   private val inst = io.in.inst
   private val decoded = decodeTable.decode(inst)
 
-  /* --- 控制信号接线 (safe 返回 (枚举值, 有效位), 取 _1 消除 W001 警告) --- */
   io.out.aluOp := ALUOpType.safe(decoded(AluOpField))._1
   io.out.aluSel1 := ALUOp1Sel.safe(decoded(AluSel1Field))._1
   io.out.aluSel2 := ALUOp2Sel.safe(decoded(AluSel2Field))._1
@@ -548,7 +508,6 @@ class CU extends Module with HasCoreParameter with HasRegFileParameter {
   io.out.csrOp := CSROpType.safe(decoded(CsrOpField))._1
   io.out.csrWen := decoded(CsrWenField)
 
-  /* --- 异常信号 --- */
   private val isEbreak = decoded(EbreakField)
   private val isEcall = decoded(EcallField)
   private val invalidInst = !decoded(ValidField)
