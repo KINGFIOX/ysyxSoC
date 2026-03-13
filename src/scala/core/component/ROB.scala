@@ -35,7 +35,7 @@ class RobEntry extends Bundle with HasCoreParameter with HasRegFileParameter {
   val xtval     = UInt(dataBits.W)
 
   val mispredict = Bool()
-  val actual_npc = UInt(addrBits.W)
+  val target_npc = UInt(addrBits.W)
 
   val state = EntryState()
 }
@@ -58,6 +58,12 @@ class RobEnqData extends Bundle with HasCoreParameter with HasRegFileParameter {
   val except_en = Bool()
   val mcause    = UInt(dataBits.W)
   val xtval     = UInt(dataBits.W)
+
+  val dispatch_executed = Bool()
+  val rd_val            = UInt(dataBits.W)
+  val rd_val_valid      = Bool()
+  val mispredict        = Bool()
+  val target_npc        = UInt(addrBits.W)
 }
 
 class Rob(val entries: Int = 32) extends NPCModule {
@@ -65,12 +71,8 @@ class Rob(val entries: Int = 32) extends NPCModule {
   private val idxBits = log2Ceil(entries)
 
   val io = IO(new Bundle {
-    val enq = new Bundle {
-      val valid = Input(Bool())
-      val ready = Output(Bool())
-      val tag   = Output(UInt(robEntryBits.W))
-      val data  = Input(new RobEnqData)
-    }
+    val enq     = Flipped(Decoupled(new RobEnqData))
+    val enq_tag = Output(UInt(robEntryBits.W))
 
     val wb = new Bundle {
       val valid      = Input(Bool())
@@ -81,7 +83,23 @@ class Rob(val entries: Int = 32) extends NPCModule {
       val rs1_val    = Input(UInt(dataBits.W))
       val rs2_val    = Input(UInt(dataBits.W))
       val mispredict = Input(Bool())
+      val target_npc = Input(UInt(addrBits.W))
+    }
+
+    val wb2 = new Bundle {
+      val valid      = Input(Bool())
+      val tag        = Input(UInt(robEntryBits.W))
+      val mispredict = Input(Bool())
       val actual_npc = Input(UInt(addrBits.W))
+    }
+
+    val lookup1 = new Bundle {
+      val tag   = Input(UInt(robEntryBits.W))
+      val entry = Output(new RobEntry)
+    }
+    val lookup2 = new Bundle {
+      val tag   = Input(UInt(robEntryBits.W))
+      val entry = Output(new RobEntry)
     }
 
     val commit = new Bundle {
@@ -125,19 +143,28 @@ class Rob(val entries: Int = 32) extends NPCModule {
   private def idx(tag: UInt): UInt = tag(idxBits - 1, 0)
 
   // ============================================================
-  // Writeback from NPCCore (ALU result + computed values)
+  // Writeback 1 — from ALU path
   // ============================================================
   when(io.wb.valid && !io.flush) {
-    val i = idx(io.wb.tag)
-    val e = ram(i)
+    val e = ram(idx(io.wb.tag))
     e.alu_result  := io.wb.alu_result
     e.rd_val       := io.wb.rd_val
     e.rd_val_valid := io.wb.rd_val_valid
     e.rs1_val     := io.wb.rs1_val
     e.rs2_val     := io.wb.rs2_val
     e.mispredict  := io.wb.mispredict
-    e.actual_npc  := io.wb.actual_npc
+    e.target_npc  := io.wb.target_npc
     e.state       := EntryState.executed
+  }
+
+  // ============================================================
+  // Writeback 2 — from BRU path
+  // ============================================================
+  when(io.wb2.valid && !io.flush) {
+    val e = ram(idx(io.wb2.tag))
+    e.mispredict := io.wb2.mispredict
+    e.target_npc := io.wb2.actual_npc
+    e.state      := EntryState.executed
   }
 
   // Commit-time writeback (load / CSR value)
@@ -148,14 +175,20 @@ class Rob(val entries: Int = 32) extends NPCModule {
   }
 
   // ============================================================
-  // Enqueue (after writeback so tail-slot writes take priority)
+  // Lookup ports — combinational read for writeback logic
+  // ============================================================
+  io.lookup1.entry := ram(idx(io.lookup1.tag))
+  io.lookup2.entry := ram(idx(io.lookup2.tag))
+
+  // ============================================================
+  // Enqueue
   // ============================================================
   val enq_fire = io.enq.valid && io.enq.ready
   io.enq.ready := !full && !io.flush
-  io.enq.tag   := tail_q.pad(robEntryBits)
+  io.enq_tag   := tail_q.pad(robEntryBits)
 
   when(enq_fire) {
-    val d = io.enq.data
+    val d = io.enq.bits
     val e = ram(tail_q)
     e.wbSel  := d.wbSel;  e.mem := d.mem
     e.csrOp  := d.csrOp;  e.csrWen := d.csrWen
@@ -164,8 +197,8 @@ class Rob(val entries: Int = 32) extends NPCModule {
     e.rd_idx := d.rd_idx; e.rd_def := d.rd_def
 
     e.alu_result  := 0.U
-    e.rd_val       := 0.U
-    e.rd_val_valid := false.B
+    e.rd_val       := d.rd_val
+    e.rd_val_valid := d.rd_val_valid
     e.rs1_val     := 0.U
     e.rs2_val     := 0.U
 
@@ -173,10 +206,11 @@ class Rob(val entries: Int = 32) extends NPCModule {
     e.mcause    := d.mcause
     e.xtval     := d.xtval
 
-    e.mispredict := false.B
-    e.actual_npc := 0.U
+    e.mispredict := d.mispredict
+    e.target_npc := d.target_npc
 
-    e.state := Mux(d.except_en, EntryState.executed, EntryState.allocated)
+    e.state := Mux(d.except_en || d.dispatch_executed,
+                   EntryState.executed, EntryState.allocated)
   }
 
   // ============================================================
@@ -193,7 +227,7 @@ class Rob(val entries: Int = 32) extends NPCModule {
   }
 
   // ============================================================
-  // Forward ports — for dispatch operand resolution
+  // Forward ports
   // ============================================================
   io.fwd1.ready := ram(idx(io.fwd1.tag)).rd_val_valid
   io.fwd1.value := ram(idx(io.fwd1.tag)).rd_val
@@ -210,7 +244,7 @@ class Rob(val entries: Int = 32) extends NPCModule {
   }
 
   // ============================================================
-  // Pointer / count tracking (normal operation)
+  // Pointer / count tracking
   // ============================================================
   when(!io.flush) {
     when(enq_fire && !deq_fire) {

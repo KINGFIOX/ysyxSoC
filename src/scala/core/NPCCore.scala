@@ -43,11 +43,12 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   val bru_ = Module(new BRU)
   val rob_ = Module(new Rob)
   val rat_ = Module(new RAT)
-  val iq_ = Module(new IssueQueue)
+  val alu_iq_ = Module(new ALUIssueQueue)
+  val bru_iq_ = Module(new BRUIssueQueue)
   val csru_ = Module(new CSRU)
 
   val dcache_load = Module(new LoadUnit(axiParams, 1))
-  val dcache_store = Module(new StoreUnit(axiParams, 1))
+  val dcache_store = Module(new StoreUnit(axiParams, 2))
 
   // ==========================================================
   // AXI connections
@@ -63,18 +64,16 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   // ==========================================================
   // Flush / redirect wiring
   // ==========================================================
-  val flush = Wire(Bool())
+  val flush = WireDefault(false.B)
   val redirect = Wire(new RedirectBundle)
+  redirect.valid := false.B // defaults
+  redirect.target := 0.U
 
   ifu_.io.redirect := redirect
   rob_.io.flush := flush
   rat_.io.flush := flush
-  iq_.io.flush := flush
-
-  // defaults
-  flush := false.B
-  redirect.valid := false.B
-  redirect.target := 0.U
+  alu_iq_.io.flush := flush
+  bru_iq_.io.flush := flush
 
   // ==========================================================
   // Decode stage (combinational from IFU output)
@@ -90,6 +89,29 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   val rs2_idx = ifu_out.inst(24, 20)
   val rd_idx = ifu_out.inst(11, 7)
   val imm = igu_.io.out.imm
+  val dispatch_pc = ifu_out.pc
+
+  // ==========================================================
+  // Instruction classification for dispatch routing
+  // ==========================================================
+  val npcOp = cu_.io.out.npcOp
+  val aluSel1 = cu_.io.out.aluSel1
+  val aluSel2 = cu_.io.out.aluSel2
+
+  val is_jal = npcOp === NPCOpType.NPC_JAL
+  val is_mret = npcOp === NPCOpType.NPC_MRET
+  val is_lui = aluSel1 === ALUOp1Sel.OP1_ZERO // TODO:
+  val is_auipc = aluSel1 === ALUOp1Sel.OP1_PC && npcOp === NPCOpType.NPC_4
+  val is_branch = npcOp === NPCOpType.NPC_BR
+
+  val ifu_except_en = ifu_out.exceptionEn
+  val cu_except_en = cu_.io.out.exceptionEn
+  val dispatch_except_en = ifu_except_en || cu_except_en
+
+  val dispatch_resolved = is_jal || is_mret || is_lui || is_auipc
+  val skip_iq = dispatch_except_en || dispatch_resolved
+  val go_to_alu = !skip_iq && !is_branch
+  val go_to_bru = is_branch && !skip_iq
 
   // ==========================================================
   // CDB wires (declared early for dispatch bypass)
@@ -97,8 +119,10 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   val cdb1 = Wire(new CDBBundle)
   val cdb2 = Wire(new CDBBundle)
 
-  iq_.io.cdb1 := cdb1
-  iq_.io.cdb2 := cdb2
+  alu_iq_.io.cdb1 := cdb1
+  alu_iq_.io.cdb2 := cdb2
+  bru_iq_.io.cdb1 := cdb1
+  bru_iq_.io.cdb2 := cdb2
 
   // ==========================================================
   // Rename — RAT + RFU + ROB forward + CDB bypass
@@ -109,11 +133,9 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   rfu_.io.in.rs1_i := rs1_idx
   rfu_.io.in.rs2_i := rs2_idx
 
-  val needs_rs1 = (cu_.io.out.aluSel1 === ALUOp1Sel.OP1_RS1) ||
-    (cu_.io.out.npcOp === NPCOpType.NPC_BR)
-  val needs_rs2 = (cu_.io.out.aluSel2 === ALUOp2Sel.OP2_RS2) ||
-    (cu_.io.out.npcOp === NPCOpType.NPC_BR) ||
-    cu_.io.out.mem.w_en
+  val needs_rs1 = (aluSel1 === ALUOp1Sel.OP1_RS1) || is_branch
+  val needs_rs2 =
+    (aluSel2 === ALUOp2Sel.OP2_RS2) || is_branch || /*store*/ cu_.io.out.mem.w_en
 
   // --- Source 1 resolution ---
   val src1_ready = Wire(Bool())
@@ -180,13 +202,8 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   }
 
   // ==========================================================
-  // Exception from IFU / CU  →  mcause mapping
+  // Exception mcause mapping
   // ==========================================================
-  val ifu_except_en = ifu_out.exceptionEn
-  val cu_except_en = cu_.io.out.exceptionEn
-
-  val dispatch_except_en = ifu_except_en || cu_except_en
-
   val dispatch_mcause = MuxCase(
     0.U,
     Seq(
@@ -212,24 +229,52 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   val dispatch_mtval = Mux(ifu_except_en, ifu_out.mtval, cu_.io.out.mtval)
 
   // ==========================================================
+  // Dispatch-resolved value computation
+  // ==========================================================
+  val disp_rd_val = MuxCase(
+    0.U,
+    Seq(
+      is_jal -> (dispatch_pc + 4.U),
+      is_lui -> imm,
+      is_auipc -> (dispatch_pc + imm)
+    )
+  )
+  val disp_rd_val_valid = is_jal || is_lui || is_auipc
+  val disp_mispredict = is_jal || is_mret // TODO: branch predict
+  val disp_target_npc = MuxCase(
+    0.U,
+    Seq(
+      is_jal -> (dispatch_pc + imm),
+      is_branch -> (dispatch_pc + imm)
+    )
+  )
+
+  // ==========================================================
   // Dispatch — enqueue to ROB + IQ, update RAT
   // ==========================================================
-  val can_dispatch = ifu_valid && rob_.io.enq.ready &&
-    (iq_.io.enq.ready || dispatch_except_en) && !flush
-  ifu_.io.out.ready := rob_.io.enq.ready &&
-    (iq_.io.enq.ready || dispatch_except_en) && !flush
+  val iq_ready = MuxCase(
+    true.B, // not use of iq. to not block the pipeline, true default
+    (
+      Seq(
+        go_to_alu -> alu_iq_.io.enq.ready,
+        go_to_bru -> bru_iq_.io.enq.ready
+      )
+    )
+  )
+  val can_dispatch = ifu_valid && rob_.io.enq.ready && iq_ready && !flush
+  ifu_.io.out.ready := rob_.io.enq.ready && iq_ready && !flush
 
   // --- ROB enqueue ---
   rob_.io.enq.valid := can_dispatch
 
-  val rob_enq = rob_.io.enq.data
+  val rob_enq = rob_.io.enq.bits // reference a wire
   rob_enq.wbSel := cu_.io.out.wbSel
   rob_enq.mem := cu_.io.out.mem
   rob_enq.csrOp := cu_.io.out.csrOp
   rob_enq.csrWen := cu_.io.out.csrWen
   rob_enq.rfWen := cu_.io.out.rfWen
-  rob_enq.npcOp := cu_.io.out.npcOp
-  rob_enq.pc := ifu_out.pc
+  rob_enq.npcOp := npcOp
+  rob_enq.pc := dispatch_pc
   rob_enq.inst := ifu_out.inst
   rob_enq.imm := imm
   rob_enq.rd_idx := rd_idx
@@ -237,102 +282,118 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   rob_enq.except_en := dispatch_except_en
   rob_enq.mcause := dispatch_mcause
   rob_enq.xtval := dispatch_mtval
+  rob_enq.dispatch_executed := dispatch_resolved
+  rob_enq.rd_val := disp_rd_val
+  rob_enq.rd_val_valid := disp_rd_val_valid
+  rob_enq.mispredict := disp_mispredict
+  rob_enq.target_npc := disp_target_npc
 
-  // --- IQ enqueue (skip for exception instructions) ---
-  iq_.io.enq.valid := can_dispatch && !dispatch_except_en
+  // --- ALU IQ enqueue ---
+  alu_iq_.io.enq.valid := can_dispatch && go_to_alu
 
-  val iq_enq = iq_.io.enq.data
-  iq_enq.rs1_val := src1_val
-  iq_enq.rs1_tag := src1_tag
-  iq_enq.rs1_ready := src1_ready
-  iq_enq.rs2_val := src2_val
-  iq_enq.rs2_tag := src2_tag
-  iq_enq.rs2_ready := src2_ready
-  iq_enq.aluOp := cu_.io.out.aluOp
-  iq_enq.aluSel1 := cu_.io.out.aluSel1
-  iq_enq.aluSel2 := cu_.io.out.aluSel2
-  iq_enq.npcOp := cu_.io.out.npcOp
-  iq_enq.bruOp := cu_.io.out.bruOp
-  iq_enq.wbSel := cu_.io.out.wbSel
-  iq_enq.imm := imm
-  iq_enq.pc := ifu_out.pc
-  iq_enq.rob_tag := rob_.io.enq.tag
-  iq_enq.rd_def := cu_.io.out.rfWen && (rd_idx =/= 0.U)
+  val alu_enq = alu_iq_.io.enq.data
+  alu_enq.src1_val := src1_val
+  alu_enq.src1_tag := src1_tag
+  alu_enq.src1_ready := src1_ready
+
+  val is_store_dispatch = cu_.io.out.mem.w_en
+  val imm_as_src2 = (aluSel2 === ALUOp2Sel.OP2_IMM) && !is_store_dispatch
+  alu_enq.src2_val   := Mux(imm_as_src2, imm, src2_val)
+  alu_enq.src2_tag   := Mux(imm_as_src2, 0.U, src2_tag)
+  alu_enq.src2_ready := Mux(imm_as_src2, true.B, src2_ready)
+
+  alu_enq.aluOp := cu_.io.out.aluOp
+  alu_enq.rob_tag := rob_.io.enq_tag
+  alu_enq.rd_def := cu_.io.out.rfWen && (rd_idx =/= 0.U)
+
+  // --- BRU IQ enqueue ---
+  bru_iq_.io.enq.valid := can_dispatch && go_to_bru
+
+  val bru_enq = bru_iq_.io.enq.data
+  bru_enq.rs1_val := src1_val
+  bru_enq.rs1_tag := src1_tag
+  bru_enq.rs1_ready := src1_ready
+  bru_enq.rs2_val := src2_val
+  bru_enq.rs2_tag := src2_tag
+  bru_enq.rs2_ready := src2_ready
+  bru_enq.bruOp := cu_.io.out.bruOp
+  bru_enq.rob_tag := rob_.io.enq_tag
 
   // --- RAT update ---
-  val should_rename = can_dispatch && cu_.io.out.rfWen &&
-    (rd_idx =/= 0.U) && !dispatch_except_en
+  val should_rename = can_dispatch && cu_.io.out.rfWen && (rd_idx =/= 0.U) && !dispatch_except_en
   rat_.io.write.en := should_rename
   rat_.io.write.addr := rd_idx
-  rat_.io.write.tag := rob_.io.enq.tag
+  rat_.io.write.tag := rob_.io.enq_tag
 
   // ==========================================================
-  // Issue → ALU + BRU (from IQ)
+  // ALU Issue → Execute → Writeback
   // ==========================================================
-  alu_.io.in.op1 := iq_.io.issue.op1
-  alu_.io.in.op2 := iq_.io.issue.op2
-  alu_.io.in.aluOp := iq_.io.issue.aluOp
+  alu_.io.in.op1 := alu_iq_.io.issue.op1
+  alu_.io.in.op2 := alu_iq_.io.issue.op2
+  alu_.io.in.aluOp := alu_iq_.io.issue.aluOp
 
-  bru_.io.in.rs1_v := iq_.io.issue.rs1_v
-  bru_.io.in.rs2_v := iq_.io.issue.rs2_v
-  bru_.io.in.op := iq_.io.issue.bruOp
-
-  // ==========================================================
-  // Writeback — compute results in NPCCore, write to ROB
-  // ==========================================================
-  val issue_valid = iq_.io.issue.valid
-  val issue_npcOp = iq_.io.issue.npcOp
-  val issue_wbSel = iq_.io.issue.wbSel
-  val issue_pc = iq_.io.issue.pc
-  val issue_tag = iq_.io.issue.rob_tag
-  val issue_rd_def = iq_.io.issue.rd_def
+  val alu_issue_valid = alu_iq_.io.issue.valid
+  val alu_issue_tag = alu_iq_.io.issue.rob_tag
+  val alu_issue_rd_def = alu_iq_.io.issue.rd_def
   val alu_result = alu_.io.out.result
+
+  rob_.io.lookup1.tag := alu_issue_tag
+  val alu_rob_entry = rob_.io.lookup1.entry
+
+  val alu_rd_val =
+    Mux(alu_rob_entry.rd_val_valid, alu_rob_entry.rd_val, alu_result)
+  val alu_rd_val_valid =
+    alu_rob_entry.rd_val_valid || (alu_rob_entry.wbSel === WBSel.WB_ALU)
+
+  val alu_is_jalr = alu_rob_entry.npcOp === NPCOpType.NPC_JALR
+  val alu_mispredict = alu_is_jalr
+  val alu_target_npc =
+    Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.pc + 4.U)
+
+  val is_store_wb = alu_rob_entry.mem.w_en
+  val wb_alu_result = Mux(is_store_wb,
+    alu_iq_.io.issue.src1_v + alu_rob_entry.imm,
+    alu_result)
+
+  rob_.io.wb.valid := alu_issue_valid
+  rob_.io.wb.tag := alu_issue_tag
+  rob_.io.wb.alu_result := wb_alu_result
+  rob_.io.wb.rd_val := alu_rd_val
+  rob_.io.wb.rd_val_valid := alu_rd_val_valid
+  rob_.io.wb.rs1_val := alu_iq_.io.issue.src1_v
+  rob_.io.wb.rs2_val := alu_iq_.io.issue.src2_v
+  rob_.io.wb.mispredict := alu_mispredict
+  rob_.io.wb.target_npc := alu_target_npc
+
+  // ==========================================================
+  // BRU Issue → Execute → Writeback
+  // ==========================================================
+  bru_.io.in.rs1_v := bru_iq_.io.issue.rs1_v
+  bru_.io.in.rs2_v := bru_iq_.io.issue.rs2_v
+  bru_.io.in.op := bru_iq_.io.issue.bruOp
+
+  val bru_issue_valid = bru_iq_.io.issue.valid
+  val bru_issue_tag = bru_iq_.io.issue.rob_tag
   val br_flag = bru_.io.out.br_flag
 
-  val wb_rd_val = MuxCase(
-    0.U,
-    Seq(
-      (issue_wbSel === WBSel.WB_ALU) -> alu_result,
-      (issue_wbSel === WBSel.WB_PC4) -> (issue_pc + 4.U)
-    )
-  )
-  val wb_rd_val_valid = (issue_wbSel === WBSel.WB_ALU) ||
-    (issue_wbSel === WBSel.WB_PC4)
+  rob_.io.lookup2.tag := bru_issue_tag
+  val bru_rob_entry = rob_.io.lookup2.entry
 
-  val wb_mispredict = MuxLookup(issue_npcOp, false.B)(
-    Seq(
-      NPCOpType.NPC_4 -> false.B,
-      NPCOpType.NPC_BR -> br_flag,
-      NPCOpType.NPC_JAL -> true.B,
-      NPCOpType.NPC_JALR -> true.B,
-      NPCOpType.NPC_MRET -> true.B
-    )
-  )
-  val wb_actual_npc = MuxLookup(issue_npcOp, (issue_pc + 4.U))(
-    Seq(
-      NPCOpType.NPC_4 -> (issue_pc + 4.U),
-      NPCOpType.NPC_BR -> Mux(br_flag, alu_result, issue_pc + 4.U),
-      NPCOpType.NPC_JAL -> alu_result,
-      NPCOpType.NPC_JALR -> (alu_result & ~1.U(addrBits.W))
-    )
-  )
+  val bru_mispredict = br_flag
+  val bru_actual_npc =
+    Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
 
-  rob_.io.wb.valid := issue_valid
-  rob_.io.wb.tag := issue_tag
-  rob_.io.wb.alu_result := alu_result
-  rob_.io.wb.rd_val := wb_rd_val
-  rob_.io.wb.rd_val_valid := wb_rd_val_valid
-  rob_.io.wb.rs1_val := iq_.io.issue.rs1_v
-  rob_.io.wb.rs2_val := iq_.io.issue.rs2_v
-  rob_.io.wb.mispredict := wb_mispredict
-  rob_.io.wb.actual_npc := wb_actual_npc
+  rob_.io.wb2.valid := bru_issue_valid
+  rob_.io.wb2.tag := bru_issue_tag
+  rob_.io.wb2.mispredict := bru_mispredict
+  rob_.io.wb2.actual_npc := bru_actual_npc
 
   // ==========================================================
-  // CDB1 — ALU writeback broadcast to IQ
+  // CDB1 — ALU writeback broadcast
   // ==========================================================
-  cdb1.valid := issue_valid && wb_rd_val_valid && issue_rd_def && !flush
-  cdb1.tag := issue_tag
-  cdb1.value := wb_rd_val
+  cdb1.valid := alu_issue_valid && alu_rd_val_valid && alu_issue_rd_def && !flush
+  cdb1.tag := alu_issue_tag
+  cdb1.value := alu_rd_val
 
   // ==========================================================
   // Commit state machine
@@ -346,7 +407,7 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   val head_tag = rob_.io.commit.tag
   val head_valid = rob_.io.commit.valid
 
-  // CDB2 defaults (commit-time writeback to IQ)
+  // CDB2 defaults
   cdb2.valid := false.B
   cdb2.tag := head_tag
   cdb2.value := 0.U
@@ -356,7 +417,6 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   rob_.io.commitWb.tag := head_tag
   rob_.io.commitWb.value := 0.U
 
-  // ROB dequeue default
   rob_.io.commit.deq := false.B
 
   // RFU write defaults
@@ -411,7 +471,6 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
   dcache_store.in.wstrb := store_wstrb
   dcache_store.in.wdata := store_wdata
 
-  // fence_i default
   fence_i := false.B
 
   // load data extraction
@@ -521,7 +580,7 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
           when(head.mispredict) {
             flush := true.B
             redirect.valid := true.B
-            redirect.target := head.actual_npc
+            redirect.target := head.target_npc
           }
 
           rob_.io.commit.deq := true.B
@@ -530,7 +589,7 @@ class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
           commit_pc_dbg := head.pc
           commit_dnpc_dbg := Mux(
             head.mispredict,
-            head.actual_npc,
+            head.target_npc,
             head.pc + 4.U
           )
           commit_inst_dbg := head.inst

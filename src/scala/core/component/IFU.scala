@@ -11,7 +11,7 @@ class IFUOutputBundle extends Bundle with HasCoreParameter {
   val pc = UInt(dataBits.W)
   val isValid = Bool()
   val exception = IFUExceptionType()
-  val mtval = UInt(dataBits.W)
+  val mtval = UInt(dataBits.W) // access fault address
   val exceptionEn = Bool()
 }
 
