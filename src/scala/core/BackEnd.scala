@@ -36,6 +36,8 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   val rat_ = Module(new RAT)
   val alu_iq_ = Module(new ALUIssueQueue)
   val bru_iq_ = Module(new BRUIssueQueue)
+  val agu_iq_ = Module(new AGUIssueQueue)
+  val agu_ = Module(new AGU)
   val csru_ = Module(new CSRU)
 
   val dcache_load = Module(new LoadUnit(axiParams, 1))
@@ -65,6 +67,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   rat_.io.flush := flush
   alu_iq_.io.flush := flush
   bru_iq_.io.flush := flush
+  agu_iq_.io.flush := flush
 
   // ==========================================================
   // Decode stage (combinational from instruction input)
@@ -99,10 +102,13 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   val cu_except_en = cu_.io.out.exceptionEn
   val dispatch_except_en = ifu_except_en || cu_except_en
 
+  val is_mem = cu_.io.out.mem.r_en || cu_.io.out.mem.w_en
+
   val dispatch_resolved = is_jal || is_mret || is_lui || is_auipc
   val skip_iq = dispatch_except_en || dispatch_resolved
-  val go_to_alu = !skip_iq && !is_branch
+  val go_to_alu = !skip_iq && !is_branch && !is_mem
   val go_to_bru = is_branch && !skip_iq
+  val go_to_agu = is_mem && !skip_iq
 
   // ==========================================================
   // CDB wires (declared early for dispatch bypass)
@@ -114,6 +120,8 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   alu_iq_.io.cdb2 := cdb2
   bru_iq_.io.cdb1 := cdb1
   bru_iq_.io.cdb2 := cdb2
+  agu_iq_.io.cdb1 := cdb1
+  agu_iq_.io.cdb2 := cdb2
 
   // ==========================================================
   // Rename — RAT + RFU + ROB forward + CDB bypass
@@ -247,7 +255,8 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
     true.B,
     Seq(
       go_to_alu -> alu_iq_.io.enq.ready,
-      go_to_bru -> bru_iq_.io.enq.ready
+      go_to_bru -> bru_iq_.io.enq.ready,
+      go_to_agu -> agu_iq_.io.enq.ready
     )
   )
   val can_dispatch = ifu_valid && rob_.io.enq.ready && iq_ready && !flush
@@ -261,7 +270,6 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   rob_enq.mem := cu_.io.out.mem
   rob_enq.csrOp := cu_.io.out.csrOp
   rob_enq.csrWen := cu_.io.out.csrWen
-  rob_enq.rfWen := cu_.io.out.rfWen
   rob_enq.npcOp := npcOp
   rob_enq.pc := dispatch_pc
   rob_enq.inst := ifu_out.inst
@@ -285,8 +293,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   alu_enq.src1_tag := src1_tag
   alu_enq.src1_ready := src1_ready
 
-  val is_store_dispatch = cu_.io.out.mem.w_en
-  val imm_as_src2 = (aluSel2 === ALUOp2Sel.OP2_IMM) && !is_store_dispatch
+  val imm_as_src2 = aluSel2 === ALUOp2Sel.OP2_IMM
   alu_enq.src2_val := Mux(imm_as_src2, imm, src2_val)
   alu_enq.src2_tag := Mux(imm_as_src2, 0.U, src2_tag)
   alu_enq.src2_ready := Mux(imm_as_src2, true.B, src2_ready)
@@ -307,6 +314,20 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   bru_enq.rs2_ready := src2_ready
   bru_enq.bruOp := cu_.io.out.bruOp
   bru_enq.rob_tag := rob_.io.enq_tag
+
+  // --- AGU IQ enqueue ---
+  agu_iq_.io.enq.valid := can_dispatch && go_to_agu
+
+  val agu_enq = agu_iq_.io.enq.data
+  agu_enq.base_val   := src1_val
+  agu_enq.base_tag   := src1_tag
+  agu_enq.base_ready := src1_ready
+  val is_load = cu_.io.out.mem.r_en
+  agu_enq.wdata_val   := Mux(is_load, 0.U, src2_val)
+  agu_enq.wdata_tag   := Mux(is_load, 0.U, src2_tag)
+  agu_enq.wdata_ready := Mux(is_load, true.B, src2_ready)
+  agu_enq.imm         := imm
+  agu_enq.rob_tag     := rob_.io.enq_tag
 
   // --- RAT update ---
   val should_rename = can_dispatch && cu_.io.out.rfWen && (rd_idx =/= 0.U) && !dispatch_except_en
@@ -336,16 +357,14 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   val alu_mispredict = alu_is_jalr
   val alu_target_npc = Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.pc + 4.U)
 
-  val is_store_wb = alu_rob_entry.mem.w_en
-  val wb_alu_result = Mux(is_store_wb, alu_iq_.io.issue.src1_v + alu_rob_entry.imm, alu_result)
+  val is_csr_wb = alu_rob_entry.wbSel === WBSel.WB_CSR || alu_rob_entry.csr_wen
+  val final_alu_result = Mux(is_csr_wb, alu_iq_.io.issue.src1_v, alu_result)
 
   rob_.io.wb.valid := alu_issue_valid
   rob_.io.wb.tag := alu_issue_tag
-  rob_.io.wb.alu_result := wb_alu_result
+  rob_.io.wb.alu_result := final_alu_result
   rob_.io.wb.rd_val := alu_rd_val
   rob_.io.wb.rd_val_valid := alu_rd_val_valid
-  rob_.io.wb.rs1_val := alu_iq_.io.issue.src1_v
-  rob_.io.wb.rs2_val := alu_iq_.io.issue.src2_v
   rob_.io.wb.mispredict := alu_mispredict
   rob_.io.wb.target_npc := alu_target_npc
 
@@ -370,6 +389,17 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   rob_.io.wb2.tag := bru_issue_tag
   rob_.io.wb2.mispredict := bru_mispredict
   rob_.io.wb2.actual_npc := bru_actual_npc
+
+  // ==========================================================
+  // AGU Issue -> Execute -> Writeback to ROB
+  // ==========================================================
+  agu_.io.in.base   := agu_iq_.io.issue.base_v
+  agu_.io.in.offset := agu_iq_.io.issue.imm
+
+  rob_.io.wb_agu.valid := agu_iq_.io.issue.valid
+  rob_.io.wb_agu.tag   := agu_iq_.io.issue.rob_tag
+  rob_.io.wb_agu.addr  := agu_.io.out.addr
+  rob_.io.wb_agu.wdata := agu_iq_.io.issue.wdata_v
 
   // ==========================================================
   // CDB1 — ALU writeback broadcast
@@ -416,7 +446,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   csru_.io.addr := head.imm(NRCSRbits - 1, 0)
   csru_.io.wop := head.csrOp
   csru_.io.wen := false.B
-  csru_.io.wdata := head.rs1_val
+  csru_.io.wdata := head.alu_result
   csru_.io.commit.xepc := head.pc
   csru_.io.commit.xepc_wen := false.B
   csru_.io.commit.xcause := head.mcause
@@ -428,29 +458,29 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   dcache_load.in.req := false.B
   dcache_load.in.wr := false.B
   dcache_load.in.size := head.mem.size
-  dcache_load.in.addr := head.alu_result
+  dcache_load.in.addr := head.mem.addr
   dcache_load.in.wstrb := 0.U
   dcache_load.in.wdata := 0.U
 
   val store_wstrb = MuxLookup(head.mem.size, "b1111".U)(
     Seq(
-      0.U -> (1.U(4.W) << head.alu_result(1, 0)),
-      1.U -> (3.U(4.W) << (head.alu_result(1, 0) & "b10".U)),
+      0.U -> (1.U(4.W) << head.mem.addr(1, 0)),
+      1.U -> (3.U(4.W) << (head.mem.addr(1, 0) & "b10".U)),
       2.U -> "b1111".U(4.W)
     )
   )
-  val store_wdata = MuxLookup(head.mem.size, head.rs2_val)(
+  val store_wdata = MuxLookup(head.mem.size, head.mem.wdata)(
     Seq(
-      0.U -> Fill(4, head.rs2_val(7, 0)),
-      1.U -> Fill(2, head.rs2_val(15, 0)),
-      2.U -> head.rs2_val
+      0.U -> Fill(4, head.mem.wdata(7, 0)),
+      1.U -> Fill(2, head.mem.wdata(15, 0)),
+      2.U -> head.mem.wdata
     )
   )
 
   dcache_store.in.req := false.B
   dcache_store.in.wr := true.B
   dcache_store.in.size := head.mem.size
-  dcache_store.in.addr := head.alu_result
+  dcache_store.in.addr := head.mem.addr
   dcache_store.in.wstrb := store_wstrb
   dcache_store.in.wdata := store_wdata
 
@@ -458,7 +488,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
 
   // load data extraction
   val load_raw = dcache_load.in.rdata
-  val load_byte = MuxLookup(head.alu_result(1, 0), load_raw(7, 0))(
+  val load_byte = MuxLookup(head.mem.addr(1, 0), load_raw(7, 0))(
     Seq(
       0.U -> load_raw(7, 0),
       1.U -> load_raw(15, 8),
@@ -466,7 +496,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
       3.U -> load_raw(31, 24)
     )
   )
-  val load_half = Mux(head.alu_result(1), load_raw(31, 16), load_raw(15, 0))
+  val load_half = Mux(head.mem.addr(1), load_raw(31, 16), load_raw(15, 0))
   val load_final = MuxLookup(head.mem.size, load_raw)(
     Seq(
       0.U -> Mux(
@@ -519,11 +549,11 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
           dcache_store.in.req := true.B
           commitStateQ := CommitState.lsu_req
 
-        }.elsewhen(head.wbSel === WBSel.WB_CSR || head.csrWen) {
-          csru_.io.wen := head.csrWen
+        }.elsewhen(head.wbSel === WBSel.WB_CSR || head.csr_wen) {
+          csru_.io.wen := head.csr_wen
           val csr_rd = csru_.io.rdata
 
-          when(head.rd_def && head.rfWen) {
+          when(head.rd_def) {
             rfu_.io.in.wen := true.B
             rfu_.io.in.wdata := csr_rd
           }
@@ -533,7 +563,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
           cdb2.valid := head.rd_def
           cdb2.value := csr_rd
 
-          rat_.io.commit.en := head.rd_def && head.rfWen
+          rat_.io.commit.en := head.rd_def
 
           when(head.npcOp === NPCOpType.NPC_MRET) {
             flush := true.B
@@ -553,12 +583,12 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
           commit_inst_dbg := head.inst
 
         }.otherwise {
-          when(head.rd_def && head.rfWen) {
+          when(head.rd_def) {
             rfu_.io.in.wen := true.B
             rfu_.io.in.wdata := head.rd_val
           }
 
-          rat_.io.commit.en := head.rd_def && head.rfWen
+          rat_.io.commit.en := head.rd_def
 
           when(head.mispredict) {
             flush := true.B
@@ -596,7 +626,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
 
     is(CommitState.lsu_wait) {
       when(head.mem.r_en && dcache_load.in.data_ok) {
-        when(head.rd_def && head.rfWen) {
+        when(head.rd_def) {
           rfu_.io.in.wen := true.B
           rfu_.io.in.wdata := load_final
         }
@@ -605,7 +635,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
         cdb2.valid := head.rd_def
         cdb2.value := load_final
 
-        rat_.io.commit.en := head.rd_def && head.rfWen
+        rat_.io.commit.en := head.rd_def
         rob_.io.commit.deq := true.B
         commitStateQ := CommitState.idle
 

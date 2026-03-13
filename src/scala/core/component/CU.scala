@@ -548,6 +548,8 @@ class CU extends Module with HasCoreParameter with HasRegFileParameter {
   io.out.mem.w_en := decoded(MemWenField)
   io.out.mem.size := decoded(MemSizeField)
   io.out.mem.sign_ext := decoded(MemSignExtField)
+  io.out.mem.addr := 0.U
+  io.out.mem.wdata := 0.U
   io.out.wbSel := WBSel.safe(decoded(WbSelField))._1
   io.out.rfWen := decoded(RfWenField)
   io.out.csrOp := CSROpType.safe(decoded(CsrOpField))._1

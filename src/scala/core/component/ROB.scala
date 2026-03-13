@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import ysyx.core.common._
 
+// whether the entry valided, defined by queue ptr: head and tail
 object EntryState extends ChiselEnum {
   val allocated, executed = Value
 }
@@ -13,27 +14,22 @@ class MemRobEntry extends MemInfoBundle {
   val wdata_rdy = Bool()
 }
 
-class RobEntry extends Bundle with HasCoreParameter with HasRegFileParameter {
+class RobEntry extends NPCBundle {
   val wbSel  = WBSel()
-  val mem    = new MemInfoBundle
+  val mem    = new MemRobEntry
   val csrOp  = CSROpType()
-  val csrWen = Bool()
-  val rfWen  = Bool()
+  val csr_wen = Bool()
   val npcOp  = NPCOpType()
 
   val pc   = UInt(addrBits.W)
   val inst = UInt(InstBits.W)
   val imm  = UInt(dataBits.W)
 
-  val rd_idx = UInt(NRRegbits.W)
-  val rd_def = Bool()
-
   val alu_result  = UInt(dataBits.W)
   val rd_val       = UInt(dataBits.W)
   val rd_val_valid = Bool()
-
-  val rs1_val = UInt(dataBits.W)
-  val rs2_val = UInt(dataBits.W)
+  val rd_idx = UInt(NRRegbits.W)
+  val rd_def = Bool()
 
   val except_en = Bool()
   val mcause    = UInt(dataBits.W)
@@ -45,12 +41,11 @@ class RobEntry extends Bundle with HasCoreParameter with HasRegFileParameter {
   val state = EntryState()
 }
 
-class RobEnqData extends Bundle with HasCoreParameter with HasRegFileParameter {
+class RobEnqData extends NPCBundle {
   val wbSel  = WBSel()
-  val mem    = new MemRobEntry
+  val mem    = new MemInfoBundle
   val csrOp  = CSROpType()
   val csrWen = Bool()
-  val rfWen  = Bool()
   val npcOp  = NPCOpType()
 
   val pc   = UInt(addrBits.W)
@@ -85,10 +80,15 @@ class Rob(val entries: Int = 32) extends NPCModule {
       val alu_result = Input(UInt(dataBits.W))
       val rd_val       = Input(UInt(dataBits.W))
       val rd_val_valid = Input(Bool())
-      val rs1_val    = Input(UInt(dataBits.W))
-      val rs2_val    = Input(UInt(dataBits.W))
       val mispredict = Input(Bool())
       val target_npc = Input(UInt(addrBits.W))
+    }
+
+    val wb_agu = new Bundle {
+      val valid = Input(Bool())
+      val tag   = Input(UInt(robEntryBits.W))
+      val addr  = Input(UInt(addrBits.W))
+      val wdata = Input(UInt(dataBits.W))
     }
 
     val wb2 = new Bundle {
@@ -155,8 +155,6 @@ class Rob(val entries: Int = 32) extends NPCModule {
     e.alu_result  := io.wb.alu_result
     e.rd_val       := io.wb.rd_val
     e.rd_val_valid := io.wb.rd_val_valid
-    e.rs1_val     := io.wb.rs1_val
-    e.rs2_val     := io.wb.rs2_val
     e.mispredict  := io.wb.mispredict
     e.target_npc  := io.wb.target_npc
     e.state       := EntryState.executed
@@ -170,6 +168,18 @@ class Rob(val entries: Int = 32) extends NPCModule {
     e.mispredict := io.wb2.mispredict
     e.target_npc := io.wb2.actual_npc
     e.state      := EntryState.executed
+  }
+
+  // ============================================================
+  // Writeback 3 — from AGU path (addr + wdata for load/store)
+  // ============================================================
+  when(io.wb_agu.valid && !io.flush) {
+    val e = ram(idx(io.wb_agu.tag))
+    e.mem.addr     := io.wb_agu.addr
+    e.mem.wdata    := io.wb_agu.wdata
+    e.mem.addr_rdy := true.B
+    e.mem.wdata_rdy := true.B
+    e.state        := EntryState.executed
   }
 
   // Commit-time writeback (load / CSR value)
@@ -195,17 +205,19 @@ class Rob(val entries: Int = 32) extends NPCModule {
   when(enq_fire) {
     val d = io.enq.bits
     val e = ram(tail_q)
-    e.wbSel  := d.wbSel;  e.mem := d.mem
-    e.csrOp  := d.csrOp;  e.csrWen := d.csrWen
-    e.rfWen  := d.rfWen;  e.npcOp := d.npcOp
+    e.wbSel    := d.wbSel
+    e.mem.size := d.mem.size; e.mem.r_en := d.mem.r_en
+    e.mem.sign_ext := d.mem.sign_ext; e.mem.w_en := d.mem.w_en
+    e.mem.addr := d.mem.addr; e.mem.wdata := d.mem.wdata
+    e.mem.addr_rdy := false.B; e.mem.wdata_rdy := false.B
+    e.csrOp  := d.csrOp;  e.csr_wen := d.csrWen
+    e.npcOp := d.npcOp
     e.pc     := d.pc;     e.inst := d.inst; e.imm := d.imm
     e.rd_idx := d.rd_idx; e.rd_def := d.rd_def
 
     e.alu_result  := 0.U
     e.rd_val       := d.rd_val
     e.rd_val_valid := d.rd_val_valid
-    e.rs1_val     := 0.U
-    e.rs2_val     := 0.U
 
     e.except_en := d.except_en
     e.mcause    := d.mcause

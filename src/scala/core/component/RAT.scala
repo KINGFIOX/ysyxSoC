@@ -2,21 +2,21 @@ package ysyx.core.component
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.common.{HasCoreParameter, HasRegFileParameter}
+import ysyx.core.common._
 
-class RATReadPort extends Bundle with HasCoreParameter with HasRegFileParameter {
+class RATReadPort extends NPCBundle {
   val addr = Input(UInt(NRRegbits.W))
   val busy = Output(Bool())
   val tag  = Output(UInt(robEntryBits.W))
 }
 
-class RATWritePort extends Bundle with HasCoreParameter with HasRegFileParameter {
+class RATWritePort extends NPCBundle {
   val en   = Input(Bool())
   val addr = Input(UInt(NRRegbits.W))
   val tag  = Input(UInt(robEntryBits.W))
 }
 
-class RATCommitPort extends Bundle with HasCoreParameter with HasRegFileParameter {
+class RATCommitPort extends NPCBundle {
   val en   = Input(Bool())
   val addr = Input(UInt(NRRegbits.W))
   val tag  = Input(UInt(robEntryBits.W))
