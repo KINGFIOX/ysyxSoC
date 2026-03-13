@@ -11,7 +11,7 @@ object BRUOpType extends ChiselEnum {
 class BRUInput extends NPCBundle {
   val rs1_v = UInt(dataBits.W)
   val rs2_v = UInt(dataBits.W)
-  val op    = BRUOpType()
+  val op = BRUOpType()
 }
 
 class BRUOutput extends NPCBundle {
@@ -23,18 +23,20 @@ class BRU extends ExecUnit(new BRUInput, new BRUOutput) {
   io.out.valid := io.in.valid
   io.out.bits.br_flag := false.B
 
+  // format: off
   switch(io.in.bits.op) {
-    is(BRUOpType.bru_BLT)  { when(io.in.bits.rs1_v.asSInt < io.in.bits.rs2_v.asSInt)  { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BLTU) { when(io.in.bits.rs1_v < io.in.bits.rs2_v)                { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BGE)  { when(io.in.bits.rs1_v.asSInt >= io.in.bits.rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BGEU) { when(io.in.bits.rs1_v >= io.in.bits.rs2_v)               { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BEQ)  { when(io.in.bits.rs1_v === io.in.bits.rs2_v)              { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BNE)  { when(io.in.bits.rs1_v =/= io.in.bits.rs2_v)             { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BLT) { when(io.in.bits.rs1_v.asSInt < io.in.bits.rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BLTU) { when(io.in.bits.rs1_v < io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BGE) { when(io.in.bits.rs1_v.asSInt >= io.in.bits.rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BGEU) { when(io.in.bits.rs1_v >= io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BEQ) { when(io.in.bits.rs1_v === io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BNE) { when(io.in.bits.rs1_v =/= io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
   }
+  // format: on
 }
 
 class BRUExtra extends NPCBundle {
   val bruOp = BRUOpType()
 }
 
-class BRUIssueQueue extends IssueQueue(new BRUExtra, entries = 4, bypassCDB1InIssue = true)
+class BRUIssueQueue extends IssueQueue(new BRUExtra, entries = 4)

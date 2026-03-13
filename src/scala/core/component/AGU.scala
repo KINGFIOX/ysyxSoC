@@ -5,7 +5,7 @@ import chisel3.util._
 import ysyx.core.common._
 
 class AGUInput extends NPCBundle {
-  val base   = UInt(addrBits.W)
+  val base = UInt(addrBits.W)
   val offset = UInt(addrBits.W)
 }
 
@@ -23,5 +23,4 @@ class AGUExtra extends NPCBundle {
   val imm = UInt(dataBits.W)
 }
 
-class AGUIssueQueue
-    extends IssueQueue(new AGUExtra, entries = 4, bypassCDB1InIssue = true)
+class AGUIssueQueue extends IssueQueue(new AGUExtra, entries = 4)

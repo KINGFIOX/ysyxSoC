@@ -45,12 +45,12 @@ class CSRU extends Module with HasCoreParameter with HasCSRParameter {
   io.late.result_valid := true.B
 
   // ==================== CSR 寄存器定义 ====================
-  // 可读写寄存器
-  private val mstatus = RegInit(0x1800.U(dataBits.W)) // TODO: 写入时某些位无效果
-  private val mtvec   = RegInit(0.U(dataBits.W))
-  private val mepc    = RegInit(0.U(dataBits.W))
-  private val mcause  = RegInit(0.U(dataBits.W))
-  private val mtval   = RegInit(0.U(dataBits.W))
+  // readable && writable register
+  val mstatus = RegInit(0x1800.U(dataBits.W)) // TODO: 写入时某些位无效果
+  val mtvec   = RegInit(0.U(dataBits.W))
+  val mepc    = RegInit(0.U(dataBits.W))
+  val mcause  = RegInit(0.U(dataBits.W))
+  val mtval   = RegInit(0.U(dataBits.W))
 
   // 只读寄存器
   private val mvendorid = 0x79737978.U(dataBits.W) // "ysyx" in ASCII

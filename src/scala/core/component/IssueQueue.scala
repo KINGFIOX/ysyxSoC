@@ -30,8 +30,8 @@ class IQIssueData[T <: Data](gen: T) extends NPCBundle {
   val rob_tag = UInt(robEntryBits.W)
 }
 
+// for Imm, always ready
 class IQEntry[T <: Data](gen: T) extends NPCBundle {
-  val valid = Bool()
   val src1_val = UInt(dataBits.W)
   val src1_tag = UInt(robEntryBits.W)
   val src1_ready = Bool()
@@ -40,128 +40,105 @@ class IQEntry[T <: Data](gen: T) extends NPCBundle {
   val src2_ready = Bool()
   val extra = gen.cloneType
   val rob_tag = UInt(robEntryBits.W)
+  val occupied = Bool()
 }
 
-abstract class IssueQueue[T <: Data](
-    gen: T,
-    val entries: Int = 4,
-    val bypassCDB1InIssue: Boolean = true
-) extends NPCModule {
+abstract class IssueQueue[T <: Data](gen: T, val entries: Int)
+    extends NPCModule {
   require(isPow2(entries))
   private val idxBits = log2Ceil(entries)
 
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new IQEnqData(gen)))
     val issue = Decoupled(new IQIssueData(gen))
-    val cdb1 = Input(new CDBBundle)
-    val cdb2 = Input(new CDBBundle)
+    val cdb1 = Flipped(new CDBBundle)
+    val cdb2 = Flipped(new CDBBundle)
     val flush = Input(Bool())
   })
 
-  private val ram = Reg(Vec(entries, new IQEntry(gen)))
-  private val head = RegInit(0.U(idxBits.W))
-  private val tail = RegInit(0.U(idxBits.W))
-  private val count = RegInit(0.U((idxBits + 1).W))
-  private val empty = count === 0.U
-  private val full = count === entries.U
+  val ram = Reg(Vec(entries, new IQEntry(gen)))
+  val enq_ptr = RegInit(0.U(idxBits.W))
+  val deq_ptr = RegInit(0.U(idxBits.W))
+  val maybe_full = RegInit(false.B)
+  val ptr_match = enq_ptr === deq_ptr
+  val empty = ptr_match && !maybe_full
+  val full = ptr_match && maybe_full
 
-  // CDB value capture (always both CDB1 and CDB2)
-  for (i <- 0 until entries) {
-    val e = ram(i)
-    when(e.valid && !io.flush) {
-      when(io.cdb1.valid && !e.src1_ready && e.src1_tag === io.cdb1.tag) {
-        e.src1_val := io.cdb1.value; e.src1_ready := true.B
-      }.elsewhen(io.cdb2.valid && !e.src1_ready && e.src1_tag === io.cdb2.tag) {
-        e.src1_val := io.cdb2.value; e.src1_ready := true.B
+  // CDB value capture: write to ram, ready on next cycle
+  // format: off
+  ram.foreach(ent =>
+    when(ent.occupied && !io.flush) {
+      when(io.cdb1.valid && !ent.src1_ready && ent.src1_tag === io.cdb1.tag) {
+        ent.src1_val := io.cdb1.value
+        ent.src1_ready := true.B
+        assert(!ent.src1_ready, "impossible: src1 already ready on CDB hit")
+      }.elsewhen( io.cdb2.valid && !ent.src1_ready && ent.src1_tag === io.cdb2.tag) {
+        ent.src1_val := io.cdb2.value
+        ent.src1_ready := true.B
+        assert(!ent.src1_ready, "impossible: src1 already ready on CDB hit")
       }
-      when(io.cdb1.valid && !e.src2_ready && e.src2_tag === io.cdb1.tag) {
-        e.src2_val := io.cdb1.value; e.src2_ready := true.B
-      }.elsewhen(io.cdb2.valid && !e.src2_ready && e.src2_tag === io.cdb2.tag) {
-        e.src2_val := io.cdb2.value; e.src2_ready := true.B
+      when(io.cdb1.valid && !ent.src2_ready && ent.src2_tag === io.cdb1.tag) {
+        ent.src2_val := io.cdb1.value
+        ent.src2_ready := true.B
+        assert(!ent.src2_ready, "impossible: src2 already ready on CDB hit")
+      }.elsewhen( io.cdb2.valid && !ent.src2_ready && ent.src2_tag === io.cdb2.tag) {
+        ent.src2_val := io.cdb2.value
+        ent.src2_ready := true.B
+        assert(!ent.src2_ready, "impossible: src2 already ready on CDB hit")
       }
     }
-  }
+  )
+  // format: on
 
-  private def srcReady(ready: Bool, tag: UInt): Bool = {
-    val rdy = ready || (io.cdb2.valid && !ready && tag === io.cdb2.tag)
-    if (bypassCDB1InIssue)
-      rdy || (io.cdb1.valid && !ready && tag === io.cdb1.tag)
-    else rdy
-  }
+  // Issue from head: in-order, gated by source readiness
+  val head_ent = ram(deq_ptr)
+  io.issue.valid := !empty && head_ent.src1_ready && head_ent.src2_ready && !io.flush
+  io.issue.bits.rob_tag := head_ent.rob_tag
+  io.issue.bits.src1_v := head_ent.src1_val
+  io.issue.bits.src2_v := head_ent.src2_val
+  io.issue.bits.extra := head_ent.extra
 
-  private val rotated_ready = VecInit((0 until entries).map { off =>
-    val actual = (head +& off.U)(idxBits - 1, 0)
-    val in_range = off.U((idxBits + 1).W) < count
-    val e = ram(actual)
-    in_range && e.valid && srcReady(e.src1_ready, e.src1_tag) && srcReady(
-      e.src2_ready,
-      e.src2_tag
-    )
-  })
-
-  private val has_issuable = rotated_ready.asUInt.orR
-  private val issue_offset = PriorityEncoder(rotated_ready.asUInt)
-  private val issue_idx = (head +& issue_offset)(idxBits - 1, 0)
-  private val ie = ram(issue_idx)
-
-  private def srcBypass(value: UInt, ready: Bool, tag: UInt): UInt = {
-    val base = Seq(
-      (io.cdb2.valid && !ready && tag === io.cdb2.tag) -> io.cdb2.value
-    )
-    val all =
-      if (bypassCDB1InIssue)
-        Seq(
-          (io.cdb1.valid && !ready && tag === io.cdb1.tag) -> io.cdb1.value
-        ) ++ base
-      else base
-    MuxCase(value, all)
-  }
-
-  io.issue.valid := has_issuable && !io.flush
-  io.issue.bits.rob_tag := ie.rob_tag
-  io.issue.bits.src1_v := srcBypass(ie.src1_val, ie.src1_ready, ie.src1_tag)
-  io.issue.bits.src2_v := srcBypass(ie.src2_val, ie.src2_ready, ie.src2_tag)
-  io.issue.bits.extra := ie.extra
-
-  when(io.issue.fire) { ram(issue_idx).valid := false.B }
-
-  // Enqueue
+  // Enqueue at tail
   io.enq.ready := !full && !io.flush
 
-  when(io.enq.fire) {
-    val e = ram(tail)
-    e.valid := true.B
-    e.src1_val := io.enq.bits.src1.value
-    e.src1_tag := io.enq.bits.src1.tag
-    e.src1_ready := io.enq.bits.src1.ready
-    e.src2_val := io.enq.bits.src2.value
-    e.src2_tag := io.enq.bits.src2.tag
-    e.src2_ready := io.enq.bits.src2.ready
-    e.extra := io.enq.bits.extra
-    e.rob_tag := io.enq.bits.rob_tag
+  val do_enq = io.enq.fire
+  val do_deq = io.issue.fire
+
+  when(do_enq) {
+    val ent = ram(enq_ptr)
+    ent.src1_val := io.enq.bits.src1.value
+    ent.src1_tag := io.enq.bits.src1.tag
+    ent.src1_ready := io.enq.bits.src1.ready
+    ent.src2_val := io.enq.bits.src2.value
+    ent.src2_tag := io.enq.bits.src2.tag
+    ent.src2_ready := io.enq.bits.src2.ready
+    ent.extra := io.enq.bits.extra
+    ent.rob_tag := io.enq.bits.rob_tag
+    ent.occupied := true.B
+    enq_ptr := enq_ptr + 1.U
   }
 
-  // Head advancement + pointer tracking
-  private val head_advance = !empty && !ram(head).valid
+  when(do_deq) {
+    ram(deq_ptr).occupied := false.B
+    deq_ptr := deq_ptr + 1.U
+  }
+
+  when(do_enq =/= do_deq) {
+    maybe_full := do_enq
+  }
 
   when(io.flush) {
-    head := 0.U; tail := 0.U; count := 0.U
-    for (i <- 0 until entries) { ram(i).valid := false.B }
-  }.otherwise {
-    when(io.enq.fire && !head_advance) {
-      tail := tail + 1.U; count := count + 1.U
-    }.elsewhen(!io.enq.fire && head_advance) {
-      head := head + 1.U; count := count - 1.U
-    }.elsewhen(io.enq.fire && head_advance) {
-      tail := tail + 1.U; head := head + 1.U
-    }
+    enq_ptr := 0.U
+    deq_ptr := 0.U
+    maybe_full := false.B
+    ram.foreach(_.occupied := false.B)
   }
 }
 
 abstract class ExecUnit[I <: Data, O <: Data](inGen: I, outGen: O)
     extends NPCModule {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(inGen))
+    val in = Flipped(Decoupled(inGen))
     val out = Decoupled(outGen)
   })
 }
