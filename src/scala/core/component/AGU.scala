@@ -14,7 +14,9 @@ class AGUOutput extends NPCBundle {
 }
 
 class AGU extends ExecUnit(new AGUInput, new AGUOutput) {
-  io.out.addr := io.in.base + io.in.offset
+  io.in.ready := io.out.ready
+  io.out.valid := io.in.valid
+  io.out.bits.addr := io.in.bits.base + io.in.bits.offset
 }
 
 class AGUExtra extends NPCBundle {

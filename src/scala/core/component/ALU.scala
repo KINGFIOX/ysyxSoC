@@ -19,23 +19,26 @@ class ALUOutput extends NPCBundle {
 }
 
 class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
-  private val op1   = io.in.op1
-  private val op2   = io.in.op2
+  io.in.ready := io.out.ready
+  io.out.valid := io.in.valid
+
+  private val op1   = io.in.bits.op1
+  private val op2   = io.in.bits.op2
   private val shamt = op2(log2Up(dataBits) - 1, 0)
 
-  io.out.result := 0.U
+  io.out.bits.result := 0.U
 
-  switch(io.in.aluOp) {
-    is(ALUOpType.alu_ADD)  { io.out.result := op1 + op2 }
-    is(ALUOpType.alu_SUB)  { io.out.result := op1 - op2 }
-    is(ALUOpType.alu_AND)  { io.out.result := op1 & op2 }
-    is(ALUOpType.alu_OR)   { io.out.result := op1 | op2 }
-    is(ALUOpType.alu_XOR)  { io.out.result := op1 ^ op2 }
-    is(ALUOpType.alu_SLL)  { io.out.result := op1 << shamt }
-    is(ALUOpType.alu_SRL)  { io.out.result := op1 >> shamt }
-    is(ALUOpType.alu_SRA)  { io.out.result := (op1.asSInt >> shamt).asUInt }
-    is(ALUOpType.alu_SLT)  { io.out.result := op1.asSInt < op2.asSInt }
-    is(ALUOpType.alu_SLTU) { io.out.result := op1 < op2 }
+  switch(io.in.bits.aluOp) {
+    is(ALUOpType.alu_ADD)  { io.out.bits.result := op1 + op2 }
+    is(ALUOpType.alu_SUB)  { io.out.bits.result := op1 - op2 }
+    is(ALUOpType.alu_AND)  { io.out.bits.result := op1 & op2 }
+    is(ALUOpType.alu_OR)   { io.out.bits.result := op1 | op2 }
+    is(ALUOpType.alu_XOR)  { io.out.bits.result := op1 ^ op2 }
+    is(ALUOpType.alu_SLL)  { io.out.bits.result := op1 << shamt }
+    is(ALUOpType.alu_SRL)  { io.out.bits.result := op1 >> shamt }
+    is(ALUOpType.alu_SRA)  { io.out.bits.result := (op1.asSInt >> shamt).asUInt }
+    is(ALUOpType.alu_SLT)  { io.out.bits.result := op1.asSInt < op2.asSInt }
+    is(ALUOpType.alu_SLTU) { io.out.bits.result := op1 < op2 }
   }
 }
 

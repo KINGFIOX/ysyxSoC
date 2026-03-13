@@ -19,15 +19,17 @@ class BRUOutput extends NPCBundle {
 }
 
 class BRU extends ExecUnit(new BRUInput, new BRUOutput) {
-  io.out.br_flag := false.B
+  io.in.ready := io.out.ready
+  io.out.valid := io.in.valid
+  io.out.bits.br_flag := false.B
 
-  switch(io.in.op) {
-    is(BRUOpType.bru_BLT)  { when(io.in.rs1_v.asSInt < io.in.rs2_v.asSInt)  { io.out.br_flag := true.B } }
-    is(BRUOpType.bru_BLTU) { when(io.in.rs1_v < io.in.rs2_v)                { io.out.br_flag := true.B } }
-    is(BRUOpType.bru_BGE)  { when(io.in.rs1_v.asSInt >= io.in.rs2_v.asSInt) { io.out.br_flag := true.B } }
-    is(BRUOpType.bru_BGEU) { when(io.in.rs1_v >= io.in.rs2_v)               { io.out.br_flag := true.B } }
-    is(BRUOpType.bru_BEQ)  { when(io.in.rs1_v === io.in.rs2_v)              { io.out.br_flag := true.B } }
-    is(BRUOpType.bru_BNE)  { when(io.in.rs1_v =/= io.in.rs2_v)             { io.out.br_flag := true.B } }
+  switch(io.in.bits.op) {
+    is(BRUOpType.bru_BLT)  { when(io.in.bits.rs1_v.asSInt < io.in.bits.rs2_v.asSInt)  { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BLTU) { when(io.in.bits.rs1_v < io.in.bits.rs2_v)                { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BGE)  { when(io.in.bits.rs1_v.asSInt >= io.in.bits.rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BGEU) { when(io.in.bits.rs1_v >= io.in.bits.rs2_v)               { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BEQ)  { when(io.in.bits.rs1_v === io.in.bits.rs2_v)              { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BNE)  { when(io.in.bits.rs1_v =/= io.in.bits.rs2_v)             { io.out.bits.br_flag := true.B } }
   }
 }
 
