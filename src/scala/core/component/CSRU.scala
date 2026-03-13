@@ -2,9 +2,7 @@ package ysyx.core.component
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.common.HasCoreParameter
-import ysyx.core.common.HasRegFileParameter
-import ysyx.core.common.HasCSRParameter
+import ysyx.core.common._
 import chisel3.probe.{define, Probe, ProbeValue}
 
 // from the master's point-of-view
@@ -26,23 +24,25 @@ class CSRUDebugBundle extends Bundle with HasCoreParameter with HasCSRParameter 
 
 class CSRU extends Module with HasCoreParameter with HasCSRParameter {
   val io = IO(new Bundle {
-    // for `csr instruction`
+    val late = new LateExecIO
+
     val addr = Input(UInt(NRCSRbits.W))
     val wop = Input(CSROpType())
     val wen = Input(Bool())
-    val wdata = Input(UInt(dataBits.W)) // rs1_data
+    val wdata = Input(UInt(dataBits.W))
     val rdata = Output(UInt(dataBits.W))
 
-    // for `commit`
     val commit = Flipped(new CSRCommitIO)
 
-    // for `exception` and `mret`
-    val xepc   = Output(UInt(dataBits.W))
+    val xepc  = Output(UInt(dataBits.W))
     val xtvec = Output(UInt(dataBits.W))
 
-    // for difftest
     val probe = Output(Probe(new CSRUDebugBundle))
   })
+
+  io.late.done         := io.late.req
+  io.late.result       := 0.U
+  io.late.result_valid := true.B
 
   // ==================== CSR 寄存器定义 ====================
   // 可读写寄存器
@@ -79,6 +79,7 @@ class CSRU extends Module with HasCoreParameter with HasCSRParameter {
   // ==================== 读取 CSR() ====================
   private val csrRdata = MuxLookup(io.addr, 0.U)(csrReadMap)
   io.rdata := csrRdata
+  io.late.result := csrRdata
 
   // ==================== 计算写入数据(wdata, waddr, wen) ====================
   // CSRRW: wdata = rs1

@@ -178,7 +178,7 @@ class APBXIPController(address: Seq[AddressSet], config: XIPConfig)(implicit
     val isWrite = Reg(Bool())
     val writeData = Reg(UInt(config.dataBits.W))
     val writeStrb = Reg(UInt(4.W))  // Byte strobe for write operations
-    val rxData = Reg(Vec(config.numRxRegs, UInt(32.W)))
+    val rxData = Mem( config.numRxRegs, UInt(32.W) )
 
     // Build TX data based on operation type:
     // Read:  [readCmd  | addr | dummy | 0 (placeholder)]

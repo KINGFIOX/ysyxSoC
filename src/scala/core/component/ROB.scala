@@ -66,9 +66,9 @@ class RobEnqData extends NPCBundle {
   val target_npc        = UInt(addrBits.W)
 }
 
-class Rob(val entries: Int = 32) extends NPCModule {
-  require(isPow2(entries))
-  private val idxBits = log2Ceil(entries)
+class Rob extends NPCModule {
+  private val idxBits = robEntryBits
+  private val entries = (1 << robEntryBits)
 
   val io = IO(new Bundle {
     val enq     = Flipped(Decoupled(new RobEnqData))
@@ -275,8 +275,3 @@ class Rob(val entries: Int = 32) extends NPCModule {
   }
 }
 
-class CDBBundle extends NPCBundle {
-  val valid = Bool()
-  val tag = UInt(robEntryBits.W)
-  val value = UInt(dataBits.W)
-}

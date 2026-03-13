@@ -6,7 +6,7 @@ import chisel3.util._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
 
-import ysyx.core.common.HasCoreParameter
+import ysyx.core.common._
 import ysyx.SoCConfig
 
 object MemUExceptionType extends ChiselEnum {
@@ -171,4 +171,117 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
     }
   }
 
+}
+
+class LSU extends NPCModule {
+  val dcache = IO(AXI4Bundle(axiParams))
+
+  val io = IO(new Bundle {
+    val late     = new LateExecIO
+    val addr     = Input(UInt(addrBits.W))
+    val size     = Input(UInt(axiParams.sizeBits.W))
+    val sign_ext = Input(Bool())
+    val r_en     = Input(Bool())
+    val w_en     = Input(Bool())
+    val wdata    = Input(UInt(dataBits.W))
+  })
+
+  private val load_unit  = Module(new LoadUnit(axiParams, 1))
+  private val store_unit = Module(new StoreUnit(axiParams, 2))
+
+  load_unit.ar  <> dcache.ar
+  load_unit.r   <> dcache.r
+  store_unit.aw <> dcache.aw
+  store_unit.w  <> dcache.w
+  store_unit.b  <> dcache.b
+
+  // Store wstrb / wdata formatting
+  private val store_wstrb = MuxLookup(io.size, "b1111".U)(Seq(
+    0.U -> (1.U(4.W) << io.addr(1, 0)),
+    1.U -> (3.U(4.W) << (io.addr(1, 0) & "b10".U)),
+    2.U -> "b1111".U(4.W)
+  ))
+  private val store_wdata = MuxLookup(io.size, io.wdata)(Seq(
+    0.U -> Fill(4, io.wdata(7, 0)),
+    1.U -> Fill(2, io.wdata(15, 0)),
+    2.U -> io.wdata
+  ))
+
+  // Load data extraction
+  private val load_raw  = load_unit.in.rdata
+  private val load_byte = MuxLookup(io.addr(1, 0), load_raw(7, 0))(Seq(
+    0.U -> load_raw(7, 0),
+    1.U -> load_raw(15, 8),
+    2.U -> load_raw(23, 16),
+    3.U -> load_raw(31, 24)
+  ))
+  private val load_half  = Mux(io.addr(1), load_raw(31, 16), load_raw(15, 0))
+  private val load_final = MuxLookup(io.size, load_raw)(Seq(
+    0.U -> Mux(io.sign_ext, SignExt(load_byte, 32), ZeroExt(load_byte, 32)),
+    1.U -> Mux(io.sign_ext, SignExt(load_half, 32), ZeroExt(load_half, 32)),
+    2.U -> load_raw
+  ))
+
+  // LoadUnit defaults
+  load_unit.in.req   := false.B
+  load_unit.in.wr    := false.B
+  load_unit.in.size  := io.size
+  load_unit.in.addr  := io.addr
+  load_unit.in.wstrb := 0.U
+  load_unit.in.wdata := 0.U
+
+  // StoreUnit defaults
+  store_unit.in.req   := false.B
+  store_unit.in.wr    := true.B
+  store_unit.in.size  := io.size
+  store_unit.in.addr  := io.addr
+  store_unit.in.wstrb := store_wstrb
+  store_unit.in.wdata := store_wdata
+
+  // LateExecIO defaults
+  io.late.done         := false.B
+  io.late.result       := load_final
+  io.late.result_valid := io.r_en
+
+  // Internal state machine
+  object LSUState extends ChiselEnum {
+    val idle, lsu_req, lsu_wait = Value
+  }
+  private val stateQ = RegInit(LSUState.idle)
+
+  switch(stateQ) {
+    is(LSUState.idle) {
+      when(io.late.req) {
+        when(io.r_en) {
+          load_unit.in.req := true.B
+        }.elsewhen(io.w_en) {
+          store_unit.in.req := true.B
+        }
+        stateQ := LSUState.lsu_req
+      }
+    }
+    is(LSUState.lsu_req) {
+      when(io.r_en) {
+        load_unit.in.req := true.B
+        when(load_unit.in.addr_ok) {
+          stateQ := LSUState.lsu_wait
+        }
+      }.elsewhen(io.w_en) {
+        store_unit.in.req := true.B
+        when(store_unit.in.addr_ok) {
+          stateQ := LSUState.lsu_wait
+        }
+      }
+    }
+    is(LSUState.lsu_wait) {
+      when(io.r_en && load_unit.in.data_ok) {
+        io.late.done := true.B
+        stateQ := LSUState.idle
+      }.elsewhen(io.w_en && store_unit.in.data_ok) {
+        io.late.done         := true.B
+        io.late.result_valid := false.B
+        stateQ := LSUState.idle
+      }
+    }
+  }
 }
