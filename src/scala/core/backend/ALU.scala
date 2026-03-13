@@ -1,7 +1,8 @@
-package ysyx.core.component
+package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
+
 import ysyx.core.common._
 
 object ALUOpType extends ChiselEnum {

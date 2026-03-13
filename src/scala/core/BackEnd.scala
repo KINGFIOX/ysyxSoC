@@ -1,14 +1,16 @@
-package ysyx.core
+package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
 import chisel3.probe.{define, Probe, ProbeValue, read}
 
-import ysyx.core.common.{HasCSRParameter, HasCoreParameter, HasRegFileParameter}
-import ysyx.core.component._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
-import ysyx.core.common.NPCModule
+
+import ysyx.core.common._
+import ysyx.core.frontend._
+import ysyx.core.lsu._
+import ysyx.core.DebugBundle
 
 class BackEnd extends NPCModule {
 
@@ -122,7 +124,8 @@ class BackEnd extends NPCModule {
   rfu_.io.in.rs2_i := rs2_idx
 
   val needs_rs1 = (aluSel1 === ALUOp1Sel.OP1_RS1) || is_branch
-  val needs_rs2 = (aluSel2 === ALUOp2Sel.OP2_RS2) || is_branch || cu_.io.out.mem.w_en
+  val needs_rs2 =
+    (aluSel2 === ALUOp2Sel.OP2_RS2) || is_branch || cu_.io.out.mem.w_en
 
   // --- Source 1 ---
   val rename_src1 = Wire(new IQSrcBundle)

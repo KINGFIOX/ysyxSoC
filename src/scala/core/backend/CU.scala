@@ -1,14 +1,10 @@
-/** @brief
-  *   CU - 控制单元 (Control Unit) 根据指令生成各个模块的控制信号
-  */
-
-package ysyx.core.component
+package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.decode._
-import ysyx.core.common.HasCoreParameter
-import ysyx.core.common.HasRegFileParameter
+
+import ysyx.core.common._
 
 /** ALU 操作数1 选择 */
 object ALUOp1Sel extends ChiselEnum {

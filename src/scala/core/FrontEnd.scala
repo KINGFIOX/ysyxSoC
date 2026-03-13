@@ -1,11 +1,11 @@
-package ysyx.core
+package ysyx.core.frontend
 
 import chisel3._
 import chisel3.util._
 
-import ysyx.core.common.NPCModule
-import ysyx.core.component._
 import freechips.rocketchip.amba.axi4._
+
+import ysyx.core.common._
 
 class FrontEnd extends NPCModule {
 

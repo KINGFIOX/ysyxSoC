@@ -3,11 +3,11 @@ package ysyx.core
 import chisel3._
 import chisel3.util._
 import chisel3.probe.{define, Probe, ProbeValue}
-
-import ysyx.core.common.{HasCoreParameter, HasRegFileParameter}
-import ysyx.core.component._
 import freechips.rocketchip.amba.axi4._
-import ysyx.core.common.NPCModule
+
+import ysyx.core.common._
+import ysyx.core.backend._
+import ysyx.core.frontend._
 
 class DebugBundle
     extends Bundle

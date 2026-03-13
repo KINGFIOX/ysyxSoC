@@ -1,8 +1,10 @@
-package ysyx.core.component
+package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
+
 import ysyx.core.common._
+import ysyx.core.lsu._
 
 // whether the entry valided, defined by queue ptr: head and tail
 object EntryState extends ChiselEnum {

@@ -1,4 +1,4 @@
-package ysyx.core.component
+package ysyx.core.lsu
 
 import chisel3._
 import chisel3.util._
@@ -7,6 +7,7 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
 
 import ysyx.core.common._
+import ysyx.core.backend._
 import ysyx.SoCConfig
 
 object MemUExceptionType extends ChiselEnum {

@@ -1,9 +1,10 @@
-package ysyx.core.component
+package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.common._
 import chisel3.probe.{define, Probe, ProbeValue}
+
+import ysyx.core.common._
 
 // from the master's point-of-view
 class CSRCommitIO extends Bundle with HasCoreParameter {

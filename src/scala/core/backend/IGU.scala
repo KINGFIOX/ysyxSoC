@@ -1,31 +1,28 @@
-/** @brief
-  *   ExtU - 立即数扩展单元
-  */
-
-package ysyx.core.component
+package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.common.HasCoreParameter
+
+import ysyx.core.common._
 
 /** 立即数类型 */
 object ImmType extends ChiselEnum {
   val IMM_I, IMM_S, IMM_B, IMM_U, IMM_J = Value
 }
 
-class IGUInput extends Bundle with HasCoreParameter {
+class IGUInput extends NPCBundle {
   val inst_31_7 = UInt((InstBits - OpcodeBits).W) // inst[31:7], 不需要 opcode 部分
   val immType   = ImmType()
 }
 
-class IGUOutput extends Bundle with HasCoreParameter {
+class IGUOutput extends NPCBundle {
   val imm = UInt(dataBits.W)
 }
 
 /** @brief
   *   Immediate Generator Unit, 立即数生成器
   */
-class IGU extends Module with HasCoreParameter {
+class IGU extends NPCModule {
   val io = IO(new Bundle {
     val in  = Flipped(new IGUInput)
     val out = new IGUOutput

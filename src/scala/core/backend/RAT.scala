@@ -1,7 +1,8 @@
-package ysyx.core.component
+package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
+
 import ysyx.core.common._
 
 class RATReadPort extends NPCBundle {
@@ -22,7 +23,7 @@ class RATCommitPort extends NPCBundle {
   val tag  = Input(UInt(robEntryBits.W))
 }
 
-class RAT extends Module with HasCoreParameter with HasRegFileParameter {
+class RAT extends NPCModule {
   val io = IO(new Bundle {
     val read1  = new RATReadPort
     val read2  = new RATReadPort

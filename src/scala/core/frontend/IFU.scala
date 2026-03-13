@@ -1,10 +1,13 @@
-package ysyx.core.component
+package ysyx.core.frontend
 
 import chisel3._
 import chisel3.util._
-import ysyx.core.common._
+
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
+
+import ysyx.core.common._
+import ysyx.core.lsu._
 
 class IFUOutput extends Bundle with HasCoreParameter {
   val inst = UInt(InstBits.W)
