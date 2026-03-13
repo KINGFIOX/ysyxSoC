@@ -35,8 +35,10 @@ class RenameStage extends NPCModule {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
 
-    val rat_read1 = Flipped(new RATReadPort)
-    val rat_read2 = Flipped(new RATReadPort)
+    val rat = new Bundle {
+      val read1 = Flipped(new RATReadPort)
+      val read2 = Flipped(new RATReadPort)
+    }
 
     val rfu_rs1_idx = Output(UInt(NRRegbits.W))
     val rfu_rs2_idx = Output(UInt(NRRegbits.W))
@@ -57,16 +59,16 @@ class RenameStage extends NPCModule {
   val o = io.out.bits
 
   // RAT read
-  io.rat_read1.addr := d.rs1_idx
-  io.rat_read2.addr := d.rs2_idx
+  io.rat.read1.addr := d.rs1_idx
+  io.rat.read2.addr := d.rs2_idx
 
   // RFU read
   io.rfu_rs1_idx := d.rs1_idx
   io.rfu_rs2_idx := d.rs2_idx
 
   // ROB forward tag
-  io.rob_fwd1.tag := io.rat_read1.tag
-  io.rob_fwd2.tag := io.rat_read2.tag
+  io.rob_fwd1.tag := io.rat.read1.tag
+  io.rob_fwd2.tag := io.rat.read2.tag
 
   // --- Source 1 rename ---
   val rename_src1 = Wire(new IQSrcBundle)
@@ -75,12 +77,12 @@ class RenameStage extends NPCModule {
     rename_src1.ready := true.B
     rename_src1.value := 0.U
     rename_src1.tag := 0.U
-  }.elsewhen(!io.rat_read1.busy) {
+  }.elsewhen(!io.rat.read1.busy) {
     rename_src1.ready := true.B
     rename_src1.value := io.rfu_rs1_v
     rename_src1.tag := 0.U
   }.otherwise {
-    val fwd_tag = io.rat_read1.tag
+    val fwd_tag = io.rat.read1.tag
     val fwd_rdy = io.rob_fwd1.valid ||
       (io.cdb1.valid && io.cdb1.tag === fwd_tag) ||
       (io.cdb2.valid && io.cdb2.tag === fwd_tag)
@@ -103,12 +105,12 @@ class RenameStage extends NPCModule {
     rename_src2.ready := true.B
     rename_src2.value := 0.U
     rename_src2.tag := 0.U
-  }.elsewhen(!io.rat_read2.busy) {
+  }.elsewhen(!io.rat.read2.busy) {
     rename_src2.ready := true.B
     rename_src2.value := io.rfu_rs2_v
     rename_src2.tag := 0.U
   }.otherwise {
-    val fwd_tag = io.rat_read2.tag
+    val fwd_tag = io.rat.read2.tag
     val fwd_rdy = io.rob_fwd2.valid ||
       (io.cdb1.valid && io.cdb1.tag === fwd_tag) ||
       (io.cdb2.valid && io.cdb2.tag === fwd_tag)

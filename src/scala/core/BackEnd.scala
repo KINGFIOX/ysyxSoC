@@ -14,14 +14,14 @@ import ysyx.core.DebugBundle
 
 class BackEnd extends NPCModule {
 
-  val dcache = IO(AXI4Bundle(axiParams))
-
   val io = IO(new Bundle {
     val in = Flipped(Irrevocable(new IFUOutput))
     val redirect = Output(new RedirectBundle)
     val flush = Output(Bool())
   })
 
+  // bus
+  val dcache = IO(AXI4Bundle(axiParams))
   val probe = IO(Output(Probe(new DebugBundle)))
   val interrupt = IO(Input(Bool()))
   val fence_i = IO(Output(Bool()))
@@ -73,9 +73,12 @@ class BackEnd extends NPCModule {
   val cdb1 = Wire(new CDBBundle)
   val cdb2 = Wire(new CDBBundle)
 
-  alu_iq_.io.cdb1 := cdb1; alu_iq_.io.cdb2 := cdb2
-  bru_iq_.io.cdb1 := cdb1; bru_iq_.io.cdb2 := cdb2
-  agu_iq_.io.cdb1 := cdb1; agu_iq_.io.cdb2 := cdb2
+  alu_iq_.io.cdb1 := cdb1
+  alu_iq_.io.cdb2 := cdb2
+  bru_iq_.io.cdb1 := cdb1
+  bru_iq_.io.cdb2 := cdb2
+  agu_iq_.io.cdb1 := cdb1
+  agu_iq_.io.cdb2 := cdb2
 
   // ==========================================================
   // Stage pipeline: IFU -> Decode -> Rename -> Dispatch
@@ -85,8 +88,8 @@ class BackEnd extends NPCModule {
   dispatcher_.io.in <> renameStage_.io.out
 
   // --- RenameStage side-band ---
-  renameStage_.io.rat_read1 <> rat_.io.read1
-  renameStage_.io.rat_read2 <> rat_.io.read2
+  renameStage_.io.rat.read1 <> rat_.io.read1
+  renameStage_.io.rat.read2 <> rat_.io.read2
 
   rfu_.io.in.rs1_i := renameStage_.io.rfu_rs1_idx
   rfu_.io.in.rs2_i := renameStage_.io.rfu_rs2_idx
@@ -103,9 +106,9 @@ class BackEnd extends NPCModule {
   dispatcher_.io.flush := flush
   dispatcher_.io.rob_enq <> rob_.io.enq
   dispatcher_.io.rob_tag := rob_.io.enq_tag
-  dispatcher_.io.dis_alu <> alu_iq_.io.enq
-  dispatcher_.io.dis_bru <> bru_iq_.io.enq
-  dispatcher_.io.dis_agu <> agu_iq_.io.enq
+  dispatcher_.io.disp_alu <> alu_iq_.io.enq
+  dispatcher_.io.disp_bru <> bru_iq_.io.enq
+  dispatcher_.io.disp_agu <> agu_iq_.io.enq
 
   rat_.io.write.en := dispatcher_.io.rat_write.en
   rat_.io.write.addr := dispatcher_.io.rat_write.addr

@@ -9,10 +9,7 @@ import ysyx.core.common._
 import ysyx.core.backend._
 import ysyx.core.frontend._
 
-class DebugBundle
-    extends Bundle
-    with HasCoreParameter
-    with HasRegFileParameter {
+class DebugBundle extends NPCBundle {
   val valid = Bool()
   val pc = UInt(dataBits.W)
   val dnpc = UInt(dataBits.W)
