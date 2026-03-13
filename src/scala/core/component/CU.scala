@@ -48,10 +48,7 @@ object CUExceptionType extends ChiselEnum {
 }
 
 /** CU 输出的控制信号 */
-class CUOutput
-    extends Bundle
-    with HasRegFileParameter
-    with HasCoreParameter {
+class CUOutput extends Bundle with HasRegFileParameter with HasCoreParameter {
   val aluOp = ALUOpType(); val aluSel1 = ALUOp1Sel();
   val aluSel2 = ALUOp2Sel() // ALU 控制
   val immType = ImmType()
