@@ -7,7 +7,7 @@ import ysyx.core.common.NPCModule
 import ysyx.core.component._
 import freechips.rocketchip.amba.axi4._
 
-class FrontEnd(axiParams: AXI4BundleParameters) extends NPCModule {
+class FrontEnd extends NPCModule {
 
   val icache = IO(AXI4Bundle(axiParams))
 

@@ -10,7 +10,7 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
 import ysyx.core.common.NPCModule
 
-class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
+class BackEnd extends NPCModule {
 
   val dcache = IO(AXI4Bundle(axiParams))
 

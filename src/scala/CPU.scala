@@ -12,14 +12,9 @@ import freechips.rocketchip.util._
 
 import ysyx.core.NPCCore
 import ysyx.core.DebugBundle
+import ysyx.core.common.HasAXIParameter
 
-object CPUAXI4BundleParameters {
-  def apply() = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = ChipLinkParam.idBits)
-}
-
-class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
-
-  private val axiParams = CPUAXI4BundleParameters()
+class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule with HasAXIParameter {
 
   private val icacheNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(
     masters = Seq(AXI4MasterParameters(
@@ -50,7 +45,7 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     val probe = IO(Output(Probe(new DebugBundle)))
 
     // --- modules ---
-    val core = Module(new NPCCore(axiParams))
+    val core = Module(new NPCCore)
 
     // --- connect ---
     define(probe, core.probe)

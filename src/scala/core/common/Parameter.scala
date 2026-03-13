@@ -2,6 +2,8 @@ package ysyx.core.common
 
 import chisel3._
 import chisel3.util._
+import freechips.rocketchip.amba.axi4.AXI4BundleParameters
+import ysyx.ChipLinkParam
 
 /** @brief
   *   有几个通用寄存器
@@ -39,14 +41,20 @@ trait HasCoreParameter {
   val robEntryBits = 6 // 2^6 = 64
 }
 
+trait HasAXIParameter extends HasCoreParameter {
+  val axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = addrBits, dataBits = dataBits, idBits = ChipLinkParam.idBits)
+}
+
 abstract class NPCModule
     extends Module
     with HasRegFileParameter
     with HasCoreParameter
     with HasCSRParameter
+    with HasAXIParameter
 
 abstract class NPCBundle
     extends Bundle
     with HasRegFileParameter
     with HasCoreParameter
     with HasCSRParameter
+    with HasAXIParameter

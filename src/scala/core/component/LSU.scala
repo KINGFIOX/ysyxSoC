@@ -7,7 +7,6 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
 
 import ysyx.core.common.HasCoreParameter
-import ysyx.CPUAXI4BundleParameters
 import ysyx.SoCConfig
 
 object MemUExceptionType extends ChiselEnum {

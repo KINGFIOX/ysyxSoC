@@ -22,7 +22,7 @@ class DebugBundle
   val csr = new CSRUDebugBundle
 }
 
-class NPCCore(axiParams: AXI4BundleParameters) extends NPCModule {
+class NPCCore extends NPCModule {
 
   val icache    = IO(AXI4Bundle(axiParams))
   val dcache    = IO(AXI4Bundle(axiParams))
