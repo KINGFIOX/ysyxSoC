@@ -8,6 +8,11 @@ object EntryState extends ChiselEnum {
   val allocated, executed = Value
 }
 
+class MemRobEntry extends MemInfoBundle {
+  val addr_rdy = Bool()
+  val wdata_rdy = Bool()
+}
+
 class RobEntry extends Bundle with HasCoreParameter with HasRegFileParameter {
   val wbSel  = WBSel()
   val mem    = new MemInfoBundle
@@ -42,7 +47,7 @@ class RobEntry extends Bundle with HasCoreParameter with HasRegFileParameter {
 
 class RobEnqData extends Bundle with HasCoreParameter with HasRegFileParameter {
   val wbSel  = WBSel()
-  val mem    = new MemInfoBundle
+  val mem    = new MemRobEntry
   val csrOp  = CSROpType()
   val csrWen = Bool()
   val rfWen  = Bool()
@@ -256,4 +261,10 @@ class Rob(val entries: Int = 32) extends NPCModule {
       tail_q := tail_q + 1.U
     }
   }
+}
+
+class CDBBundle extends NPCBundle {
+  val valid = Bool()
+  val tag = UInt(robEntryBits.W)
+  val value = UInt(dataBits.W)
 }

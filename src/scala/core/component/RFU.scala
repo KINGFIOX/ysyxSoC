@@ -6,12 +6,12 @@ import chisel3.probe.{define, Probe, ProbeValue}
 import ysyx.core.common.HasCoreParameter
 import ysyx.core.common.HasRegFileParameter
 
-class RFUOutputBundle extends Bundle with HasCoreParameter with HasRegFileParameter {
+class RFUOutput extends Bundle with HasCoreParameter with HasRegFileParameter {
   val rs1_v  = UInt(dataBits.W)
   val rs2_v  = UInt(dataBits.W)
 }
 
-class RFUInputBundle extends Bundle with HasRegFileParameter with HasCoreParameter {
+class RFUInput extends Bundle with HasRegFileParameter with HasCoreParameter {
   val rs1_i = UInt(NRRegbits.W)
   val rs2_i = UInt(NRRegbits.W)
   val rd_i  = UInt(NRRegbits.W)
@@ -25,8 +25,8 @@ class RFUInputBundle extends Bundle with HasRegFileParameter with HasCoreParamet
   */
 class RFU extends Module with HasCoreParameter with HasRegFileParameter {
   val io = IO(new Bundle {
-    val in   = Flipped(new RFUInputBundle)
-    val out  = new RFUOutputBundle
+    val in   = Flipped(new RFUInput)
+    val out  = new RFUOutput
     val probe = Output(Probe(Vec(NRReg, UInt(dataBits.W))))
   })
 

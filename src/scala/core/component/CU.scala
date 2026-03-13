@@ -48,7 +48,7 @@ object CUExceptionType extends ChiselEnum {
 }
 
 /** CU 输出的控制信号 */
-class CUOutputBundle
+class CUOutput
     extends Bundle
     with HasRegFileParameter
     with HasCoreParameter {
@@ -70,14 +70,16 @@ class CUOutputBundle
   val mtval = UInt(dataBits.W) // access fault address
 }
 
-class MemInfoBundle extends Bundle {
-  val r_en = Bool()
-  val w_en = Bool()
+class MemInfoBundle extends Bundle with HasCoreParameter {
   val size = UInt(2.W) // 0, 1, 2
+  val r_en = Bool()
   val sign_ext = Bool() // need sign extension ? only used when load
+  val w_en = Bool()
+  val addr = UInt(addrBits.W)
+  val wdata = UInt(dataBits.W)
 }
 
-class CUInputBundle extends Bundle with HasCoreParameter {
+class CUInput extends Bundle with HasCoreParameter {
   val inst = UInt(InstBits.W)
 }
 
@@ -526,8 +528,8 @@ object CU {
 
 class CU extends Module with HasCoreParameter with HasRegFileParameter {
   val io = IO(new Bundle {
-    val in = Flipped(new CUInputBundle)
-    val out = new CUOutputBundle
+    val in = Flipped(new CUInput)
+    val out = new CUOutput
   })
 
   import CU._

@@ -34,9 +34,10 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
   val masterNode = AXI4Xbar()
   // masterNode := icacheNode
 
-  val licache = LazyModule(new AXI4ICache)
+  // val licache = LazyModule(new AXI4ICache)
 
-  masterNode := licache.node := icacheNode
+  // masterNode := licache.node := icacheNode
+  masterNode := icacheNode
   masterNode := AXI4DCache() := dcacheNode
 
   lazy val module = new Impl
@@ -66,8 +67,8 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule {
     slave.b.valid := false.B
     slave.b.bits := DontCare
 
-    // fence_i
-    licache.module.fence_i := core.fence_i
+    // // fence_i
+    // licache.module.fence_i := core.fence_i
 
     // Interrupt is not used yet
     core.interrupt := interrupt

@@ -15,14 +15,14 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   val dcache = IO(AXI4Bundle(axiParams))
 
   val io = IO(new Bundle {
-    val in       = Flipped(Irrevocable(new IFUOutputBundle))
+    val in = Flipped(Irrevocable(new IFUOutput))
     val redirect = Output(new RedirectBundle)
-    val flush    = Output(Bool())
+    val flush = Output(Bool())
   })
 
-  val probe     = IO(Output(Probe(new DebugBundle)))
+  val probe = IO(Output(Probe(new DebugBundle)))
   val interrupt = IO(Input(Bool()))
-  val fence_i   = IO(Output(Bool()))
+  val fence_i = IO(Output(Bool()))
 
   // ==========================================================
   // Sub-modules
@@ -287,12 +287,12 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
 
   val is_store_dispatch = cu_.io.out.mem.w_en
   val imm_as_src2 = (aluSel2 === ALUOp2Sel.OP2_IMM) && !is_store_dispatch
-  alu_enq.src2_val   := Mux(imm_as_src2, imm, src2_val)
-  alu_enq.src2_tag   := Mux(imm_as_src2, 0.U, src2_tag)
+  alu_enq.src2_val := Mux(imm_as_src2, imm, src2_val)
+  alu_enq.src2_tag := Mux(imm_as_src2, 0.U, src2_tag)
   alu_enq.src2_ready := Mux(imm_as_src2, true.B, src2_ready)
 
   alu_enq.aluOp := cu_.io.out.aluOp
-  alu_enq.rob_tag := rob_.io.enq_tag
+  alu_enq.rob_tag := rob_.io.enq_tag // def
   alu_enq.rd_def := cu_.io.out.rfWen && (rd_idx =/= 0.U)
 
   // --- BRU IQ enqueue ---
@@ -337,9 +337,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   val alu_target_npc = Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.pc + 4.U)
 
   val is_store_wb = alu_rob_entry.mem.w_en
-  val wb_alu_result = Mux(is_store_wb,
-    alu_iq_.io.issue.src1_v + alu_rob_entry.imm,
-    alu_result)
+  val wb_alu_result = Mux(is_store_wb, alu_iq_.io.issue.src1_v + alu_rob_entry.imm, alu_result)
 
   rob_.io.wb.valid := alu_issue_valid
   rob_.io.wb.tag := alu_issue_tag
@@ -366,8 +364,7 @@ class BackEnd(axiParams: AXI4BundleParameters) extends NPCModule {
   val bru_rob_entry = rob_.io.lookup2.entry
 
   val bru_mispredict = br_flag
-  val bru_actual_npc =
-    Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
+  val bru_actual_npc = Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
 
   rob_.io.wb2.valid := bru_issue_valid
   rob_.io.wb2.tag := bru_issue_tag

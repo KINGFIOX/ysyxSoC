@@ -7,7 +7,7 @@ import ysyx.core.common.HasRegFileParameter
 import ysyx.core.common.HasCSRParameter
 import chisel3.probe.{define, Probe, ProbeValue}
 
-// 指令执行完成、指令发生了异常, 需要 commit(交付)
+// from the master's point-of-view
 class CSRCommitIO extends Bundle with HasCoreParameter {
   val xepc = UInt(dataBits.W); val xepc_wen = Bool()
   val xcause = UInt(dataBits.W); val xcause_wen = Bool()

@@ -6,7 +6,7 @@ import ysyx.core.common._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
 
-class IFUOutputBundle extends Bundle with HasCoreParameter {
+class IFUOutput extends Bundle with HasCoreParameter {
   val inst = UInt(InstBits.W)
   val pc = UInt(dataBits.W)
   val isValid = Bool()
@@ -35,7 +35,7 @@ object AXI4Resp {
 class IFU(axiParams: AXI4BundleParameters) extends NPCModule {
 
   val io = IO(new Bundle {
-    val out = Irrevocable(new IFUOutputBundle)
+    val out = Irrevocable(new IFUOutput)
     val redirect = Input(new RedirectBundle)
   })
 

@@ -44,3 +44,9 @@ abstract class NPCModule
     with HasRegFileParameter
     with HasCoreParameter
     with HasCSRParameter
+
+abstract class NPCBundle
+    extends Bundle
+    with HasRegFileParameter
+    with HasCoreParameter
+    with HasCSRParameter

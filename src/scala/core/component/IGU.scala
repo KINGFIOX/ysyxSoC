@@ -13,12 +13,12 @@ object ImmType extends ChiselEnum {
   val IMM_I, IMM_S, IMM_B, IMM_U, IMM_J = Value
 }
 
-class IGUInputBundle extends Bundle with HasCoreParameter {
+class IGUInput extends Bundle with HasCoreParameter {
   val inst_31_7 = UInt((InstBits - OpcodeBits).W) // inst[31:7], 不需要 opcode 部分
   val immType   = ImmType()
 }
 
-class IGUOutputBundle extends Bundle with HasCoreParameter {
+class IGUOutput extends Bundle with HasCoreParameter {
   val imm = UInt(dataBits.W)
 }
 
@@ -27,8 +27,8 @@ class IGUOutputBundle extends Bundle with HasCoreParameter {
   */
 class IGU extends Module with HasCoreParameter {
   val io = IO(new Bundle {
-    val in  = Flipped(new IGUInputBundle)
-    val out = new IGUOutputBundle
+    val in  = Flipped(new IGUInput)
+    val out = new IGUOutput
   })
 
   // inst 输入是 inst[31:7], 共25位, 索引映射: inst[i] = 原inst[i+7]
