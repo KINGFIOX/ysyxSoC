@@ -29,8 +29,10 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Sub-modules
   // ==========================================================
-  val cu_ = Module(new CU)
-  val igu_ = Module(new IGU)
+  val decodeStage_ = Module(new DecodeStage)
+  val renameStage_ = Module(new RenameStage)
+  val dispatcher_ = Module(new Dispatcher)
+
   val rfu_ = Module(new RFU)
   val alu_ = Module(new ALU)
   val bru_ = Module(new BRU)
@@ -76,234 +78,38 @@ class BackEnd extends NPCModule {
   agu_iq_.io.cdb1 := cdb1; agu_iq_.io.cdb2 := cdb2
 
   // ==========================================================
-  // Stage 1 — Decode
+  // Stage pipeline: IFU -> Decode -> Rename -> Dispatch
   // ==========================================================
-  val ifu_out = io.in.bits
-  val ifu_valid = io.in.valid
+  decodeStage_.io.in <> io.in
+  renameStage_.io.in <> decodeStage_.io.out
+  dispatcher_.io.in <> renameStage_.io.out
 
-  cu_.io.in.inst := ifu_out.inst
-  igu_.io.in.inst_31_7 := ifu_out.inst(31, 7)
-  igu_.io.in.immType := cu_.io.out.immType
+  // --- RenameStage side-band ---
+  renameStage_.io.rat_read1 <> rat_.io.read1
+  renameStage_.io.rat_read2 <> rat_.io.read2
 
-  val rs1_idx = ifu_out.inst(19, 15)
-  val rs2_idx = ifu_out.inst(24, 20)
-  val rd_idx = ifu_out.inst(11, 7)
-  val imm = igu_.io.out.imm
-  val dispatch_pc = ifu_out.pc
+  rfu_.io.in.rs1_i := renameStage_.io.rfu_rs1_idx
+  rfu_.io.in.rs2_i := renameStage_.io.rfu_rs2_idx
+  renameStage_.io.rfu_rs1_v := rfu_.io.out.rs1_v
+  renameStage_.io.rfu_rs2_v := rfu_.io.out.rs2_v
 
-  val npcOp = cu_.io.out.npcOp
-  val aluSel1 = cu_.io.out.aluSel1
-  val aluSel2 = cu_.io.out.aluSel2
+  renameStage_.io.rob_fwd1 <> rob_.io.fwd1
+  renameStage_.io.rob_fwd2 <> rob_.io.fwd2
 
-  val is_jal = npcOp === NPCOpType.NPC_JAL
-  val is_mret = npcOp === NPCOpType.NPC_MRET
-  val is_lui = aluSel1 === ALUOp1Sel.OP1_ZERO
-  val is_auipc = aluSel1 === ALUOp1Sel.OP1_PC && npcOp === NPCOpType.NPC_4
-  val is_branch = npcOp === NPCOpType.NPC_BR
+  renameStage_.io.cdb1 := cdb1
+  renameStage_.io.cdb2 := cdb2
 
-  val ifu_except_en = ifu_out.exceptionEn
-  val cu_except_en = cu_.io.out.exceptionEn
-  val dispatch_except_en = ifu_except_en || cu_except_en
+  // --- Dispatcher ---
+  dispatcher_.io.flush := flush
+  dispatcher_.io.rob_enq <> rob_.io.enq
+  dispatcher_.io.rob_tag := rob_.io.enq_tag
+  dispatcher_.io.dis_alu <> alu_iq_.io.enq
+  dispatcher_.io.dis_bru <> bru_iq_.io.enq
+  dispatcher_.io.dis_agu <> agu_iq_.io.enq
 
-  val is_mem = cu_.io.out.mem.r_en || cu_.io.out.mem.w_en
-
-  val dispatch_resolved = is_jal || is_mret || is_lui || is_auipc
-  val skip_iq = dispatch_except_en || dispatch_resolved
-  val go_to_alu = !skip_iq && !is_branch && !is_mem
-  val go_to_bru = is_branch && !skip_iq
-  val go_to_agu = is_mem && !skip_iq
-  val rd_def = cu_.io.out.rfWen && (rd_idx =/= 0.U)
-
-  // ==========================================================
-  // Stage 2 — Rename (RAT read + RFU read + ROB fwd + CDB bypass)
-  // ==========================================================
-  rat_.io.read1.addr := rs1_idx
-  rat_.io.read2.addr := rs2_idx
-
-  rfu_.io.in.rs1_i := rs1_idx
-  rfu_.io.in.rs2_i := rs2_idx
-
-  val needs_rs1 = (aluSel1 === ALUOp1Sel.OP1_RS1) || is_branch
-  val needs_rs2 =
-    (aluSel2 === ALUOp2Sel.OP2_RS2) || is_branch || cu_.io.out.mem.w_en
-
-  // --- Source 1 ---
-  val rename_src1 = Wire(new IQSrcBundle)
-  rob_.io.fwd1.tag := rat_.io.read1.tag
-
-  when(!needs_rs1) {
-    rename_src1.ready := true.B
-    rename_src1.value := 0.U
-    rename_src1.tag := 0.U
-  }.elsewhen(!rat_.io.read1.busy) {
-    rename_src1.ready := true.B
-    rename_src1.value := rfu_.io.out.rs1_v
-    rename_src1.tag := 0.U
-  }.otherwise {
-    val fwd_tag = rat_.io.read1.tag
-    val fwd_rdy = rob_.io.fwd1.valid ||
-      (cdb1.valid && cdb1.tag === fwd_tag) ||
-      (cdb2.valid && cdb2.tag === fwd_tag)
-    val fwd_val = MuxCase(
-      rob_.io.fwd1.value,
-      Seq(
-        (cdb1.valid && cdb1.tag === fwd_tag) -> cdb1.value,
-        (cdb2.valid && cdb2.tag === fwd_tag) -> cdb2.value
-      )
-    )
-    rename_src1.ready := fwd_rdy
-    rename_src1.value := fwd_val
-    rename_src1.tag := fwd_tag
-  }
-
-  // --- Source 2 ---
-  val rename_src2 = Wire(new IQSrcBundle)
-  rob_.io.fwd2.tag := rat_.io.read2.tag
-
-  when(!needs_rs2) {
-    rename_src2.ready := true.B
-    rename_src2.value := 0.U
-    rename_src2.tag := 0.U
-  }.elsewhen(!rat_.io.read2.busy) {
-    rename_src2.ready := true.B
-    rename_src2.value := rfu_.io.out.rs2_v
-    rename_src2.tag := 0.U
-  }.otherwise {
-    val fwd_tag = rat_.io.read2.tag
-    val fwd_rdy = rob_.io.fwd2.valid ||
-      (cdb1.valid && cdb1.tag === fwd_tag) ||
-      (cdb2.valid && cdb2.tag === fwd_tag)
-    val fwd_val = MuxCase(
-      rob_.io.fwd2.value,
-      Seq(
-        (cdb1.valid && cdb1.tag === fwd_tag) -> cdb1.value,
-        (cdb2.valid && cdb2.tag === fwd_tag) -> cdb2.value
-      )
-    )
-    rename_src2.ready := fwd_rdy
-    rename_src2.value := fwd_val
-    rename_src2.tag := fwd_tag
-  }
-
-  // Dispatch-resolved value computation
-  val disp_rd_val = MuxCase(
-    0.U,
-    Seq(
-      is_jal -> (dispatch_pc + 4.U),
-      is_lui -> imm,
-      is_auipc -> (dispatch_pc + imm)
-    )
-  )
-  val disp_rd_val_valid = is_jal || is_lui || is_auipc
-  val disp_mispredict = is_jal || is_mret
-  val disp_target_npc = MuxCase(
-    0.U,
-    Seq(
-      is_jal -> (dispatch_pc + imm),
-      is_branch -> (dispatch_pc + imm)
-    )
-  )
-
-  // Exception mcause mapping
-  val dispatch_mcause = MuxCase(
-    0.U,
-    Seq(
-      ifu_except_en -> MuxLookup(ifu_out.exception, 0.U)(
-        Seq(
-          IFUExceptionType.ifu_INSTRUCTION_ADDRESS_MISALIGNED -> 0.U,
-          IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT -> 1.U,
-          IFUExceptionType.ifu_INSTRUCTION_PAGE_FAULT -> 12.U
-        )
-      ),
-      cu_except_en -> MuxLookup(cu_.io.out.exception, 0.U)(
-        Seq(
-          CUExceptionType.cu_ILLEGAL_INSTRUCTION -> 2.U,
-          CUExceptionType.cu_BREAKPOINT -> 3.U,
-          CUExceptionType.cu_ECALL_FROM_U_MODE -> 8.U,
-          CUExceptionType.cu_ECALL_FROM_S_MODE -> 9.U,
-          CUExceptionType.cu_ECALL_FROM_M_MODE -> 11.U
-        )
-      )
-    )
-  )
-  val dispatch_mtval = Mux(ifu_except_en, ifu_out.mtval, cu_.io.out.mtval)
-
-  // ==========================================================
-  // Stage 3 — Dispatch (ROB enqueue + IQ enqueue + RAT write)
-  // ==========================================================
-  val iq_ready = MuxCase(
-    true.B,
-    Seq(
-      go_to_alu -> alu_iq_.io.enq.ready,
-      go_to_bru -> bru_iq_.io.enq.ready,
-      go_to_agu -> agu_iq_.io.enq.ready
-    )
-  )
-  val can_dispatch = ifu_valid && rob_.io.enq.ready && iq_ready && !flush
-  io.in.ready := rob_.io.enq.ready && iq_ready && !flush
-
-  // --- ROB enqueue ---
-  rob_.io.enq.valid := can_dispatch
-
-  val rob_enq = rob_.io.enq.bits
-  rob_enq.wbSel := cu_.io.out.wbSel
-  rob_enq.mem := cu_.io.out.mem
-  rob_enq.csrOp := cu_.io.out.csrOp
-  rob_enq.csrWen := cu_.io.out.csrWen
-  rob_enq.npcOp := npcOp
-  rob_enq.pc := dispatch_pc
-  rob_enq.inst := ifu_out.inst
-  rob_enq.imm := imm
-  rob_enq.rd_idx := rd_idx
-  rob_enq.rd_def := rd_def
-  rob_enq.except_en := dispatch_except_en
-  rob_enq.mcause := dispatch_mcause
-  rob_enq.mtval := dispatch_mtval
-  rob_enq.dispatch_executed := dispatch_resolved
-  rob_enq.rd_val := disp_rd_val
-  rob_enq.rd_val_valid := disp_rd_val_valid
-  rob_enq.mispredict := disp_mispredict
-  rob_enq.target_npc := disp_target_npc
-
-  val rob_tag = rob_.io.enq_tag
-
-  // --- ALU IQ enqueue ---
-  alu_iq_.io.enq.valid := can_dispatch && go_to_alu
-  alu_iq_.io.enq.bits.src1 := rename_src1
-
-  val imm_as_src2 = aluSel2 === ALUOp2Sel.OP2_IMM
-  alu_iq_.io.enq.bits.src2.value := Mux(imm_as_src2, imm, rename_src2.value)
-  alu_iq_.io.enq.bits.src2.tag := Mux(imm_as_src2, 0.U, rename_src2.tag)
-  alu_iq_.io.enq.bits.src2.ready := Mux(imm_as_src2, true.B, rename_src2.ready)
-
-  alu_iq_.io.enq.bits.extra.aluOp := cu_.io.out.aluOp
-  alu_iq_.io.enq.bits.extra.rd_def := rd_def
-  alu_iq_.io.enq.bits.rob_tag := rob_tag
-
-  // --- BRU IQ enqueue ---
-  bru_iq_.io.enq.valid := can_dispatch && go_to_bru
-  bru_iq_.io.enq.bits.src1 := rename_src1
-  bru_iq_.io.enq.bits.src2 := rename_src2
-  bru_iq_.io.enq.bits.extra.bruOp := cu_.io.out.bruOp
-  bru_iq_.io.enq.bits.rob_tag := rob_tag
-
-  // --- AGU IQ enqueue ---
-  agu_iq_.io.enq.valid := can_dispatch && go_to_agu
-  agu_iq_.io.enq.bits.src1 := rename_src1
-
-  val is_load = cu_.io.out.mem.r_en
-  agu_iq_.io.enq.bits.src2.value := Mux(is_load, 0.U, rename_src2.value)
-  agu_iq_.io.enq.bits.src2.tag := Mux(is_load, 0.U, rename_src2.tag)
-  agu_iq_.io.enq.bits.src2.ready := Mux(is_load, true.B, rename_src2.ready)
-
-  agu_iq_.io.enq.bits.extra.imm := imm
-  agu_iq_.io.enq.bits.rob_tag := rob_tag
-
-  // --- RAT update ---
-  val should_rename = can_dispatch && rd_def && !dispatch_except_en
-  rat_.io.write.en := should_rename
-  rat_.io.write.addr := rd_idx
-  rat_.io.write.tag := rob_tag
+  rat_.io.write.en := dispatcher_.io.rat_write.en
+  rat_.io.write.addr := dispatcher_.io.rat_write.addr
+  rat_.io.write.tag := dispatcher_.io.rat_write.tag
 
   // ==========================================================
   // Stage 4 — Issue + Execute + Writeback
