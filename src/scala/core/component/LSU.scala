@@ -11,9 +11,8 @@ import ysyx.SoCConfig
 
 object MemUExceptionType extends ChiselEnum {
   val mem_LOAD_ADDRESS_MISALIGNED, mem_LOAD_ACCESS_FAULT,
-    mem_STORE_ADDRESS_MISALIGNED, mem_STORE_ACCESS_FAULT,
-    mem_LOAD_PAGE_FAULT, mem_STORE_PAGE_FAULT
-    = Value
+      mem_STORE_ADDRESS_MISALIGNED, mem_STORE_ACCESS_FAULT, mem_LOAD_PAGE_FAULT,
+      mem_STORE_PAGE_FAULT = Value
 }
 
 object SignExt {
@@ -51,7 +50,7 @@ class SRAMBundle(axiParams: AXI4BundleParameters) extends Bundle {
 class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   val in = IO(Flipped(new SRAMBundle(axiParams)))
   val ar = IO(Irrevocable(new AXI4BundleAR(axiParams)))
-  val r  = IO(Flipped(Irrevocable(new AXI4BundleR(axiParams))))
+  val r = IO(Flipped(Irrevocable(new AXI4BundleR(axiParams))))
 
   // ar
   ar.bits.id := id.U
@@ -63,7 +62,7 @@ class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   ar.bits.cache := 0.U
   ar.bits.prot := 0.U
   ar.bits.qos := 0.U
-  
+
   // in
   in.rdata := r.bits.data holdUnless r.fire
   in.resp := r.bits.resp holdUnless r.fire
@@ -83,7 +82,7 @@ class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
       when(in.req) {
         when(ar.fire) {
           stateQ := State.r_wait
-        } .otherwise {
+        }.otherwise {
           stateQ := State.ar_wait
         }
       }
@@ -106,8 +105,8 @@ class LoadUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   val in = IO(Flipped(new SRAMBundle(axiParams)))
   val aw = IO(Irrevocable(new AXI4BundleAW(axiParams)))
-  val w  = IO(Irrevocable(new AXI4BundleW(axiParams)))
-  val b  = IO(Flipped(Irrevocable(new AXI4BundleB(axiParams))))
+  val w = IO(Irrevocable(new AXI4BundleW(axiParams)))
+  val b = IO(Flipped(Irrevocable(new AXI4BundleB(axiParams))))
 
   // aw
   aw.bits.id := id.U
@@ -145,8 +144,8 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 
   // defaults
   in.addr_ok := (stateQ =/= State.b_wait) && aw_done && w_done
-  aw.valid := in.req && ! aw_sent_q
-  w.valid := in.req && ! w_sent_q
+  aw.valid := in.req && !aw_sent_q
+  w.valid := in.req && !w_sent_q
   b.ready := (stateQ === State.b_wait)
 
   switch(stateQ) {
@@ -156,16 +155,16 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
       when(in.req) {
         when(aw.fire) { aw_sent_q := true.B }
         when(w.fire) { w_sent_q := true.B }
-        stateQ := Mux( aw_done && w_done, State.b_wait, State.aw_w_wait )
+        stateQ := Mux(aw_done && w_done, State.b_wait, State.aw_w_wait)
       }
     }
     is(State.aw_w_wait) {
       when(aw.fire) { aw_sent_q := true.B }
       when(w.fire) { w_sent_q := true.B }
-      when( aw_done && w_done ) { stateQ := State.b_wait }
+      when(aw_done && w_done) { stateQ := State.b_wait }
     }
     is(State.b_wait) {
-      when( b.fire ) {
+      when(b.fire) {
         stateQ := State.idle
       }
     }
@@ -177,108 +176,116 @@ class LSU extends NPCModule {
   val dcache = IO(AXI4Bundle(axiParams))
 
   val io = IO(new Bundle {
-    val late     = new LateExecIO
-    val addr     = Input(UInt(addrBits.W))
-    val size     = Input(UInt(axiParams.sizeBits.W))
+    val late = new LateExecIO
+    val addr = Input(UInt(addrBits.W))
+    val size = Input(UInt(axiParams.sizeBits.W))
     val sign_ext = Input(Bool())
-    val r_en     = Input(Bool())
-    val w_en     = Input(Bool())
-    val wdata    = Input(UInt(dataBits.W))
+    val r_en = Input(Bool())
+    val w_en = Input(Bool())
+    val wdata = Input(UInt(dataBits.W))
   })
 
-  private val load_unit  = Module(new LoadUnit(axiParams, 1))
-  private val store_unit = Module(new StoreUnit(axiParams, 2))
+  val cache_load = Module(new LoadUnit(axiParams, 1))
+  val cache_store = Module(new StoreUnit(axiParams, 2))
 
-  load_unit.ar  <> dcache.ar
-  load_unit.r   <> dcache.r
-  store_unit.aw <> dcache.aw
-  store_unit.w  <> dcache.w
-  store_unit.b  <> dcache.b
+  cache_load.ar <> dcache.ar
+  cache_load.r <> dcache.r
+  cache_store.aw <> dcache.aw
+  cache_store.w <> dcache.w
+  cache_store.b <> dcache.b
 
   // Store wstrb / wdata formatting
-  private val store_wstrb = MuxLookup(io.size, "b1111".U)(Seq(
-    0.U -> (1.U(4.W) << io.addr(1, 0)),
-    1.U -> (3.U(4.W) << (io.addr(1, 0) & "b10".U)),
-    2.U -> "b1111".U(4.W)
-  ))
-  private val store_wdata = MuxLookup(io.size, io.wdata)(Seq(
-    0.U -> Fill(4, io.wdata(7, 0)),
-    1.U -> Fill(2, io.wdata(15, 0)),
-    2.U -> io.wdata
-  ))
+  val store_wstrb = MuxLookup(io.size, "b1111".U)(
+    Seq(
+      0.U -> (1.U(4.W) << io.addr(1, 0)),
+      1.U -> (3.U(4.W) << (io.addr(1, 0) & "b10".U)),
+      2.U -> "b1111".U(4.W)
+    )
+  )
+  val store_wdata = MuxLookup(io.size, io.wdata)(
+    Seq(
+      0.U -> Fill(4, io.wdata(7, 0)),
+      1.U -> Fill(2, io.wdata(15, 0)),
+      2.U -> io.wdata
+    )
+  )
 
   // Load data extraction
-  private val load_raw  = load_unit.in.rdata
-  private val load_byte = MuxLookup(io.addr(1, 0), load_raw(7, 0))(Seq(
-    0.U -> load_raw(7, 0),
-    1.U -> load_raw(15, 8),
-    2.U -> load_raw(23, 16),
-    3.U -> load_raw(31, 24)
-  ))
-  private val load_half  = Mux(io.addr(1), load_raw(31, 16), load_raw(15, 0))
-  private val load_final = MuxLookup(io.size, load_raw)(Seq(
-    0.U -> Mux(io.sign_ext, SignExt(load_byte, 32), ZeroExt(load_byte, 32)),
-    1.U -> Mux(io.sign_ext, SignExt(load_half, 32), ZeroExt(load_half, 32)),
-    2.U -> load_raw
-  ))
+  val load_raw = cache_load.in.rdata
+  val load_byte = MuxLookup(io.addr(1, 0), load_raw(7, 0))(
+    Seq(
+      0.U -> load_raw(7, 0),
+      1.U -> load_raw(15, 8),
+      2.U -> load_raw(23, 16),
+      3.U -> load_raw(31, 24)
+    )
+  )
+  val load_half = Mux(io.addr(1), load_raw(31, 16), load_raw(15, 0))
+  val load_final = MuxLookup(io.size, load_raw)(
+    Seq(
+      0.U -> Mux(io.sign_ext, SignExt(load_byte, 32), ZeroExt(load_byte, 32)),
+      1.U -> Mux(io.sign_ext, SignExt(load_half, 32), ZeroExt(load_half, 32)),
+      2.U -> load_raw
+    )
+  )
 
   // LoadUnit defaults
-  load_unit.in.req   := false.B
-  load_unit.in.wr    := false.B
-  load_unit.in.size  := io.size
-  load_unit.in.addr  := io.addr
-  load_unit.in.wstrb := 0.U
-  load_unit.in.wdata := 0.U
+  cache_load.in.req := false.B
+  cache_load.in.wr := false.B
+  cache_load.in.size := io.size
+  cache_load.in.addr := io.addr
+  cache_load.in.wstrb := 0.U
+  cache_load.in.wdata := 0.U
 
   // StoreUnit defaults
-  store_unit.in.req   := false.B
-  store_unit.in.wr    := true.B
-  store_unit.in.size  := io.size
-  store_unit.in.addr  := io.addr
-  store_unit.in.wstrb := store_wstrb
-  store_unit.in.wdata := store_wdata
+  cache_store.in.req := false.B
+  cache_store.in.wr := true.B
+  cache_store.in.size := io.size
+  cache_store.in.addr := io.addr
+  cache_store.in.wstrb := store_wstrb
+  cache_store.in.wdata := store_wdata
 
   // LateExecIO defaults
-  io.late.done         := false.B
-  io.late.result       := load_final
+  io.late.done := false.B
+  io.late.result := load_final
   io.late.result_valid := io.r_en
 
   // Internal state machine
   object LSUState extends ChiselEnum {
     val idle, lsu_req, lsu_wait = Value
   }
-  private val stateQ = RegInit(LSUState.idle)
+  val stateQ = RegInit(LSUState.idle)
 
   switch(stateQ) {
     is(LSUState.idle) {
       when(io.late.req) {
         when(io.r_en) {
-          load_unit.in.req := true.B
+          cache_load.in.req := true.B
         }.elsewhen(io.w_en) {
-          store_unit.in.req := true.B
+          cache_store.in.req := true.B
         }
         stateQ := LSUState.lsu_req
       }
     }
     is(LSUState.lsu_req) {
       when(io.r_en) {
-        load_unit.in.req := true.B
-        when(load_unit.in.addr_ok) {
+        cache_load.in.req := true.B
+        when(cache_load.in.addr_ok) {
           stateQ := LSUState.lsu_wait
         }
       }.elsewhen(io.w_en) {
-        store_unit.in.req := true.B
-        when(store_unit.in.addr_ok) {
+        cache_store.in.req := true.B
+        when(cache_store.in.addr_ok) {
           stateQ := LSUState.lsu_wait
         }
       }
     }
     is(LSUState.lsu_wait) {
-      when(io.r_en && load_unit.in.data_ok) {
+      when(io.r_en && cache_load.in.data_ok) {
         io.late.done := true.B
         stateQ := LSUState.idle
-      }.elsewhen(io.w_en && store_unit.in.data_ok) {
-        io.late.done         := true.B
+      }.elsewhen(io.w_en && cache_store.in.data_ok) {
+        io.late.done := true.B
         io.late.result_valid := false.B
         stateQ := LSUState.idle
       }

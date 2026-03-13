@@ -16,7 +16,7 @@ class FrontEnd extends NPCModule {
     val redirect = Input(new RedirectBundle)
   })
 
-  val ifu_ = Module(new IFU(axiParams))
+  val ifu_ = Module(new IFU)
 
   ifu_.icache <> icache
   io.out <> ifu_.io.out

@@ -32,7 +32,7 @@ object AXI4Resp {
   val DECERR = 3.U(2.W)
 }
 
-class IFU(axiParams: AXI4BundleParameters) extends NPCModule {
+class IFU extends NPCModule {
 
   val io = IO(new Bundle {
     val out = Irrevocable(new IFUOutput)
