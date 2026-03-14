@@ -6,22 +6,13 @@ import chisel3.util._
 import ysyx.core.common._
 import ysyx.core.frontend._
 
+// FIXME: data hazard between Dispatcher and RenameStage
+// the instruction in Dispatcher alloc the rob entry and define the rd.
+// However, the instruction in RenameStage retrive the obsolete value.
 class RenameStageOutput extends NPCBundle {
-  val pc = UInt(addrBits.W)
-  val inst = UInt(InstBits.W)
-  val imm = UInt(dataBits.W)
-  val rd_idx = UInt(NRRegbits.W)
-  val rd_def = Bool()
-  val ctrl = new CUOutput
-  val go_to_alu = Bool()
-  val go_to_bru = Bool()
-  val go_to_agu = Bool()
-  val dispatch_except_en = Bool()
-  val dispatch_resolved = Bool()
-
+  val dec = new DecodeStageOutput
   val src1 = new IQSrcBundle
   val src2 = new IQSrcBundle
-
   val disp_rd_val = UInt(dataBits.W)
   val disp_rd_val_valid = Bool()
   val disp_mispredict = Bool()
@@ -34,20 +25,21 @@ class RenameStage extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
-
     val rat = new Bundle {
-      val read1 = Flipped(new RATReadPort)
-      val read2 = Flipped(new RATReadPort)
+      val rs1 = Flipped(new RATReadPort)
+      val rs2 = Flipped(new RATReadPort)
     }
-
-    val rfu_rs1_idx = Output(UInt(NRRegbits.W))
-    val rfu_rs2_idx = Output(UInt(NRRegbits.W))
-    val rfu_rs1_v = Input(UInt(dataBits.W))
-    val rfu_rs2_v = Input(UInt(dataBits.W))
-
-    val rob_fwd1 = Flipped(new ForwardBundle)
-    val rob_fwd2 = Flipped(new ForwardBundle)
-
+    val rob = new Bundle {
+      val fwd1 = Flipped(new RobFwdBundle)
+      val fwd2 = Flipped(new RobFwdBundle)
+    }
+    val disp_fwd = Flipped(new DispFwdBundle)
+    val rfu = new Bundle {
+      val rs1_i = Output(UInt(NRRegbits.W))
+      val rs1_v = Input(UInt(dataBits.W))
+      val rs2_i = Output(UInt(NRRegbits.W))
+      val rs2_v = Input(UInt(dataBits.W))
+    }
     val cdb1 = Input(new CDBBundle)
     val cdb2 = Input(new CDBBundle)
   })
@@ -55,138 +47,123 @@ class RenameStage extends NPCModule {
   io.in.ready := io.out.ready
   io.out.valid := io.in.valid
 
-  val d = io.in.bits
-  val o = io.out.bits
+  val dec = io.in.bits
+  val ctrl = dec.ctrl
+  val pc = dec.ifu.pc
+  val imm = dec.imm
 
-  // RAT read
-  io.rat.read1.addr := d.rs1_idx
-  io.rat.read2.addr := d.rs2_idx
+  io.out.bits.dec := dec
 
+  // ============================================================
+  // RAT lookup
+  // ============================================================
+  io.rat.rs1.addr := dec.rs1_idx
+  io.rat.rs2.addr := dec.rs2_idx
+
+  // ============================================================
   // RFU read
-  io.rfu_rs1_idx := d.rs1_idx
-  io.rfu_rs2_idx := d.rs2_idx
+  // ============================================================
+  io.rfu.rs1_i := dec.rs1_idx
+  io.rfu.rs2_i := dec.rs2_idx
 
-  // ROB forward tag
-  io.rob_fwd1.tag := io.rat.read1.tag
-  io.rob_fwd2.tag := io.rat.read2.tag
+  // ============================================================
+  // Dispatcher forward (bypass for RAT-not-yet-written hazard)
+  // ============================================================
+  val disp_rs1_hit = io.disp_fwd.rd_wen &&
+    (io.disp_fwd.rd_idx === dec.rs1_idx) && (dec.rs1_idx =/= 0.U)
+  val disp_rs2_hit = io.disp_fwd.rd_wen &&
+    (io.disp_fwd.rd_idx === dec.rs2_idx) && (dec.rs2_idx =/= 0.U)
 
-  // --- Source 1 rename ---
-  val rename_src1 = Wire(new IQSrcBundle)
+  val rs1_busy = io.rat.rs1.busy || disp_rs1_hit
+  val rs1_tag = Mux(disp_rs1_hit, io.disp_fwd.rd_tag, io.rat.rs1.tag)
+  val rs2_busy = io.rat.rs2.busy || disp_rs2_hit
+  val rs2_tag = Mux(disp_rs2_hit, io.disp_fwd.rd_tag, io.rat.rs2.tag)
 
-  when(!d.needs_rs1) {
-    rename_src1.ready := true.B
-    rename_src1.value := 0.U
-    rename_src1.tag := 0.U
-  }.elsewhen(!io.rat.read1.busy) {
-    rename_src1.ready := true.B
-    rename_src1.value := io.rfu_rs1_v
-    rename_src1.tag := 0.U
-  }.otherwise {
-    val fwd_tag = io.rat.read1.tag
-    val fwd_rdy = io.rob_fwd1.valid ||
-      (io.cdb1.valid && io.cdb1.tag === fwd_tag) ||
-      (io.cdb2.valid && io.cdb2.tag === fwd_tag)
-    val fwd_val = MuxCase(
-      io.rob_fwd1.value,
-      Seq(
-        (io.cdb1.valid && io.cdb1.tag === fwd_tag) -> io.cdb1.value,
-        (io.cdb2.valid && io.cdb2.tag === fwd_tag) -> io.cdb2.value
-      )
-    )
-    rename_src1.ready := fwd_rdy
-    rename_src1.value := fwd_val
-    rename_src1.tag := fwd_tag
-  }
+  // ============================================================
+  // ROB forward query
+  // ============================================================
+  io.rob.fwd1.tag := rs1_tag
+  io.rob.fwd2.tag := rs2_tag
 
-  // --- Source 2 rename ---
-  val rename_src2 = Wire(new IQSrcBundle)
+  // ============================================================
+  // Source operand resolution (value capture)
+  // ============================================================
 
-  when(!d.needs_rs2) {
-    rename_src2.ready := true.B
-    rename_src2.value := 0.U
-    rename_src2.tag := 0.U
-  }.elsewhen(!io.rat.read2.busy) {
-    rename_src2.ready := true.B
-    rename_src2.value := io.rfu_rs2_v
-    rename_src2.tag := 0.U
-  }.otherwise {
-    val fwd_tag = io.rat.read2.tag
-    val fwd_rdy = io.rob_fwd2.valid ||
-      (io.cdb1.valid && io.cdb1.tag === fwd_tag) ||
-      (io.cdb2.valid && io.cdb2.tag === fwd_tag)
-    val fwd_val = MuxCase(
-      io.rob_fwd2.value,
-      Seq(
-        (io.cdb1.valid && io.cdb1.tag === fwd_tag) -> io.cdb1.value,
-        (io.cdb2.valid && io.cdb2.tag === fwd_tag) -> io.cdb2.value
-      )
-    )
-    rename_src2.ready := fwd_rdy
-    rename_src2.value := fwd_val
-    rename_src2.tag := fwd_tag
-  }
+  // --- RS1 ---
+  val rs1_free = !ctrl.needs_rs1 || !rs1_busy // ctrl.needs_rs1 -> !rs1_busy
+  val rs1_cdb1 = io.cdb1.valid && (io.cdb1.tag === rs1_tag)
+  val rs1_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs1_tag)
+  val rs1_rob = io.rob.fwd1.valid
 
-  // Dispatch-resolved value computation
-  val disp_rd_val = MuxCase(
-    0.U,
-    Seq(
-      d.is_jal -> (d.pc + 4.U),
-      d.is_lui -> d.imm,
-      d.is_auipc -> (d.pc + d.imm)
-    )
+  // format: off
+  io.out.bits.src1.value := MuxCase(0.U, Seq(
+    rs1_free -> io.rfu.rs1_v,
+    rs1_cdb1 -> io.cdb1.value,
+    rs1_cdb2 -> io.cdb2.value,
+    rs1_rob  -> io.rob.fwd1.value,
+  ))
+  // format: on
+  io.out.bits.src1.tag := rs1_tag
+  io.out.bits.src1.ready := rs1_free || rs1_cdb1 || rs1_cdb2 || rs1_rob
+
+  // --- RS2 ---
+  val rs2_free = !ctrl.needs_rs2 || !rs2_busy
+  val rs2_cdb1 = io.cdb1.valid && (io.cdb1.tag === rs2_tag)
+  val rs2_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs2_tag)
+  val rs2_rob = io.rob.fwd2.valid
+
+  // format: off
+  io.out.bits.src2.value := MuxCase(0.U, Seq(
+    rs2_free -> io.rfu.rs2_v,
+    rs2_cdb1 -> io.cdb1.value,
+    rs2_cdb2 -> io.cdb2.value,
+    rs2_rob  -> io.rob.fwd2.value,
+  ))
+  // format: on
+  io.out.bits.src2.tag := rs2_tag
+  io.out.bits.src2.ready := rs2_free || rs2_cdb1 || rs2_cdb2 || rs2_rob
+
+  // ============================================================
+  // Dispatch-time resolved values
+  // ============================================================
+  // format: off
+  io.out.bits.disp_rd_val := MuxCase(0.U, Seq(
+    ctrl.is_lui   -> imm,
+    ctrl.is_auipc -> (pc + imm),
+    ctrl.is_jal   -> (pc + 4.U),
+    ctrl.is_jalr  -> (pc + 4.U),
+  ))
+  // format: on
+  io.out.bits.disp_rd_val_valid := ctrl.is_lui || ctrl.is_auipc ||
+    ctrl.is_jal || ctrl.is_jalr
+  io.out.bits.disp_mispredict := ctrl.is_jal
+  io.out.bits.disp_target_npc := pc + imm
+
+  // ============================================================
+  // Exception mcause / mtval conversion
+  // ============================================================
+  // format: off
+  val ifu_mcause = MuxCase(0.U, Seq(
+    (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ADDRESS_MISALIGNED) -> 0.U,
+    (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT)       -> 1.U,
+    (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_PAGE_FAULT)         -> 12.U,
+  ))
+  val cu_mcause = MuxCase(0.U, Seq(
+    (ctrl.except_type === CUExceptionType.cu_ILLEGAL_INSTRUCTION) -> 2.U,
+    (ctrl.except_type === CUExceptionType.cu_BREAKPOINT)          -> 3.U,
+    (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_U_MODE)   -> 8.U,
+    (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_S_MODE)   -> 9.U,
+    (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_M_MODE)   -> 11.U,
+  ))
+  // format: on
+  io.out.bits.dispatch_mcause := Mux(
+    dec.ifu.exceptionEn,
+    ifu_mcause,
+    cu_mcause
   )
-
-  val disp_target_npc = MuxCase(
-    0.U,
-    Seq(
-      d.is_jal -> (d.pc + d.imm),
-      d.is_branch -> (d.pc + d.imm)
-    )
+  io.out.bits.dispatch_mtval := Mux(
+    dec.ifu.exceptionEn,
+    dec.ifu.mtval,
+    ctrl.mtval
   )
-
-  // Exception mcause mapping
-  val dispatch_mcause = MuxCase(
-    0.U,
-    Seq(
-      d.ifu_exceptionEn -> MuxLookup(d.ifu_exception, 0.U)(
-        Seq(
-          IFUExceptionType.ifu_INSTRUCTION_ADDRESS_MISALIGNED -> 0.U,
-          IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT -> 1.U,
-          IFUExceptionType.ifu_INSTRUCTION_PAGE_FAULT -> 12.U
-        )
-      ),
-      d.ctrl.exceptionEn -> MuxLookup(d.ctrl.exception, 0.U)(
-        Seq(
-          CUExceptionType.cu_ILLEGAL_INSTRUCTION -> 2.U,
-          CUExceptionType.cu_BREAKPOINT -> 3.U,
-          CUExceptionType.cu_ECALL_FROM_U_MODE -> 8.U,
-          CUExceptionType.cu_ECALL_FROM_S_MODE -> 9.U,
-          CUExceptionType.cu_ECALL_FROM_M_MODE -> 11.U
-        )
-      )
-    )
-  )
-
-  // --- Output ---
-  o.pc := d.pc
-  o.inst := d.inst
-  o.imm := d.imm
-  o.rd_idx := d.rd_idx
-  o.rd_def := d.rd_def
-  o.ctrl := d.ctrl
-  o.go_to_alu := d.go_to_alu
-  o.go_to_bru := d.go_to_bru
-  o.go_to_agu := d.go_to_agu
-  o.dispatch_except_en := d.dispatch_except_en
-  o.dispatch_resolved := d.dispatch_resolved
-
-  o.src1 := rename_src1
-  o.src2 := rename_src2
-
-  o.disp_rd_val := disp_rd_val
-  o.disp_rd_val_valid := d.is_jal || d.is_lui || d.is_auipc
-  o.disp_mispredict := d.is_jal || d.is_mret
-  o.disp_target_npc := disp_target_npc
-  o.dispatch_mcause := dispatch_mcause
-  o.dispatch_mtval := Mux(d.ifu_exceptionEn, d.ifu_mtval, d.ctrl.mtval)
 }

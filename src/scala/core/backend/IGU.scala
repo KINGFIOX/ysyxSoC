@@ -11,8 +11,8 @@ object ImmType extends ChiselEnum {
 }
 
 class IGUInput extends NPCBundle {
-  val inst_31_7 = UInt((InstBits - OpcodeBits).W) // inst[31:7], 不需要 opcode 部分
-  val immType   = ImmType()
+  val inst_31_7 = UInt((instBits - OpcodeBits).W) // inst[31:7], 不需要 opcode 部分
+  val imm_type   = ImmType()
 }
 
 class IGUOutput extends NPCBundle {
@@ -49,11 +49,11 @@ class IGU extends NPCModule {
   io.out.imm := MuxCase(
     0.U,
     Seq(
-      (io.in.immType === ImmType.IMM_I) -> immI,
-      (io.in.immType === ImmType.IMM_S) -> immS,
-      (io.in.immType === ImmType.IMM_B) -> immB,
-      (io.in.immType === ImmType.IMM_U) -> immU,
-      (io.in.immType === ImmType.IMM_J) -> immJ
+      (io.in.imm_type === ImmType.IMM_I) -> immI,
+      (io.in.imm_type === ImmType.IMM_S) -> immS,
+      (io.in.imm_type === ImmType.IMM_B) -> immB,
+      (io.in.imm_type === ImmType.IMM_U) -> immU,
+      (io.in.imm_type === ImmType.IMM_J) -> immJ
     )
   )
 }

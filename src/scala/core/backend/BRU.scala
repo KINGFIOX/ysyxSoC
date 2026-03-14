@@ -37,7 +37,7 @@ class BRU extends ExecUnit(new BRUInput, new BRUOutput) {
 }
 
 class BRUExtra extends NPCBundle {
-  val bruOp = BRUOpType()
+  val bru_op = BRUOpType()
 }
 
 class BRUIssueQueue extends IssueQueue(new BRUExtra, entries = 4)

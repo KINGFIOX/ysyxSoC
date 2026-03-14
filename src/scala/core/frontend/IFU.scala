@@ -10,7 +10,7 @@ import ysyx.core.common._
 import ysyx.core.lsu._
 
 class IFUOutput extends NPCBundle {
-  val inst = UInt(InstBits.W)
+  val inst = UInt(instBits.W)
   val pc = UInt(dataBits.W)
   val exception = IFUExceptionType()
   val mtval = UInt(dataBits.W) // access fault address

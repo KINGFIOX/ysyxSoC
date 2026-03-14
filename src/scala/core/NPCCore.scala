@@ -13,7 +13,7 @@ class DebugBundle extends NPCBundle {
   val valid = Bool()
   val pc = UInt(dataBits.W)
   val dnpc = UInt(dataBits.W)
-  val inst = UInt(InstBits.W)
+  val inst = UInt(instBits.W)
   val isMMIO = Bool()
   val gpr = Vec(NRReg, UInt(dataBits.W))
   val csr = new CSRUDebugBundle

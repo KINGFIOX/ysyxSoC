@@ -88,16 +88,18 @@ class BackEnd extends NPCModule {
   dispatcher_.io.in <> renameStage_.io.out
 
   // --- RenameStage side-band ---
-  renameStage_.io.rat.read1 <> rat_.io.read1
-  renameStage_.io.rat.read2 <> rat_.io.read2
+  renameStage_.io.rat.rs1 <> rat_.io.read1
+  renameStage_.io.rat.rs2 <> rat_.io.read2
 
-  rfu_.io.in.rs1_i := renameStage_.io.rfu_rs1_idx
-  rfu_.io.in.rs2_i := renameStage_.io.rfu_rs2_idx
-  renameStage_.io.rfu_rs1_v := rfu_.io.out.rs1_v
-  renameStage_.io.rfu_rs2_v := rfu_.io.out.rs2_v
+  rfu_.io.in.rs1_i := renameStage_.io.rfu.rs1_i
+  rfu_.io.in.rs2_i := renameStage_.io.rfu.rs2_i
+  renameStage_.io.rfu.rs1_v := rfu_.io.out.rs1_v
+  renameStage_.io.rfu.rs2_v := rfu_.io.out.rs2_v
 
-  renameStage_.io.rob_fwd1 <> rob_.io.fwd1
-  renameStage_.io.rob_fwd2 <> rob_.io.fwd2
+  renameStage_.io.rob.fwd1 <> rob_.io.fwd1
+  renameStage_.io.rob.fwd2 <> rob_.io.fwd2
+
+  renameStage_.io.disp_fwd <> dispatcher_.io.rename_fwd
 
   renameStage_.io.cdb1 := cdb1
   renameStage_.io.cdb2 := cdb2
@@ -110,9 +112,7 @@ class BackEnd extends NPCModule {
   dispatcher_.io.disp_bru <> bru_iq_.io.enq
   dispatcher_.io.disp_agu <> agu_iq_.io.enq
 
-  rat_.io.write.en := dispatcher_.io.rat_write.en
-  rat_.io.write.addr := dispatcher_.io.rat_write.addr
-  rat_.io.write.tag := dispatcher_.io.rat_write.tag
+  rat_.io.write <> dispatcher_.io.rat_write
 
   // ==========================================================
   // Stage 4 — Issue + Execute + Writeback
@@ -135,23 +135,17 @@ class BackEnd extends NPCModule {
   rob_.io.lookup1.tag := alu_issue_tag
   val alu_rob_entry = rob_.io.lookup1.entry
 
-  val alu_rd_val =
-    Mux(alu_rob_entry.rd_val_valid, alu_rob_entry.rd_val, alu_result)
-  val alu_rd_val_valid =
-    alu_rob_entry.rd_val_valid || (alu_rob_entry.wbSel === WBSel.WB_ALU)
+  val alu_rd_val = Mux(alu_rob_entry.rd_val_valid, alu_rob_entry.rd_val, alu_result)
+  val alu_rd_val_valid = true.B // TODO:
 
-  val alu_is_jalr = alu_rob_entry.npcOp === NPCOpType.NPC_JALR
+  val alu_is_jalr = alu_rob_entry.is_jalr
   val alu_mispredict = alu_is_jalr
   val alu_target_npc =
     Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.pc + 4.U)
 
-  val is_csr_wb = alu_rob_entry.wbSel === WBSel.WB_CSR || alu_rob_entry.csr_wen
-  val final_alu_result =
-    Mux(is_csr_wb, alu_iq_.io.issue.bits.src1_v, alu_result)
-
   rob_.io.alu.valid := alu_issue_valid
   rob_.io.alu.bits.tag := alu_issue_tag
-  rob_.io.alu.bits.alu_result := final_alu_result
+  rob_.io.alu.bits.alu_result := alu_result
   rob_.io.alu.bits.rd_val := alu_rd_val
   rob_.io.alu.bits.rd_val_valid := alu_rd_val_valid
   rob_.io.alu.bits.mispredict := alu_mispredict
@@ -161,7 +155,7 @@ class BackEnd extends NPCModule {
   bru_.io.in.valid := bru_iq_.io.issue.valid
   bru_.io.in.bits.rs1_v := bru_iq_.io.issue.bits.src1_v
   bru_.io.in.bits.rs2_v := bru_iq_.io.issue.bits.src2_v
-  bru_.io.in.bits.op := bru_iq_.io.issue.bits.extra.bruOp
+  bru_.io.in.bits.op := bru_iq_.io.issue.bits.extra.bru_op
   bru_iq_.io.issue.ready := bru_.io.in.ready
 
   bru_.io.out.ready := true.B
@@ -213,7 +207,7 @@ class BackEnd extends NPCModule {
   val head_valid = rob_.io.commit.valid
 
   val head_is_mem = head.mem.r_en || head.mem.w_en
-  val head_is_csr = head.wbSel === WBSel.WB_CSR || head.csr_wen
+  val head_is_csr = head.csr_wen
 
   // CDB2 defaults
   cdb2.valid := false.B
@@ -240,7 +234,7 @@ class BackEnd extends NPCModule {
   // CSRU defaults
   csru_.io.late.req := false.B
   csru_.io.addr := head.imm(NRCSRbits - 1, 0)
-  csru_.io.wop := head.csrOp
+  csru_.io.wop := head.csr_op
   csru_.io.wen := false.B
   csru_.io.wdata := head.alu_result
   csru_.io.commit.xepc := head.pc
@@ -265,7 +259,7 @@ class BackEnd extends NPCModule {
   val commit_valid_dbg = RegInit(false.B)
   val commit_pc_dbg = Reg(UInt(dataBits.W))
   val commit_dnpc_dbg = Reg(UInt(dataBits.W))
-  val commit_inst_dbg = Reg(UInt(InstBits.W))
+  val commit_inst_dbg = Reg(UInt(instBits.W))
   commit_valid_dbg := false.B
 
   // ---- Commit state machine ----
@@ -328,21 +322,23 @@ class BackEnd extends NPCModule {
 
           rat_.io.commit.en := head.rd_def
 
-          when(head.npcOp === NPCOpType.NPC_MRET) {
-            flush := true.B
-            redirect.valid := true.B
-            redirect.target := csru_.io.xepc
-          }
+          rob_.io.commit.ready := true.B
+
+          commit_valid_dbg := true.B
+          commit_pc_dbg := head.pc
+          commit_dnpc_dbg := head.pc + 4.U
+          commit_inst_dbg := head.inst
+
+        }.elsewhen(head.is_mret) {
+          flush := true.B
+          redirect.valid := true.B
+          redirect.target := csru_.io.xepc
 
           rob_.io.commit.ready := true.B
 
           commit_valid_dbg := true.B
           commit_pc_dbg := head.pc
-          commit_dnpc_dbg := Mux(
-            head.npcOp === NPCOpType.NPC_MRET,
-            csru_.io.xepc,
-            head.pc + 4.U
-          )
+          commit_dnpc_dbg := csru_.io.xepc
           commit_inst_dbg := head.inst
 
         }.otherwise {

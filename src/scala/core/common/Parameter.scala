@@ -34,7 +34,7 @@ trait HasCSRParameter {
 trait HasCoreParameter {
   val dataBits: Int = 32 // 机器字长
   val addrBits: Int = 32 // 寻址空间
-  val InstBits: Int = 32 // 指令字长
+  val instBits: Int = 32 // 指令字长
   val OpcodeBits: Int = 7
   val dataBytes = dataBits >> 3 // 一个 word 有几个字节  4
   val dataBytesBits = log2Ceil(dataBytes) // 一个 word 有几个字节的位宽 2

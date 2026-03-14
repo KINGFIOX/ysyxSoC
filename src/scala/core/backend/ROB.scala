@@ -17,14 +17,12 @@ class MemRobEntry extends MemInfoBundle {
 }
 
 class RobEntry extends NPCBundle {
-  val wbSel = WBSel()
   val mem = new MemRobEntry
-  val csrOp = CSROpType()
+  val csr_op = CSROpType()
   val csr_wen = Bool()
-  val npcOp = NPCOpType()
 
   val pc = UInt(addrBits.W)
-  val inst = UInt(InstBits.W)
+  val inst = UInt(instBits.W)
   val imm = UInt(dataBits.W)
 
   val alu_result = UInt(dataBits.W)
@@ -37,6 +35,8 @@ class RobEntry extends NPCBundle {
   val mcause = UInt(dataBits.W)
   val xtval = UInt(dataBits.W)
 
+  val is_jalr = Bool()
+  val is_mret = Bool()
   val mispredict = Bool()
   val target_npc = UInt(addrBits.W)
 
@@ -44,14 +44,12 @@ class RobEntry extends NPCBundle {
 }
 
 class RobEnqData extends NPCBundle {
-  val wbSel = WBSel()
   val mem = new MemInfoBundle
-  val csrOp = CSROpType()
-  val csrWen = Bool()
-  val npcOp = NPCOpType()
+  val csr_op = CSROpType()
+  val csr_wen = Bool()
 
   val pc = UInt(addrBits.W)
-  val inst = UInt(InstBits.W)
+  val inst = UInt(instBits.W)
   val imm = UInt(dataBits.W)
 
   val rd_idx = UInt(NRRegbits.W)
@@ -61,6 +59,8 @@ class RobEnqData extends NPCBundle {
   val mcause = UInt(dataBits.W)
   val mtval = UInt(dataBits.W)
 
+  val is_jalr = Bool()
+  val is_mret = Bool()
   val dispatch_executed = Bool()
   val rd_val = UInt(dataBits.W)
   val rd_val_valid = Bool()
@@ -97,7 +97,8 @@ class LookupBundle extends NPCBundle {
   val entry = Input(new RobEntry)
 }
 
-class ForwardBundle extends NPCBundle {
+// rename ---(tag)--> rob ---(value, valid)--> rename
+class RobFwdBundle extends NPCBundle {
   val tag = Input(UInt(robEntryBits.W))
   val value = Output(UInt(dataBits.W))
   val valid = Output(Bool())
@@ -127,8 +128,8 @@ class Rob extends NPCModule {
     val lookup1 = Flipped(new LookupBundle)
     val lookup2 = Flipped(new LookupBundle)
     val commit = Decoupled(new CommitBundle)
-    val fwd1 = new ForwardBundle
-    val fwd2 = new ForwardBundle
+    val fwd1 = new RobFwdBundle
+    val fwd2 = new RobFwdBundle
     val flush = Input(Bool())
   })
 
@@ -195,13 +196,12 @@ class Rob extends NPCModule {
   when(enq_fire) {
     val d = io.enq.bits
     val e = ram(tail_q)
-    e.wbSel := d.wbSel
     e.mem.size := d.mem.size; e.mem.r_en := d.mem.r_en
     e.mem.sign_ext := d.mem.sign_ext; e.mem.w_en := d.mem.w_en
     e.mem.addr := d.mem.addr; e.mem.wdata := d.mem.wdata
     e.mem.addr_rdy := false.B; e.mem.wdata_rdy := false.B
-    e.csrOp := d.csrOp; e.csr_wen := d.csrWen
-    e.npcOp := d.npcOp
+    e.csr_op := d.csr_op; e.csr_wen := d.csr_wen
+    e.is_jalr := d.is_jalr; e.is_mret := d.is_mret
     e.pc := d.pc; e.inst := d.inst; e.imm := d.imm
     e.rd_idx := d.rd_idx; e.rd_def := d.rd_def
 
