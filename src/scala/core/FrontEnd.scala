@@ -12,7 +12,7 @@ class FrontEnd extends NPCModule {
   val icache = IO(AXI4Bundle(axiParams))
 
   val io = IO(new Bundle {
-    val out      = Irrevocable(new IFUOutput)
+    val out = Decoupled(new IFUOutput)
     val redirect = Input(new RedirectBundle)
   })
 

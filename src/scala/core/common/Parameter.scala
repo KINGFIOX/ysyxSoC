@@ -42,7 +42,11 @@ trait HasCoreParameter {
 }
 
 trait HasAXIParameter extends HasCoreParameter {
-  val axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = addrBits, dataBits = dataBits, idBits = ChipLinkParam.idBits)
+  val axiParams: AXI4BundleParameters = AXI4BundleParameters(
+    addrBits = addrBits,
+    dataBits = dataBits,
+    idBits = ChipLinkParam.idBits
+  )
 }
 
 abstract class NPCModule
@@ -52,14 +56,16 @@ abstract class NPCModule
     with HasCSRParameter
     with HasAXIParameter
 
+// format: off
 object AddressMap {
   def isMMIO(addr: UInt): Bool = {
-    val inSRAM  = addr >= SoCConfig.sramBase.U  && addr < (SoCConfig.sramBase  + SoCConfig.sramSize).U
+    val inSRAM = addr >= SoCConfig.sramBase.U && addr < (SoCConfig.sramBase + SoCConfig.sramSize).U
     val inSDRAM = addr >= SoCConfig.sdramBase.U && addr < (SoCConfig.sdramBase + SoCConfig.sdramSize).U
-    val inMROM  = addr >= SoCConfig.mromBase.U  && addr < (SoCConfig.mromBase  + SoCConfig.mromSize).U
+    val inMROM = addr >= SoCConfig.mromBase.U && addr < (SoCConfig.mromBase + SoCConfig.mromSize).U
     !(inSRAM || inSDRAM || inMROM)
   }
 }
+// format: on
 
 abstract class NPCBundle
     extends Bundle
@@ -67,3 +73,12 @@ abstract class NPCBundle
     with HasCoreParameter
     with HasCSRParameter
     with HasAXIParameter
+
+object PipelineConnect {
+  def apply[T <: Data](
+      prevOut: DecoupledIO[T],
+      thisIn: DecoupledIO[T]
+  ) {
+    prevOut <> thisIn
+  }
+}

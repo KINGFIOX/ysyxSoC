@@ -440,7 +440,7 @@ object CU {
   // format: on
 
   // format: off
-  object EbreakField extends BoolDecodeField[InstPattern] {
+  object IsEbreakField extends BoolDecodeField[InstPattern] {
     def name = "ebreak"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_SYSTEM =>
@@ -454,7 +454,7 @@ object CU {
   // format: on
 
   // format: off
-  object EcallField extends BoolDecodeField[InstPattern] {
+  object IsEcallField extends BoolDecodeField[InstPattern] {
     def name = "ecall"
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_SYSTEM =>
@@ -499,8 +499,8 @@ object CU {
     RfWenField,
     CsrOpField,
     CsrWenField,
-    EbreakField,
-    EcallField,
+    IsEbreakField,
+    IsEcallField,
     ValidField
   )
 
@@ -543,25 +543,25 @@ class CU extends NPCModule {
   io.out.csr_op := CSROpType.safe(decoded(CsrOpField))._1
   io.out.csr_wen := decoded(CsrWenField)
 
-  private val isEbreak = decoded(EbreakField)
-  private val isEcall = decoded(EcallField)
-  private val invalidInst = !decoded(ValidField)
+  val is_ebreak = decoded(IsEbreakField)
+  val is_ecall = decoded(IsEcallField)
+  val invalid_inst = !decoded(ValidField)
 
   io.out.except_type := MuxCase(
     DontCare,
     Seq(
-      isEbreak -> CUExceptionType.cu_BREAKPOINT,
-      isEcall -> CUExceptionType.cu_ECALL_FROM_M_MODE,
-      invalidInst -> CUExceptionType.cu_ILLEGAL_INSTRUCTION
+      is_ebreak -> CUExceptionType.cu_BREAKPOINT,
+      is_ecall -> CUExceptionType.cu_ECALL_FROM_M_MODE,
+      invalid_inst -> CUExceptionType.cu_ILLEGAL_INSTRUCTION
     )
   )
   io.out.mtval := MuxCase(
     0.U,
     Seq(
-      isEbreak -> io.in.pc,
-      isEcall -> 0.U,
-      invalidInst -> io.in.inst
+      is_ebreak -> io.in.pc,
+      is_ecall -> 0.U,
+      invalid_inst -> io.in.inst
     )
   )
-  io.out.has_except := isEbreak || isEcall || invalidInst
+  io.out.has_except := is_ebreak || is_ecall || invalid_inst
 }

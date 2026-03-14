@@ -15,7 +15,7 @@ import ysyx.core.DebugBundle
 class BackEnd extends NPCModule {
 
   val io = IO(new Bundle {
-    val in = Flipped(Irrevocable(new IFUOutput))
+    val in = Flipped(Decoupled(new IFUOutput))
     val redirect = Output(new RedirectBundle)
     val flush = Output(Bool())
   })
@@ -85,9 +85,9 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Stage pipeline: IFU -> Decode -> Rename -> Dispatch
   // ==========================================================
-  decodeStage_.io.in <> io.in
-  renameStage_.io.in <> decodeStage_.io.out
-  dispatcher_.io.in <> renameStage_.io.out
+  PipelineConnect(io.in, decodeStage_.io.in)
+  PipelineConnect(decodeStage_.io.out, renameStage_.io.in)
+  PipelineConnect(renameStage_.io.out, dispatcher_.io.in)
 
   // --- RenameStage side-band ---
   renameStage_.io.rat.rs1 <> rat_.io.read1
