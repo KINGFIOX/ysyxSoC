@@ -24,21 +24,10 @@ class RenameStage extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
-    val rat = new Bundle {
-      val rs1 = Flipped(new RATReadPort)
-      val rs2 = Flipped(new RATReadPort)
-    }
-    val rob = new Bundle {
-      val fwd1 = Flipped(new RobFwdBundle)
-      val fwd2 = Flipped(new RobFwdBundle)
-    }
+    val rat_query = Vec(2, Flipped(new RATReadPort))
+    val rob_query = Vec(2, Flipped(new RobFwdBundle)) 
     val disp_fwd = Flipped(new DispFwdBundle)
-    val rfu = new Bundle {
-      val rs1_i = Output(UInt(NRRegbits.W))
-      val rs1_v = Input(UInt(dataBits.W))
-      val rs2_i = Output(UInt(NRRegbits.W))
-      val rs2_v = Input(UInt(dataBits.W))
-    }
+    val rfu_query = Vec(2, Flipped(new RFUReadPort))
     val cdb1 = Input(new CDBBundle)
     val cdb2 = Input(new CDBBundle)
   })
@@ -56,14 +45,14 @@ class RenameStage extends NPCModule {
   // ============================================================
   // RAT lookup
   // ============================================================
-  io.rat.rs1.addr := dec.rs1_idx
-  io.rat.rs2.addr := dec.rs2_idx
+  io.rat_query(0).addr := dec.rs1_idx
+  io.rat_query(1).addr := dec.rs2_idx
 
   // ============================================================
   // RFU read
   // ============================================================
-  io.rfu.rs1_i := dec.rs1_idx
-  io.rfu.rs2_i := dec.rs2_idx
+  io.rfu_query(0).addr := dec.rs1_idx
+  io.rfu_query(1).addr := dec.rs2_idx
 
   // ============================================================
   // TODO: Dispatcher forward (bypass for RAT-not-yet-written hazard)
@@ -73,16 +62,16 @@ class RenameStage extends NPCModule {
   val disp_rs2_hit = io.disp_fwd.rd_wen && (io.disp_fwd.rd_idx === dec.rs2_idx) && (dec.rs2_idx =/= 0.U)
   // format: on
 
-  val rs1_busy = io.rat.rs1.busy || disp_rs1_hit
-  val rs1_tag = Mux(disp_rs1_hit, io.disp_fwd.rd_tag, io.rat.rs1.tag)
-  val rs2_busy = io.rat.rs2.busy || disp_rs2_hit
-  val rs2_tag = Mux(disp_rs2_hit, io.disp_fwd.rd_tag, io.rat.rs2.tag)
+  val rs1_busy = io.rat_query(0).busy || disp_rs1_hit
+  val rs1_tag = Mux(disp_rs1_hit, io.disp_fwd.rd_tag, io.rat_query(0).tag)
+  val rs2_busy = io.rat_query(1).busy || disp_rs2_hit
+  val rs2_tag = Mux(disp_rs2_hit, io.disp_fwd.rd_tag, io.rat_query(1).tag)
 
   // ============================================================
   // ROB forward query
   // ============================================================
-  io.rob.fwd1.tag := rs1_tag
-  io.rob.fwd2.tag := rs2_tag
+  io.rob_query(0).tag := rs1_tag
+  io.rob_query(1).tag := rs2_tag
 
   // ============================================================
   // Source operand resolution (value capture)
@@ -92,15 +81,15 @@ class RenameStage extends NPCModule {
   val rs1_free = !ctrl.needs_rs1 || !rs1_busy // ctrl.needs_rs1 -> !rs1_busy
   val rs1_cdb1 = io.cdb1.valid && (io.cdb1.tag === rs1_tag)
   val rs1_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs1_tag)
-  val rs1_rob = io.rob.fwd1.valid
+  val rs1_rob = io.rob_query(0).valid
 
   io.out.bits.src(0).value := MuxCase(
     0.U,
     Seq(
-      rs1_free -> io.rfu.rs1_v,
+      rs1_free -> io.rfu_query(0).data,
       rs1_cdb1 -> io.cdb1.value,
       rs1_cdb2 -> io.cdb2.value,
-      rs1_rob -> io.rob.fwd1.value
+      rs1_rob -> io.rob_query(0).value
     )
   )
   io.out.bits.src(0).tag := rs1_tag
@@ -110,15 +99,15 @@ class RenameStage extends NPCModule {
   val rs2_free = !ctrl.needs_rs2 || !rs2_busy
   val rs2_cdb1 = io.cdb1.valid && (io.cdb1.tag === rs2_tag)
   val rs2_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs2_tag)
-  val rs2_rob = io.rob.fwd2.valid
+  val rs2_rob = io.rob_query(1).valid
 
   io.out.bits.src(1).value := MuxCase(
     0.U,
     Seq(
-      rs2_free -> io.rfu.rs2_v,
+      rs2_free -> io.rfu_query(1).data,
       rs2_cdb1 -> io.cdb1.value,
       rs2_cdb2 -> io.cdb2.value,
-      rs2_rob -> io.rob.fwd2.value
+      rs2_rob -> io.rob_query(1).value
     )
   )
   io.out.bits.src(1).tag := rs2_tag

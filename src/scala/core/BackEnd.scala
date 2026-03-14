@@ -90,16 +90,16 @@ class BackEnd extends NPCModule {
   PipelineConnect(renameStage_.io.out, dispatcher_.io.in)
 
   // --- RenameStage side-band ---
-  renameStage_.io.rat.rs1 <> rat_.io.read(0)
-  renameStage_.io.rat.rs2 <> rat_.io.read(1)
+  renameStage_.io.rat_query(0) <> rat_.io.read(0)
+  renameStage_.io.rat_query(1) <> rat_.io.read(1)
 
-  rfu_.io.read(0).addr := renameStage_.io.rfu.rs1_i
-  rfu_.io.read(1).addr := renameStage_.io.rfu.rs2_i
-  renameStage_.io.rfu.rs1_v := rfu_.io.read(0).data
-  renameStage_.io.rfu.rs2_v := rfu_.io.read(1).data
+  rfu_.io.read(0).addr := renameStage_.io.rfu_query(0).addr
+  rfu_.io.read(1).addr := renameStage_.io.rfu_query(1).addr
+  renameStage_.io.rfu_query(0).data := rfu_.io.read(0).data
+  renameStage_.io.rfu_query(1).data := rfu_.io.read(1).data
 
-  renameStage_.io.rob.fwd1 <> rob_.io.fwd1
-  renameStage_.io.rob.fwd2 <> rob_.io.fwd2
+  renameStage_.io.rob_query(0) <> rob_.io.fwd1
+  renameStage_.io.rob_query(1) <> rob_.io.fwd2
 
   renameStage_.io.disp_fwd <> dispatcher_.io.rename_fwd
 
