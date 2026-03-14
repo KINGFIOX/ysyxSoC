@@ -6,18 +6,12 @@ import chisel3.util._
 import ysyx.core.common._
 import ysyx.core.frontend._
 
-// FIXME: data hazard between Dispatcher and RenameStage
-// the instruction in Dispatcher alloc the rob entry and define the rd.
-// However, the instruction in RenameStage retrive the obsolete value.
 class RenameStageOutput extends NPCBundle {
   val dec = new DecodeStageOutput
   val src = Vec(2, new IQSrcBundle)
   val disp_rd_val = UInt(dataBits.W)
   val disp_rd_val_valid = Bool()
-  val disp_mispredict = Bool()
   val disp_target_npc = UInt(addrBits.W)
-  val dispatch_mcause = UInt(dataBits.W)
-  val dispatch_mtval = UInt(dataBits.W)
 }
 
 class RenameStage extends NPCModule {
@@ -25,141 +19,85 @@ class RenameStage extends NPCModule {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
     val rat_query = Vec(2, Flipped(new RATReadPort))
-    val rob_query = Vec(2, Flipped(new RobFwdBundle)) 
+    val rob_query = Vec(2, Flipped(new RobFwdBundle))
     val disp_fwd = Flipped(new DispFwdBundle)
     val rfu_query = Vec(2, Flipped(new RFUReadPort))
-    val cdb1 = Input(new CDBBundle)
-    val cdb2 = Input(new CDBBundle)
+    val cdb = Vec(2, Flipped(new CDBBundle))
   })
 
   io.in.ready := io.out.ready
   io.out.valid := io.in.valid
 
-  val dec = io.in.bits
-  val ctrl = dec.ctrl
-  val pc = dec.ifu.pc
-  val imm = dec.imm
+  val out = io.out.bits
+  val dec_out = io.in.bits
+  out.dec := dec_out
 
-  io.out.bits.dec := dec
+  val inst_type = dec_out.ctrl.inst_type
+  val pc = dec_out.pc
+  val imm = dec_out.imm
+  val rd_idx = dec_out.rd_idx
+  val rs_idx = VecInit(dec_out.rs1_idx, dec_out.rs2_idx)
 
-  // ============================================================
-  // RAT lookup
-  // ============================================================
-  io.rat_query(0).addr := dec.rs1_idx
-  io.rat_query(1).addr := dec.rs2_idx
-
-  // ============================================================
-  // RFU read
-  // ============================================================
-  io.rfu_query(0).addr := dec.rs1_idx
-  io.rfu_query(1).addr := dec.rs2_idx
+  val disp_fwd = io.disp_fwd
 
   // ============================================================
-  // TODO: Dispatcher forward (bypass for RAT-not-yet-written hazard)
+  // Dispatch-resolved value (jalr, jal, lui, auipc)
   // ============================================================
   // format: off
-  val disp_rs1_hit = io.disp_fwd.rd_wen && (io.disp_fwd.rd_idx === dec.rs1_idx) && (dec.rs1_idx =/= 0.U)
-  val disp_rs2_hit = io.disp_fwd.rd_wen && (io.disp_fwd.rd_idx === dec.rs2_idx) && (dec.rs2_idx =/= 0.U)
+  out.disp_rd_val_valid := Seq(
+    InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC
+  ).map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
   // format: on
-
-  val rs1_busy = io.rat_query(0).busy || disp_rs1_hit
-  val rs1_tag = Mux(disp_rs1_hit, io.disp_fwd.rd_tag, io.rat_query(0).tag)
-  val rs2_busy = io.rat_query(1).busy || disp_rs2_hit
-  val rs2_tag = Mux(disp_rs2_hit, io.disp_fwd.rd_tag, io.rat_query(1).tag)
-
-  // ============================================================
-  // ROB forward query
-  // ============================================================
-  io.rob_query(0).tag := rs1_tag
-  io.rob_query(1).tag := rs2_tag
-
-  // ============================================================
-  // Source operand resolution (value capture)
-  // ============================================================
-
-  // --- RS1 ---
-  val rs1_free = !ctrl.needs_rs1 || !rs1_busy // ctrl.needs_rs1 -> !rs1_busy
-  val rs1_cdb1 = io.cdb1.valid && (io.cdb1.tag === rs1_tag)
-  val rs1_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs1_tag)
-  val rs1_rob = io.rob_query(0).valid
-
-  io.out.bits.src(0).value := MuxCase(
-    0.U,
+  out.disp_rd_val := MuxLookup(inst_type, 0.U)(
     Seq(
-      rs1_free -> io.rfu_query(0).data,
-      rs1_cdb1 -> io.cdb1.value,
-      rs1_cdb2 -> io.cdb2.value,
-      rs1_rob -> io.rob_query(0).value
+      InstType.JALR -> (pc + 4.U),
+      InstType.JAL -> (pc + 4.U),
+      InstType.LUI -> imm,
+      InstType.AUIPC -> (pc + imm)
     )
   )
-  io.out.bits.src(0).tag := rs1_tag
-  io.out.bits.src(0).ready := rs1_free || rs1_cdb1 || rs1_cdb2 || rs1_rob
-
-  // --- RS2 ---
-  val rs2_free = !ctrl.needs_rs2 || !rs2_busy
-  val rs2_cdb1 = io.cdb1.valid && (io.cdb1.tag === rs2_tag)
-  val rs2_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs2_tag)
-  val rs2_rob = io.rob_query(1).valid
-
-  io.out.bits.src(1).value := MuxCase(
-    0.U,
-    Seq(
-      rs2_free -> io.rfu_query(1).data,
-      rs2_cdb1 -> io.cdb1.value,
-      rs2_cdb2 -> io.cdb2.value,
-      rs2_rob -> io.rob_query(1).value
-    )
-  )
-  io.out.bits.src(1).tag := rs2_tag
-  io.out.bits.src(1).ready := rs2_free || rs2_cdb1 || rs2_cdb2 || rs2_rob
+  out.disp_target_npc := pc + imm
 
   // ============================================================
-  // Dispatch-time resolved values
+  // RAT lookup + RFU read
   // ============================================================
-  io.out.bits.disp_rd_val := MuxCase(
-    0.U,
-    Seq(
-      ctrl.is_lui -> imm,
-      ctrl.is_auipc -> (pc + imm),
-      ctrl.is_jal -> (pc + 4.U),
-      ctrl.is_jalr -> (pc + 4.U)
-    )
-  )
-  // format: off
-  io.out.bits.disp_rd_val_valid := ctrl.is_lui || ctrl.is_auipc || ctrl.is_jal || ctrl.is_jalr
-  // format: on
-  io.out.bits.disp_mispredict := ctrl.is_jal
-  io.out.bits.disp_target_npc := pc + imm
+  for (i <- 0 until 2) {
+    io.rat_query(i).addr := rs_idx(i)
+    io.rfu_query(i).addr := rs_idx(i)
+  }
 
   // ============================================================
-  // Exception mcause / mtval conversion
+  // Source operand resolution (symmetric for RS1 / RS2)
   // ============================================================
-  val ifu_mcause = MuxCase(
-    0.U,
-    Seq(
-      (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ADDRESS_MISALIGNED) -> 0.U,
-      (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT) -> 1.U,
-      (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_PAGE_FAULT) -> 12.U
+  for (i <- 0 until 2) {
+    // Dispatcher tag forward: override RAT when the in-flight dispatch
+    // is defining the same architectural register.
+    val disp_tag_hit = disp_fwd.rd_def_tag &&
+      (disp_fwd.rd_idx === rs_idx(i)) && (rs_idx(i) =/= 0.U)
+    val disp_val_hit = disp_fwd.rd_def_val &&
+      (disp_fwd.rd_idx === rs_idx(i)) && (rs_idx(i) =/= 0.U)
+
+    val tag = Mux(disp_tag_hit, disp_fwd.tag, io.rat_query(i).tag)
+    val busy = io.rat_query(i).busy || disp_tag_hit
+
+    io.rob_query(i).tag := tag
+
+    val free = !busy
+    val cdb0_hit = io.cdb(0).valid && (io.cdb(0).tag === tag)
+    val cdb1_hit = io.cdb(1).valid && (io.cdb(1).tag === tag)
+    val rob_hit = io.rob_query(i).valid
+
+    out.src(i).ready := free || disp_val_hit || cdb0_hit || cdb1_hit || rob_hit
+    out.src(i).tag := tag
+    out.src(i).value := MuxCase(
+      0.U,
+      Seq(
+        free -> io.rfu_query(i).data,
+        disp_val_hit -> disp_fwd.value,
+        cdb0_hit -> io.cdb(0).value,
+        cdb1_hit -> io.cdb(1).value,
+        rob_hit -> io.rob_query(i).value
+      )
     )
-  )
-  val cu_mcause = MuxCase(
-    0.U,
-    Seq(
-      (ctrl.except_type === CUExceptionType.cu_ILLEGAL_INSTRUCTION) -> 2.U,
-      (ctrl.except_type === CUExceptionType.cu_BREAKPOINT) -> 3.U,
-      (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_U_MODE) -> 8.U,
-      (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_S_MODE) -> 9.U,
-      (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_M_MODE) -> 11.U
-    )
-  )
-  io.out.bits.dispatch_mcause := Mux(
-    dec.ifu.exceptionEn,
-    ifu_mcause,
-    cu_mcause
-  )
-  io.out.bits.dispatch_mtval := Mux(
-    dec.ifu.exceptionEn,
-    dec.ifu.mtval,
-    ctrl.mtval
-  )
+  }
 }

@@ -7,6 +7,7 @@ import ysyx.core.common._
 
 class RATReadPort extends NPCBundle {
   val addr = Input(UInt(NRRegbits.W))
+  // zero is always not busy
   val busy = Output(Bool())
   val tag  = Output(UInt(robEntryBits.W))
 }

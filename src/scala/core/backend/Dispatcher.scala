@@ -6,9 +6,11 @@ import chisel3.util._
 import ysyx.core.common._
 
 class DispFwdBundle extends NPCBundle {
-  val rd_wen = Bool()
   val rd_idx = UInt(NRRegbits.W)
-  val rd_tag = UInt(robEntryBits.W)
+  val rd_def_tag = Bool()
+  val tag = UInt(robEntryBits.W)
+  val rd_def_val = Bool()
+  val value = UInt(dataBits.W)
 }
 
 class Dispatcher extends NPCModule {
@@ -27,20 +29,36 @@ class Dispatcher extends NPCModule {
   val in = io.in.bits
   val dec = in.dec
   val ctrl = dec.ctrl
+  val inst_type = ctrl.inst_type
 
-  val except_en = ctrl.has_except || dec.ifu.exceptionEn
-  val rd_def = ctrl.rf_wen && (dec.rd_idx =/= 0.U) && !except_en
+  // ============================================================
+  // Routing derived from inst_type
+  // ============================================================
+  val except_en = dec.has_except
 
-  val go_to_alu = ctrl.go_to_alu && !except_en
-  val go_to_bru = ctrl.go_to_bru && !except_en
-  val go_to_agu = ctrl.go_to_agu && !except_en
+  // format: off
+  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.CSR)
+    .map(inst_type === _).reduce(_ || _) && !except_en
+  val go_to_bru = (inst_type === InstType.BRANCH) && !except_en
+  val go_to_agu = Seq(InstType.LOAD, InstType.STORE)
+    .map(inst_type === _).reduce(_ || _) && !except_en
   val go_to_fu = go_to_alu || go_to_bru || go_to_agu
+
+  val inst_writes_rd = Seq(
+    InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD,
+    InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR
+  ).map(inst_type === _).reduce(_ || _)
+  // format: on
+
+  val rd_def = inst_writes_rd && (dec.rd_idx =/= 0.U)
+  val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
+  val is_csr = inst_type === InstType.CSR
 
   // ============================================================
   // Ready / Valid
   // ============================================================
   val iq_ready = MuxCase(
-    true.B, // dispatch_resolved: jal,lui,auipc,mret, exception
+    true.B,
     Seq(
       go_to_alu -> io.disp_alu.ready,
       go_to_bru -> io.disp_bru.ready,
@@ -58,39 +76,41 @@ class Dispatcher extends NPCModule {
   // ROB Enqueue
   // ============================================================
   val enq = io.rob_enq.bits
+  enq.pc := dec.pc
+  enq.inst := dec.inst_bits
+  enq.inst_type := inst_type
   enq.mem := ctrl.mem
-  enq.csr_op := ctrl.csr_op
-  enq.csr_wen := ctrl.csr_wen
-  enq.pc := dec.ifu.pc
-  enq.inst := dec.ifu.inst
-  enq.imm := dec.imm // for csr only
-  enq.rd_idx := dec.rd_idx
-  enq.rd_def := rd_def
-  enq.except_en := except_en
-  enq.mcause := in.dispatch_mcause
-  enq.mtval := in.dispatch_mtval
-  enq.is_jalr := ctrl.is_jalr
-  enq.is_mret := ctrl.is_mret
-  enq.dispatch_executed := !go_to_fu
-  enq.rd_val := in.disp_rd_val
-  enq.rd_val_valid := in.disp_rd_val_valid
-  enq.mispredict := in.disp_mispredict
-  enq.target_npc := in.disp_target_npc
+  enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
+  enq.csr.op := ctrl.csr_op
+  enq.csr.wdata := 0.U
+  enq.rd.idx := Mux(rd_def, dec.rd_idx, 0.U)
+  enq.rd.value := in.disp_rd_val
+  enq.rd.valid := in.disp_rd_val_valid
+  enq.except.valid := except_en
+  enq.except.mcause := dec.mcause
+  enq.except.mtval := dec.mtval
+  enq.is_call := dec.is_call
+  enq.is_ret := dec.is_ret
+  enq.target_npc := MuxCase(
+    dec.pc + 4.U,
+    Seq(
+      (inst_type === InstType.JAL) -> in.disp_target_npc,
+      (inst_type === InstType.BRANCH) -> in.disp_target_npc
+    )
+  )
+  enq.predict_npc := dec.predict_npc
+  enq.completed := !go_to_fu
 
   // ============================================================
   // ALU Issue Queue
   // ============================================================
   io.disp_alu.bits.src(0) := in.src(0)
   val alu_imm_src = Wire(new IQSrcBundle)
-  alu_imm_src.value := dec.imm
+  alu_imm_src.value := Mux(is_csr, 0.U, dec.imm)
   alu_imm_src.tag := 0.U
   alu_imm_src.ready := true.B
-  io.disp_alu.bits.src(1) := Mux(
-    ctrl.alu_sel2 === ALUSel2.OP2_IMM,
-    alu_imm_src,
-    in.src(1)
-  )
-  io.disp_alu.bits.extra.aluOp := ctrl.alu_op
+  io.disp_alu.bits.src(1) := Mux(use_imm || is_csr, alu_imm_src, in.src(1))
+  io.disp_alu.bits.extra.alu_op := Mux(is_csr, ALUOpType.alu_ADD, ctrl.alu_op)
   io.disp_alu.bits.extra.rd_def := rd_def
   io.disp_alu.bits.rob_tag := io.rob_tag
 
@@ -119,11 +139,10 @@ class Dispatcher extends NPCModule {
 
   // ============================================================
   // Rename Forward
-  // Disabled: no pipeline regs between Rename and Dispatch yet,
-  // enabling this would cause a self-dependency on the same
-  // instruction. Enable when pipeline registers are inserted.
   // ============================================================
-  io.rename_fwd.rd_wen := false.B // TODO:
-  io.rename_fwd.rd_idx := dec.rd_idx
-  io.rename_fwd.rd_tag := io.rob_tag
+  io.rename_fwd.rd_def_tag := false.B // TODO: enable when pipeline regs inserted
+  io.rename_fwd.rd_idx := Mux(rd_def, dec.rd_idx, 0.U)
+  io.rename_fwd.tag := io.rob_tag
+  io.rename_fwd.rd_def_val := false.B
+  io.rename_fwd.value := 0.U
 }

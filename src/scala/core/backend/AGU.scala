@@ -8,11 +8,15 @@ import ysyx.core.common._
 class AGUInput extends NPCBundle {
   val base = UInt(addrBits.W)
   val offset = UInt(addrBits.W)
+  val rob_tag = UInt(robEntryBits.W)
+  val wdata = UInt(dataBits.W)
 }
 
 class AGUOutput extends NPCBundle {
   val addr = UInt(addrBits.W)
   val is_mmio = Bool()
+  val rob_tag = UInt(robEntryBits.W)
+  val wdata = UInt(dataBits.W)
 }
 
 class AGU extends ExecUnit(new AGUInput, new AGUOutput) {
@@ -21,6 +25,8 @@ class AGU extends ExecUnit(new AGUInput, new AGUOutput) {
   val addr = io.in.bits.base + io.in.bits.offset
   io.out.bits.addr := addr
   io.out.bits.is_mmio := AddressMap.isMMIO(addr)
+  io.out.bits.rob_tag := io.in.bits.rob_tag
+  io.out.bits.wdata := io.in.bits.wdata
 }
 
 class AGUExtra extends NPCBundle {

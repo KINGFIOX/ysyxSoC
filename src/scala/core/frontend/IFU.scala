@@ -11,20 +11,17 @@ import ysyx.core.lsu._
 
 class IFUOutput extends NPCBundle {
   val inst = UInt(instBits.W)
-  val pc = UInt(dataBits.W)
-  val exception = IFUExceptionType()
+  val pc = UInt(addrBits.W)
+  val predict_npc = UInt(addrBits.W)
+  val mcause = UInt(dataBits.W)
   val mtval = UInt(dataBits.W) // access fault address
-  val exceptionEn = Bool()
+  val has_except = Bool()
 }
 
 class RedirectBundle extends NPCBundle {
   val valid = Bool()
-  val target = UInt(addrBits.W)
-}
-
-object IFUExceptionType extends ChiselEnum {
-  val ifu_INSTRUCTION_ADDRESS_MISALIGNED, ifu_INSTRUCTION_ACCESS_FAULT,
-      ifu_INSTRUCTION_PAGE_FAULT = Value
+  val correct_npc = UInt(addrBits.W)
+  val wrong_pc = UInt(addrBits.W) // the pc of mispredicted instruction
 }
 
 object AXI4Resp {
@@ -57,8 +54,8 @@ class IFU extends NPCModule {
 
   private val pcQ = RegInit(ysyx.SoCConfig.resetVector.U(addrBits.W))
   private val instQ = RegInit(0.U(dataBits.W))
-  private val exceptQ = Reg(IFUExceptionType())
-  private val exceptEnQ = loadUnit.in.resp holdUnless loadUnit.in.data_ok
+  private val mcauseQ = RegInit(0.U(dataBits.W))
+  private val has_except_q = loadUnit.in.resp holdUnless loadUnit.in.data_ok
 
   object State extends ChiselEnum {
     val idle, addr_req, data_wait, output_wait = Value
@@ -75,9 +72,10 @@ class IFU extends NPCModule {
   io.out.valid := (stateQ === State.output_wait)
   io.out.bits.inst := instQ
   io.out.bits.pc := pcQ
-  io.out.bits.exception := exceptQ
+  io.out.bits.mcause := mcauseQ
   io.out.bits.mtval := pcQ
-  io.out.bits.exceptionEn := exceptEnQ
+  io.out.bits.has_except := has_except_q
+  io.out.bits.predict_npc := pcQ + 4.U
 
   switch(stateQ) {
 
@@ -87,7 +85,7 @@ class IFU extends NPCModule {
 
     is(State.addr_req) {
       when(io.redirect.valid) {
-        pcQ := io.redirect.target
+        pcQ := io.redirect.correct_npc
       }.elsewhen(loadUnit.in.addr_ok) {
         stateQ := State.data_wait
       }
@@ -96,12 +94,12 @@ class IFU extends NPCModule {
     is(State.data_wait) {
       when(io.redirect.valid) {
         stateQ := State.addr_req
-        pcQ := io.redirect.target
+        pcQ := io.redirect.correct_npc
       }.elsewhen(loadUnit.in.data_ok) {
         stateQ := State.output_wait
         instQ := loadUnit.in.rdata
         when(loadUnit.in.resp =/= AXI4Resp.OKAY) {
-          exceptQ := IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT
+          mcauseQ := 1.U // instruction access fault
         }
       }
     }
@@ -109,7 +107,7 @@ class IFU extends NPCModule {
     is(State.output_wait) {
       when(io.redirect.valid) {
         stateQ := State.addr_req
-        pcQ := io.redirect.target
+        pcQ := io.redirect.correct_npc
       }.elsewhen(io.out.fire) {
         stateQ := State.addr_req
         pcQ := pcQ + 4.U

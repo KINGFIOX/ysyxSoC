@@ -17,12 +17,10 @@ class DebugCommitBundle extends NPCBundle {
 
 class CommitStage extends NPCModule {
   val io = IO(new Bundle {
-    // ROB
     val rob = new Bundle {
       val commit = Flipped(Decoupled(new CommitBundle))
       val wb_commit = Valid(new WBCommitBundle)
     }
-    // CSR — exception + retire
     val csr = new Bundle {
       val exception = new CSRCommitIO
       val retire = new Bundle {
@@ -35,7 +33,6 @@ class CommitStage extends NPCModule {
       val xepc = Input(UInt(dataBits.W))
       val xtvec = Input(UInt(dataBits.W))
     }
-    // LSU — commit driven
     val lsu = new Bundle {
       val late = Flipped(new LateExecIO)
       val addr = Output(UInt(addrBits.W))
@@ -46,24 +43,18 @@ class CommitStage extends NPCModule {
       val wdata = Output(UInt(dataBits.W))
       val is_mmio = Output(Bool())
     }
-    // RFU writeback
     val rfu = new Bundle {
       val wen = Output(Bool())
       val rd_i = Output(UInt(NRRegbits.W))
       val wdata = Output(UInt(dataBits.W))
     }
-    // RAT commit
     val rat_commit = Flipped(new RATCommitPort)
-    // IFU redirect
     val ifu = new Bundle {
       val flush = Output(Bool())
       val redirect = Output(new RedirectBundle)
     }
-    // CDB2 broadcast
     val cdb2 = Output(new CDBBundle)
-    // fence_i
     val fence_i = Output(Bool())
-    // Debug
     val debug = Output(new DebugCommitBundle)
   })
 
@@ -72,8 +63,16 @@ class CommitStage extends NPCModule {
   val head_tag = io.rob.commit.bits.tag
   val head_valid = io.rob.commit.valid
 
+  val rd_def = head.rd.idx =/= 0.U
   val head_is_mem = head.mem.r_en || head.mem.w_en
-  val head_is_csr = head.csr_wen
+  val head_is_csr = head.inst_type === InstType.CSR
+  val head_is_mret = head.inst_type === InstType.MRET
+
+  // format: off
+  val is_control = Seq(InstType.JAL, InstType.JALR, InstType.BRANCH)
+    .map(head.inst_type === _).reduce(_ || _)
+  // format: on
+  val mispredict = is_control && (head.target_npc =/= head.predict_npc)
 
   // ---- State machine ----
   object CommitState extends ChiselEnum {
@@ -85,49 +84,43 @@ class CommitStage extends NPCModule {
   val flush = WireDefault(false.B)
   val redirect = Wire(new RedirectBundle)
   redirect.valid := false.B
-  redirect.target := 0.U
+  redirect.correct_npc := 0.U
+  redirect.wrong_pc := 0.U
 
   io.ifu.flush := flush
   io.ifu.redirect := redirect
 
-  // CDB2
   io.cdb2.valid := false.B
   io.cdb2.tag := head_tag
   io.cdb2.value := 0.U
 
-  // ROB wb_commit
   io.rob.wb_commit.valid := false.B
   io.rob.wb_commit.bits.tag := head_tag
   io.rob.wb_commit.bits.value := 0.U
 
   io.rob.commit.ready := false.B
 
-  // RFU
   io.rfu.wen := false.B
-  io.rfu.rd_i := head.rd_idx
-  io.rfu.wdata := head.rd_val
+  io.rfu.rd_i := head.rd.idx
+  io.rfu.wdata := head.rd.value
 
-  // RAT commit
   io.rat_commit.en := false.B
-  io.rat_commit.addr := head.rd_idx
+  io.rat_commit.addr := head.rd.idx
   io.rat_commit.tag := head_tag
 
-  // CSR exception
   io.csr.exception.xepc := head.pc
   io.csr.exception.xepc_wen := false.B
-  io.csr.exception.xcause := head.mcause
+  io.csr.exception.xcause := head.except.mcause
   io.csr.exception.xcause_wen := false.B
-  io.csr.exception.xtval := head.xtval
+  io.csr.exception.xtval := head.except.mtval
   io.csr.exception.xtval_wen := false.B
 
-  // CSR retire
   io.csr.retire.late.req := false.B
-  io.csr.retire.addr := head.imm(NRCSRbits - 1, 0)
-  io.csr.retire.wop := head.csr_op
+  io.csr.retire.addr := head.csr.addr
+  io.csr.retire.wop := head.csr.op
   io.csr.retire.wen := false.B
-  io.csr.retire.wdata := head.alu_result
+  io.csr.retire.wdata := head.csr.wdata
 
-  // LSU
   io.lsu.late.req := false.B
   io.lsu.addr := head.mem.addr
   io.lsu.size := head.mem.size
@@ -137,10 +130,8 @@ class CommitStage extends NPCModule {
   io.lsu.wdata := head.mem.wdata
   io.lsu.is_mmio := head.mem.is_mmio
 
-  // fence_i
   io.fence_i := false.B
 
-  // Debug
   val dbg_valid = RegInit(false.B)
   val dbg_pc = Reg(UInt(dataBits.W))
   val dbg_dnpc = Reg(UInt(dataBits.W))
@@ -152,14 +143,15 @@ class CommitStage extends NPCModule {
   switch(commitStateQ) {
     is(CommitState.idle) {
       when(head_valid) {
-        when(head.except_en) {
+        when(head.except.valid) {
           io.csr.exception.xepc_wen := true.B
           io.csr.exception.xcause_wen := true.B
           io.csr.exception.xtval_wen := true.B
 
           flush := true.B
           redirect.valid := true.B
-          redirect.target := io.csr.xtvec
+          redirect.correct_npc := io.csr.xtvec
+          redirect.wrong_pc := head.pc
 
           io.rob.commit.ready := true.B
 
@@ -172,16 +164,16 @@ class CommitStage extends NPCModule {
         }.elsewhen(head_is_mem) {
           io.lsu.late.req := true.B
           when(io.lsu.late.done) {
-            when(head.rd_def) {
+            when(rd_def) {
               io.rfu.wen := true.B
               io.rfu.wdata := io.lsu.late.result
             }
-            io.rob.wb_commit.valid := head.rd_def
+            io.rob.wb_commit.valid := rd_def
             io.rob.wb_commit.bits.value := io.lsu.late.result
-            io.cdb2.valid := head.rd_def
+            io.cdb2.valid := rd_def
             io.cdb2.value := io.lsu.late.result
 
-            io.rat_commit.en := head.rd_def
+            io.rat_commit.en := rd_def
             io.rob.commit.ready := true.B
 
             dbg_valid := true.B
@@ -195,20 +187,20 @@ class CommitStage extends NPCModule {
 
         }.elsewhen(head_is_csr) {
           io.csr.retire.late.req := true.B
-          io.csr.retire.wen := head.csr_wen
+          io.csr.retire.wen := true.B
           val csr_rd = io.csr.retire.late.result
 
-          when(head.rd_def) {
+          when(rd_def) {
             io.rfu.wen := true.B
             io.rfu.wdata := csr_rd
           }
 
-          io.rob.wb_commit.valid := head.rd_def
+          io.rob.wb_commit.valid := rd_def
           io.rob.wb_commit.bits.value := csr_rd
-          io.cdb2.valid := head.rd_def
+          io.cdb2.valid := rd_def
           io.cdb2.value := csr_rd
 
-          io.rat_commit.en := head.rd_def
+          io.rat_commit.en := rd_def
 
           io.rob.commit.ready := true.B
 
@@ -218,10 +210,11 @@ class CommitStage extends NPCModule {
           dbg_inst := head.inst
           dbg_is_mmio := false.B
 
-        }.elsewhen(head.is_mret) {
+        }.elsewhen(head_is_mret) {
           flush := true.B
           redirect.valid := true.B
-          redirect.target := io.csr.xepc
+          redirect.correct_npc := io.csr.xepc
+          redirect.wrong_pc := head.pc
 
           io.rob.commit.ready := true.B
 
@@ -232,28 +225,25 @@ class CommitStage extends NPCModule {
           dbg_is_mmio := false.B
 
         }.otherwise {
-          when(head.rd_def) {
+          when(rd_def) {
             io.rfu.wen := true.B
-            io.rfu.wdata := head.rd_val
+            io.rfu.wdata := head.rd.value
           }
 
-          io.rat_commit.en := head.rd_def
+          io.rat_commit.en := rd_def
 
-          when(head.mispredict) {
+          when(mispredict) {
             flush := true.B
             redirect.valid := true.B
-            redirect.target := head.target_npc
+            redirect.correct_npc := head.target_npc
+            redirect.wrong_pc := head.pc
           }
 
           io.rob.commit.ready := true.B
 
           dbg_valid := true.B
           dbg_pc := head.pc
-          dbg_dnpc := Mux(
-            head.mispredict,
-            head.target_npc,
-            head.pc + 4.U
-          )
+          dbg_dnpc := Mux(mispredict, head.target_npc, head.pc + 4.U)
           dbg_inst := head.inst
           dbg_is_mmio := false.B
         }
@@ -263,17 +253,17 @@ class CommitStage extends NPCModule {
     is(CommitState.late_wait) {
       io.lsu.late.req := true.B
       when(io.lsu.late.done) {
-        when(head.rd_def) {
+        when(rd_def) {
           io.rfu.wen := true.B
           io.rfu.wdata := io.lsu.late.result
         }
 
-        io.rob.wb_commit.valid := head.rd_def
+        io.rob.wb_commit.valid := rd_def
         io.rob.wb_commit.bits.value := io.lsu.late.result
-        io.cdb2.valid := head.rd_def
+        io.cdb2.valid := rd_def
         io.cdb2.value := io.lsu.late.result
 
-        io.rat_commit.en := head.rd_def
+        io.rat_commit.en := rd_def
         io.rob.commit.ready := true.B
         commitStateQ := CommitState.idle
 

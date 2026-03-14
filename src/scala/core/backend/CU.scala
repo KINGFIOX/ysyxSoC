@@ -16,43 +16,24 @@ object CSROpType extends ChiselEnum {
   val CSR_RW, CSR_RS = Value // NOP, Read-Write, Read-Set
 }
 
-// mcause:
-// 2. illegal instruction
-// 3. breakpoint
-// 8. ecall from U-mode
-// 9. ecall from S-mode
-// 11. ecall from M-mode
-object CUExceptionType extends ChiselEnum {
-  val cu_ILLEGAL_INSTRUCTION, cu_BREAKPOINT,
-      cu_ECALL_FROM_U_MODE, // TODO: 暂时只有 M-mode 的 ecall
-  cu_ECALL_FROM_S_MODE, cu_ECALL_FROM_M_MODE = Value
+object InstType extends ChiselEnum {
+  val INVALID, R_ALU, I_ALU, JALR, LOAD, STORE, BRANCH, JAL, LUI, AUIPC, ECALL,
+      EBREAK, MRET, CSR = Value
 }
 
-/** CU 输出的控制信号 */
-class CUOutput extends NPCBundle {
+class CUOutputBase extends NPCBundle {
+  val inst_type = InstType()
   val alu_op = ALUOpType() // ALU 控制
-  val go_to_alu = Bool()
-  val alu_sel2 = ALUSel2()
-  val go_to_agu = Bool()
   val imm_type = ImmType()
-  val go_to_bru = Bool()
   val bru_op = BRUOpType() // bru
-  val is_jal = Bool()
-  val is_jalr = Bool()
-  val is_mret = Bool()
-  val is_lui = Bool()
-  val is_auipc = Bool()
-
   val mem = new MemInfoBundle // mem
-  val rf_wen = Bool()
   val csr_op = CSROpType() // csr
   val csr_wen = Bool()
-  val except_type = CUExceptionType() // exception
+}
+
+class CUOutput extends CUOutputBase {
   val has_except = Bool()
-
-  val needs_rs1 = Bool()
-  val needs_rs2 = Bool()
-
+  val mcause = UInt(dataBits.W)
   val mtval = UInt(dataBits.W)
 }
 
@@ -162,6 +143,32 @@ object CU {
 
   // ==================== DecodeField 对象 ====================
 
+  object InstTypeField extends DecodeField[InstPattern, UInt] {
+    def name = "inst_type"
+    def chiselType = UInt(log2Ceil(InstType.all.length).W)
+    private def bp(v: InstType.Type): BitPat = litBP(v.litValue, width)
+    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
+      case OP_R      => bp(InstType.R_ALU)
+      case OP_I_ALU  => bp(InstType.I_ALU)
+      case OP_JALR   => bp(InstType.JALR)
+      case OP_LOAD   => bp(InstType.LOAD)
+      case OP_STORE  => bp(InstType.STORE)
+      case OP_BRANCH => bp(InstType.BRANCH)
+      case OP_JAL    => bp(InstType.JAL)
+      case OP_LUI    => bp(InstType.LUI)
+      case OP_AUIPC  => bp(InstType.AUIPC)
+      case OP_SYSTEM =>
+        (op.func7.rawString, op.rs2.rawString, op.func3.rawString) match {
+          case ("0000000", "00000", "000") => bp(InstType.ECALL)
+          case ("0000000", "00001", "000") => bp(InstType.EBREAK)
+          case ("0011000", "00010", "000") => bp(InstType.MRET)
+          case ("???????", "?????", "001") => bp(InstType.CSR)
+          case ("???????", "?????", "010") => bp(InstType.CSR)
+        }
+      case _ => bp(InstType.INVALID)
+    }
+  }
+
   // format: off
   object AluOpField extends DecodeField[InstPattern, UInt] {
     def name = "alu_op"
@@ -198,40 +205,6 @@ object CU {
     }
   }
   // format: on
-
-  object AluSel2Field extends DecodeField[InstPattern, UInt] {
-    def name = "alu_sel2"
-    def chiselType = UInt(log2Ceil(ALUSel2.all.length).W)
-    private def bp(v: ALUSel2.Type): BitPat = litBP(v.litValue, width)
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R               => bp(ALUSel2.OP2_RS2)
-      case OP_I_ALU | OP_JALR => bp(ALUSel2.OP2_IMM)
-      case _                  => dc
-    }
-  }
-  object GoToAluField extends BoolDecodeField[InstPattern] {
-    def name = "go_to_alu"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R | OP_I_ALU | OP_JALR => y
-      case _                         => n
-    }
-  }
-
-  object GoToAguField extends BoolDecodeField[InstPattern] {
-    def name = "go_to_agu"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_LOAD | OP_STORE => y
-      case _                  => n
-    }
-  }
-
-  object GoToBruField extends BoolDecodeField[InstPattern] {
-    def name = "go_to_bru"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_BRANCH => y
-      case _         => n
-    }
-  }
 
   // format: off
   object ImmTypeField extends DecodeField[InstPattern, UInt] {
@@ -271,66 +244,6 @@ object CU {
   }
   // format: on
 
-  object IsJalField extends BoolDecodeField[InstPattern] {
-    def name = "is_jal"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_JAL => y
-      case _      => n
-    }
-  }
-
-  object IsJalrField extends BoolDecodeField[InstPattern] {
-    def name = "is_jalr"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_JALR => y
-      case _       => n
-    }
-  }
-
-  object NeedsRs1Field extends BoolDecodeField[InstPattern] {
-    def name = "needs_rs1"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R | OP_I_ALU | OP_JALR | OP_LOAD | OP_STORE | OP_BRANCH => y
-      case _                                                          => n
-    }
-  }
-
-  object NeedsRs2Field extends BoolDecodeField[InstPattern] {
-    def name = "needs_rs2"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R | OP_STORE | OP_BRANCH => y
-      case _                           => n
-    }
-  }
-
-  object IsLuiField extends BoolDecodeField[InstPattern] {
-    def name = "is_lui"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_LUI => y
-      case _      => n
-    }
-  }
-
-  object IsAuipcField extends BoolDecodeField[InstPattern] {
-    def name = "is_auipc"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_AUIPC => y
-      case _        => n
-    }
-  }
-
-  object IsMretField extends BoolDecodeField[InstPattern] {
-    def name = "is_mret"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_SYSTEM =>
-        (op.func7.rawString, op.rs2.rawString, op.func3.rawString) match {
-          case ("0011000", "00010", "000") => y
-          case _                           => n
-        }
-      case _ => n
-    }
-  }
-
   // format: off
   object MemSizeField extends DecodeField[InstPattern, UInt] {
     def name = "mem_size"
@@ -358,28 +271,6 @@ object CU {
   }
   // format: on
 
-  // load
-  // format: off
-  object MemRenField extends BoolDecodeField[InstPattern] {
-    def name = "mem_r_en"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_LOAD => y
-      case _       => n
-    }
-  }
-  // format: on
-
-  // store
-  // format: off
-  object MemWenField extends BoolDecodeField[InstPattern] {
-    def name = "mem_w_en"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_STORE => y
-      case _        => n
-    }
-  }
-  // format: on
-
   // format: off
   object MemSignExtField extends BoolDecodeField[InstPattern] {
     def name = "mem_sign_ext"
@@ -394,19 +285,6 @@ object CU {
     }
   }
   // format: on
-
-  object RfWenField extends BoolDecodeField[InstPattern] {
-    def name = "rf_wen"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R | OP_I_ALU | OP_LOAD | OP_JAL | OP_JALR | OP_LUI | OP_AUIPC => y
-      case OP_SYSTEM                                                        =>
-        op.func3.rawString match {
-          case "001" | "010" => y // CSRRW, CSRRS, TODO: need to add some
-          case _             => n
-        }
-      case _ => n
-    }
-  }
 
   // format: off
   object CsrOpField extends DecodeField[InstPattern, UInt] {
@@ -439,69 +317,17 @@ object CU {
   }
   // format: on
 
-  // format: off
-  object IsEbreakField extends BoolDecodeField[InstPattern] {
-    def name = "ebreak"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_SYSTEM =>
-        (op.func7.rawString, op.rs2.rawString, op.func3.rawString) match {
-          case ("0000000", "00001", "000") => y
-          case _                           => n
-        }
-      case _ => n
-    }
-  }
-  // format: on
-
-  // format: off
-  object IsEcallField extends BoolDecodeField[InstPattern] {
-    def name = "ecall"
-    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_SYSTEM =>
-        (op.func7.rawString, op.rs2.rawString, op.func3.rawString) match {
-          case ("0000000", "00000", "000") => y
-          case _                           => n
-        }
-      case _ => n
-    }
-  }
-  // format: on
-
-  // format: off
-  object ValidField extends BoolDecodeField[InstPattern] {
-    def name = "valid"
-    override def default: BitPat = n
-    def genTable(op: InstPattern): BitPat = y
-  }
-  // format: on
-
   // ==================== DecodeTable ====================
 
   val allFields: Seq[DecodeField[InstPattern, _ <: Data]] = Seq(
+    InstTypeField,
     AluOpField,
-    GoToAluField,
-    AluSel2Field,
-    GoToAguField,
     ImmTypeField,
-    GoToBruField,
     BruOpField,
-    IsJalField,
-    IsJalrField,
-    IsMretField,
-    IsLuiField,
-    IsAuipcField,
-    NeedsRs1Field,
-    NeedsRs2Field,
-    MemRenField,
-    MemWenField,
     MemSizeField,
     MemSignExtField,
-    RfWenField,
     CsrOpField,
-    CsrWenField,
-    IsEbreakField,
-    IsEcallField,
-    ValidField
+    CsrWenField
   )
 
   val decodeTable = new DecodeTable[InstPattern](allInstructions, allFields)
@@ -518,50 +344,40 @@ class CU extends NPCModule {
   val inst = io.in.inst
   val decoded = decodeTable.decode(inst)
 
+  val inst_type = InstType.safe(decoded(InstTypeField))._1
+
+  io.out.inst_type := inst_type
   io.out.alu_op := ALUOpType.safe(decoded(AluOpField))._1
-  io.out.go_to_alu := decoded(GoToAluField)
-  io.out.alu_sel2 := ALUSel2.safe(decoded(AluSel2Field))._1
-  io.out.go_to_agu := decoded(GoToAguField)
   io.out.imm_type := ImmType.safe(decoded(ImmTypeField))._1
-  io.out.go_to_bru := decoded(GoToBruField)
   io.out.bru_op := BRUOpType.safe(decoded(BruOpField))._1
-  io.out.needs_rs1 := decoded(NeedsRs1Field)
-  io.out.needs_rs2 := decoded(NeedsRs2Field)
-  io.out.is_jal := decoded(IsJalField)
-  io.out.is_jalr := decoded(IsJalrField)
-  io.out.is_lui := decoded(IsLuiField)
-  io.out.is_auipc := decoded(IsAuipcField)
-  io.out.is_mret := decoded(IsMretField)
-  io.out.mem.r_en := decoded(MemRenField)
-  io.out.mem.w_en := decoded(MemWenField)
+  io.out.mem.r_en := inst_type === InstType.LOAD
+  io.out.mem.w_en := inst_type === InstType.STORE
   io.out.mem.size := decoded(MemSizeField)
   io.out.mem.sign_ext := decoded(MemSignExtField)
   io.out.mem.addr := 0.U
   io.out.mem.wdata := 0.U
 
-  io.out.rf_wen := decoded(RfWenField)
   io.out.csr_op := CSROpType.safe(decoded(CsrOpField))._1
   io.out.csr_wen := decoded(CsrWenField)
 
-  val is_ebreak = decoded(IsEbreakField)
-  val is_ecall = decoded(IsEcallField)
-  val invalid_inst = !decoded(ValidField)
+  // mcause:
+  // 2. illegal instruction
+  // 3. breakpoint
+  // 11. ecall from M-mode
+  io.out.mcause := MuxLookup(inst_type, 0.U)(
+    Seq(
+      InstType.ECALL -> 11.U,
+      InstType.EBREAK -> 3.U,
+      InstType.INVALID -> 2.U
+    )
+  )
 
-  io.out.except_type := MuxCase(
-    DontCare,
+  io.out.mtval := MuxLookup(inst_type, 0.U)(
     Seq(
-      is_ebreak -> CUExceptionType.cu_BREAKPOINT,
-      is_ecall -> CUExceptionType.cu_ECALL_FROM_M_MODE,
-      invalid_inst -> CUExceptionType.cu_ILLEGAL_INSTRUCTION
+      InstType.ECALL -> 0.U,
+      InstType.EBREAK -> io.in.pc,
+      InstType.INVALID -> io.in.inst
     )
   )
-  io.out.mtval := MuxCase(
-    0.U,
-    Seq(
-      is_ebreak -> io.in.pc,
-      is_ecall -> 0.U,
-      invalid_inst -> io.in.inst
-    )
-  )
-  io.out.has_except := is_ebreak || is_ecall || invalid_inst
+  io.out.has_except := Seq(InstType.EBREAK, InstType.ECALL, InstType.INVALID).map(inst_type === _).reduce(_ || _)
 }

@@ -58,7 +58,8 @@ class BackEnd extends NPCModule {
   val flush = WireDefault(false.B)
   val redirect = Wire(new RedirectBundle)
   redirect.valid := false.B
-  redirect.target := 0.U
+  redirect.correct_npc := 0.U
+  redirect.wrong_pc := 0.U
 
   io.flush := flush
   io.redirect := redirect
@@ -85,9 +86,9 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Stage pipeline: IFU -> Decode -> Rename -> Dispatch
   // ==========================================================
-  PipelineConnect(io.in, decodeStage_.io.in)
-  PipelineConnect(decodeStage_.io.out, renameStage_.io.in)
-  PipelineConnect(renameStage_.io.out, dispatcher_.io.in)
+  PipelineConnect(io.in, decodeStage_.io.in, flush)
+  PipelineConnect(decodeStage_.io.out, renameStage_.io.in, flush)
+  PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush)
 
   // --- RenameStage side-band ---
   renameStage_.io.rat_query(0) <> rat_.io.read(0)
@@ -103,8 +104,8 @@ class BackEnd extends NPCModule {
 
   renameStage_.io.disp_fwd <> dispatcher_.io.rename_fwd
 
-  renameStage_.io.cdb1 := cdb1
-  renameStage_.io.cdb2 := cdb2
+  renameStage_.io.cdb(0) := cdb1
+  renameStage_.io.cdb(1) := cdb2
 
   // --- Dispatcher ---
   dispatcher_.io.flush := flush
@@ -124,77 +125,78 @@ class BackEnd extends NPCModule {
   alu_.io.in.valid := alu_iq_.io.issue.valid
   alu_.io.in.bits.op1 := alu_iq_.io.issue.bits.src_v(0)
   alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
-  alu_.io.in.bits.aluOp := alu_iq_.io.issue.bits.extra.aluOp
+  alu_.io.in.bits.alu_op := alu_iq_.io.issue.bits.extra.alu_op
+  alu_.io.in.bits.rob_tag := alu_iq_.io.issue.bits.rob_tag
+  alu_.io.in.bits.rd_def := alu_iq_.io.issue.bits.extra.rd_def
   alu_iq_.io.issue.ready := alu_.io.in.ready
 
   alu_.io.out.ready := true.B
 
-  val alu_issue_valid = alu_iq_.io.issue.fire
-  val alu_issue_tag = alu_iq_.io.issue.bits.rob_tag
-  val alu_issue_rd_def = alu_iq_.io.issue.bits.extra.rd_def
+  val alu_wb_valid = alu_.io.out.fire
+  val alu_wb_tag = alu_.io.out.bits.rob_tag
+  val alu_wb_rd_def = alu_.io.out.bits.rd_def
   val alu_result = alu_.io.out.bits.result
 
-  rob_.io.lookup1.tag := alu_issue_tag
+  rob_.io.lookup1.tag := alu_wb_tag
   val alu_rob_entry = rob_.io.lookup1.entry
 
-  val alu_rd_val =
-    Mux(alu_rob_entry.rd_val_valid, alu_rob_entry.rd_val, alu_result)
-  val alu_rd_val_valid = true.B // TODO:
+  val alu_is_jalr = alu_rob_entry.inst_type === InstType.JALR
+  val alu_is_csr = alu_rob_entry.inst_type === InstType.CSR
 
-  val alu_is_jalr = alu_rob_entry.is_jalr
-  val alu_mispredict = alu_is_jalr
+  val alu_rd_val = Mux(alu_rob_entry.rd.valid, alu_rob_entry.rd.value, alu_result)
+  val alu_rd_valid = !alu_is_csr
   val alu_target_npc =
-    Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.pc + 4.U)
+    Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.target_npc)
 
-  rob_.io.alu.valid := alu_issue_valid
-  rob_.io.alu.bits.tag := alu_issue_tag
-  rob_.io.alu.bits.alu_result := alu_result
-  rob_.io.alu.bits.rd_val := alu_rd_val
-  rob_.io.alu.bits.rd_val_valid := alu_rd_val_valid
-  rob_.io.alu.bits.mispredict := alu_mispredict
+  rob_.io.alu.valid := alu_wb_valid
+  rob_.io.alu.bits.tag := alu_wb_tag
+  rob_.io.alu.bits.rd_value := alu_rd_val
+  rob_.io.alu.bits.rd_valid := alu_rd_valid
   rob_.io.alu.bits.target_npc := alu_target_npc
+  rob_.io.alu.bits.csr_wdata := alu_result
 
   // --- BRU path ---
   bru_.io.in.valid := bru_iq_.io.issue.valid
   bru_.io.in.bits.rs1_v := bru_iq_.io.issue.bits.src_v(0)
   bru_.io.in.bits.rs2_v := bru_iq_.io.issue.bits.src_v(1)
   bru_.io.in.bits.op := bru_iq_.io.issue.bits.extra.bru_op
+  bru_.io.in.bits.rob_tag := bru_iq_.io.issue.bits.rob_tag
   bru_iq_.io.issue.ready := bru_.io.in.ready
 
   bru_.io.out.ready := true.B
 
-  val bru_issue_valid = bru_iq_.io.issue.fire
-  val bru_issue_tag = bru_iq_.io.issue.bits.rob_tag
+  val bru_wb_valid = bru_.io.out.fire
+  val bru_wb_tag = bru_.io.out.bits.rob_tag
   val br_flag = bru_.io.out.bits.br_flag
 
-  rob_.io.lookup2.tag := bru_issue_tag
+  rob_.io.lookup2.tag := bru_wb_tag
   val bru_rob_entry = rob_.io.lookup2.entry
 
-  val bru_mispredict = br_flag
-  val bru_actual_npc = Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
+  val bru_target_npc = Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
 
-  rob_.io.bru.valid := bru_issue_valid
-  rob_.io.bru.bits.tag := bru_issue_tag
-  rob_.io.bru.bits.mispredict := bru_mispredict
-  rob_.io.bru.bits.actual_npc := bru_actual_npc
+  rob_.io.bru.valid := bru_wb_valid
+  rob_.io.bru.bits.tag := bru_wb_tag
+  rob_.io.bru.bits.target_npc := bru_target_npc
 
   // --- AGU path ---
   agu_.io.in.valid := agu_iq_.io.issue.valid
   agu_.io.in.bits.base := agu_iq_.io.issue.bits.src_v(0)
   agu_.io.in.bits.offset := agu_iq_.io.issue.bits.extra.imm
+  agu_.io.in.bits.rob_tag := agu_iq_.io.issue.bits.rob_tag
+  agu_.io.in.bits.wdata := agu_iq_.io.issue.bits.src_v(1)
   agu_iq_.io.issue.ready := agu_.io.in.ready
 
   agu_.io.out.ready := true.B
 
-  rob_.io.agu.valid := agu_iq_.io.issue.fire
-  rob_.io.agu.bits.tag := agu_iq_.io.issue.bits.rob_tag
+  rob_.io.agu.valid := agu_.io.out.fire
+  rob_.io.agu.bits.tag := agu_.io.out.bits.rob_tag
   rob_.io.agu.bits.addr := agu_.io.out.bits.addr
-  rob_.io.agu.bits.wdata := agu_iq_.io.issue.bits.src_v(1)
+  rob_.io.agu.bits.wdata := agu_.io.out.bits.wdata
   rob_.io.agu.bits.is_mmio := agu_.io.out.bits.is_mmio
 
   // --- CDB1 — ALU writeback broadcast ---
-  cdb1.valid := alu_issue_valid && alu_rd_val_valid && alu_issue_rd_def && !flush
-  cdb1.tag := alu_issue_tag
+  cdb1.valid := alu_wb_valid && alu_rd_valid && alu_wb_rd_def && !flush
+  cdb1.tag := alu_wb_tag
   cdb1.value := alu_rd_val
 
   // ==========================================================

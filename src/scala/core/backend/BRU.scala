@@ -13,16 +13,19 @@ class BRUInput extends NPCBundle {
   val rs1_v = UInt(dataBits.W)
   val rs2_v = UInt(dataBits.W)
   val op = BRUOpType()
+  val rob_tag = UInt(robEntryBits.W)
 }
 
 class BRUOutput extends NPCBundle {
   val br_flag = Bool()
+  val rob_tag = UInt(robEntryBits.W)
 }
 
 class BRU extends ExecUnit(new BRUInput, new BRUOutput) {
   io.in.ready := io.out.ready
   io.out.valid := io.in.valid
   io.out.bits.br_flag := false.B
+  io.out.bits.rob_tag := io.in.bits.rob_tag
 
   // format: off
   switch(io.in.bits.op) {

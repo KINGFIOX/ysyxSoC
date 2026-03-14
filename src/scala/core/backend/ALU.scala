@@ -13,11 +13,15 @@ object ALUOpType extends ChiselEnum {
 class ALUInput extends NPCBundle {
   val op1 = UInt(dataBits.W)
   val op2 = UInt(dataBits.W)
-  val aluOp = ALUOpType()
+  val alu_op = ALUOpType()
+  val rob_tag = UInt(robEntryBits.W)
+  val rd_def = Bool()
 }
 
 class ALUOutput extends NPCBundle {
   val result = UInt(dataBits.W)
+  val rob_tag = UInt(robEntryBits.W)
+  val rd_def = Bool()
 }
 
 class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
@@ -29,6 +33,8 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
   val shamt = op2(log2Up(dataBits) - 1, 0)
 
   io.out.bits.result := 0.U
+  io.out.bits.rob_tag := io.in.bits.rob_tag
+  io.out.bits.rd_def := io.in.bits.rd_def
 
   switch(io.in.bits.aluOp) {
     is(ALUOpType.alu_ADD) { io.out.bits.result := op1 + op2 }
@@ -45,7 +51,7 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
 }
 
 class ALUExtra extends NPCBundle {
-  val aluOp = ALUOpType()
+  val alu_op = ALUOpType()
   val rd_def = Bool()
 }
 

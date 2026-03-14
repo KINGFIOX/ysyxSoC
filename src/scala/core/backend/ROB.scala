@@ -6,80 +6,68 @@ import chisel3.util._
 import ysyx.core.common._
 import ysyx.core.lsu._
 
-// whether the entry valided, defined by queue ptr: head and tail
-object EntryState extends ChiselEnum {
-  val allocated, executed = Value
-}
-
 class MemRobEntry extends MemInfoBundle {
   val addr_rdy = Bool()
   val wdata_rdy = Bool()
   val is_mmio = Bool()
 }
 
-class RobEntry extends NPCBundle {
-  val mem = new MemRobEntry
-  val csr_op = CSROpType()
-  val csr_wen = Bool()
+class CsrRobEntry extends NPCBundle {
+  val wdata = UInt(dataBits.W)
+  val addr = UInt(NRCSRbits.W)
+  val op = CSROpType()
+}
 
+class RdRobEntry extends NPCBundle {
+  val idx = UInt(NRRegbits.W)
+  val value = UInt(dataBits.W)
+  val valid = Bool()
+}
+
+class ExceptRobEntry extends NPCBundle {
+  val valid = Bool()
+  val mcause = UInt(dataBits.W)
+  val mtval = UInt(dataBits.W)
+}
+
+class RobEntry extends NPCBundle {
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
-  val imm = UInt(dataBits.W) // for csr only
-
-  val alu_result = UInt(dataBits.W)
-  val rd_val = UInt(dataBits.W)
-  val rd_val_valid = Bool()
-  val rd_idx = UInt(NRRegbits.W)
-  val rd_def = Bool()
-
-  val except_en = Bool()
-  val mcause = UInt(dataBits.W)
-  val xtval = UInt(dataBits.W)
-
-  val is_jalr = Bool()
-  val is_mret = Bool()
-  val mispredict = Bool()
+  val inst_type = InstType()
+  val mem = new MemRobEntry
+  val csr = new CsrRobEntry
+  val rd = new RdRobEntry
+  val except = new ExceptRobEntry
+  val is_call = Bool()
+  val is_ret = Bool()
   val target_npc = UInt(addrBits.W)
-
-  val state = EntryState()
+  val predict_npc = UInt(addrBits.W)
+  val completed = Bool()
 }
 
 class RobEnqData extends NPCBundle {
-  val mem = new MemInfoBundle
-  val csr_op = CSROpType()
-  val csr_wen = Bool()
-
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
-  val imm = UInt(dataBits.W) // for csr only
-
-  val rd_idx = UInt(NRRegbits.W)
-  val rd_def = Bool()
-
-  val except_en = Bool()
-  val mcause = UInt(dataBits.W)
-  val mtval = UInt(dataBits.W)
-
-  val is_jalr = Bool()
-  val is_mret = Bool()
-  val dispatch_executed = Bool()
-  val rd_val = UInt(dataBits.W)
-  val rd_val_valid = Bool()
-  val mispredict = Bool()
+  val inst_type = InstType()
+  val mem = new MemInfoBundle
+  val csr = new CsrRobEntry
+  val rd = new RdRobEntry
+  val except = new ExceptRobEntry
+  val is_call = Bool()
+  val is_ret = Bool()
   val target_npc = UInt(addrBits.W)
+  val predict_npc = UInt(addrBits.W)
+  val completed = Bool()
 }
 
-// alu
 class WBALUBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
-  val alu_result = UInt(dataBits.W)
-  val rd_val = UInt(dataBits.W)
-  val rd_val_valid = Bool()
-  val mispredict = Bool()
+  val rd_value = UInt(dataBits.W)
+  val rd_valid = Bool()
   val target_npc = UInt(addrBits.W)
+  val csr_wdata = UInt(dataBits.W)
 }
 
-// agu
 class WBAGUBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
   val addr = UInt(addrBits.W)
@@ -87,11 +75,9 @@ class WBAGUBundle extends NPCBundle {
   val is_mmio = Bool()
 }
 
-// bru
 class WBBRUBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
-  val mispredict = Bool()
-  val actual_npc = UInt(addrBits.W)
+  val target_npc = UInt(addrBits.W)
 }
 
 class LookupBundle extends NPCBundle {
@@ -99,7 +85,6 @@ class LookupBundle extends NPCBundle {
   val entry = Input(new RobEntry)
 }
 
-// rename ---(tag)--> rob ---(value, valid)--> rename
 class RobFwdBundle extends NPCBundle {
   val tag = Input(UInt(robEntryBits.W))
   val value = Output(UInt(dataBits.W))
@@ -111,7 +96,6 @@ class CommitBundle extends NPCBundle {
   val entry = new RobEntry
 }
 
-// write back on commit
 class WBCommitBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
   val value = UInt(dataBits.W)
@@ -153,18 +137,16 @@ class Rob extends NPCModule {
   // ============================================================
   when(io.alu.valid && !io.flush) {
     val e = ram(idx(io.alu.bits.tag))
-    e.alu_result := io.alu.bits.alu_result
-    e.rd_val := io.alu.bits.rd_val
-    e.rd_val_valid := io.alu.bits.rd_val_valid
-    e.mispredict := io.alu.bits.mispredict
+    e.rd.value := io.alu.bits.rd_value
+    e.rd.valid := io.alu.bits.rd_valid
     e.target_npc := io.alu.bits.target_npc
-    e.state := EntryState.executed
+    e.csr.wdata := io.alu.bits.csr_wdata
+    e.completed := true.B
   }
   when(io.bru.valid && !io.flush) {
     val e = ram(idx(io.bru.bits.tag))
-    e.mispredict := io.bru.bits.mispredict
-    e.target_npc := io.bru.bits.actual_npc
-    e.state := EntryState.executed
+    e.target_npc := io.bru.bits.target_npc
+    e.completed := true.B
   }
   when(io.agu.valid && !io.flush) {
     val e = ram(idx(io.agu.bits.tag))
@@ -173,18 +155,17 @@ class Rob extends NPCModule {
     e.mem.addr_rdy := true.B
     e.mem.wdata_rdy := true.B
     e.mem.is_mmio := io.agu.bits.is_mmio
-    e.state := EntryState.executed
+    e.completed := true.B
   }
 
-  // Commit-time writeback (load / CSR value)
   when(io.wb_commit.valid && !io.flush) {
     val i = idx(io.wb_commit.bits.tag)
-    ram(i).rd_val := io.wb_commit.bits.value
-    ram(i).rd_val_valid := true.B
+    ram(i).rd.value := io.wb_commit.bits.value
+    ram(i).rd.valid := true.B
   }
 
   // ============================================================
-  // Lookup ports — combinational read for writeback logic
+  // Lookup ports
   // ============================================================
   io.lookup1.entry := ram(idx(io.lookup1.tag))
   io.lookup2.entry := ram(idx(io.lookup2.tag))
@@ -199,38 +180,33 @@ class Rob extends NPCModule {
   when(enq_fire) {
     val enq = io.enq.bits
     val ent = ram(tail_q)
-    ent.mem.size := enq.mem.size; ent.mem.r_en := enq.mem.r_en
-    ent.mem.sign_ext := enq.mem.sign_ext; ent.mem.w_en := enq.mem.w_en
-    ent.mem.addr := enq.mem.addr; ent.mem.wdata := enq.mem.wdata
-    ent.mem.addr_rdy := false.B; ent.mem.wdata_rdy := false.B; ent.mem.is_mmio := false.B
-    ent.csr_op := enq.csr_op; ent.csr_wen := enq.csr_wen
-    ent.is_jalr := enq.is_jalr; ent.is_mret := enq.is_mret
-    ent.pc := enq.pc; ent.inst := enq.inst; ent.imm := enq.imm
-    ent.rd_idx := enq.rd_idx; ent.rd_def := enq.rd_def
-
-    ent.alu_result := 0.U
-    ent.rd_val := enq.rd_val
-    ent.rd_val_valid := enq.rd_val_valid
-
-    ent.except_en := enq.except_en
-    ent.mcause := enq.mcause
-    ent.xtval := enq.mtval
-
-    ent.mispredict := enq.mispredict
+    ent.pc := enq.pc
+    ent.inst := enq.inst
+    ent.inst_type := enq.inst_type
+    ent.mem.size := enq.mem.size
+    ent.mem.r_en := enq.mem.r_en
+    ent.mem.sign_ext := enq.mem.sign_ext
+    ent.mem.w_en := enq.mem.w_en
+    ent.mem.addr := enq.mem.addr
+    ent.mem.wdata := enq.mem.wdata
+    ent.mem.addr_rdy := false.B
+    ent.mem.wdata_rdy := false.B
+    ent.mem.is_mmio := false.B
+    ent.csr := enq.csr
+    ent.rd := enq.rd
+    ent.except := enq.except
+    ent.is_call := enq.is_call
+    ent.is_ret := enq.is_ret
     ent.target_npc := enq.target_npc
-
-    ent.state := Mux(
-      enq.except_en || enq.dispatch_executed,
-      EntryState.executed,
-      EntryState.allocated
-    )
+    ent.predict_npc := enq.predict_npc
+    ent.completed := enq.completed
   }
 
   // ============================================================
-  // Commit — expose head entry
+  // Commit
   // ============================================================
   val head_entry = ram(head_q)
-  io.commit.valid := !empty_w && head_entry.state === EntryState.executed
+  io.commit.valid := !empty_w && head_entry.completed
   io.commit.bits.tag := head_q.pad(robEntryBits)
   io.commit.bits.entry := head_entry
 
@@ -242,10 +218,10 @@ class Rob extends NPCModule {
   // ============================================================
   // Forward ports
   // ============================================================
-  io.fwd1.valid := ram(idx(io.fwd1.tag)).rd_val_valid
-  io.fwd1.value := ram(idx(io.fwd1.tag)).rd_val
-  io.fwd2.valid := ram(idx(io.fwd2.tag)).rd_val_valid
-  io.fwd2.value := ram(idx(io.fwd2.tag)).rd_val
+  io.fwd1.valid := ram(idx(io.fwd1.tag)).rd.valid
+  io.fwd1.value := ram(idx(io.fwd1.tag)).rd.value
+  io.fwd2.valid := ram(idx(io.fwd2.tag)).rd.valid
+  io.fwd2.value := ram(idx(io.fwd2.tag)).rd.value
 
   // ============================================================
   // Flush

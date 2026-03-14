@@ -178,7 +178,7 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 
 class LSU extends NPCModule {
   val dcache = IO(AXI4Bundle(axiParams))
-  val perip  = IO(AXI4Bundle(axiParams))
+  val perip = IO(AXI4Bundle(axiParams))
 
   val io = IO(new Bundle {
     val late = new LateExecIO
@@ -194,26 +194,26 @@ class LSU extends NPCModule {
   // ==========================================================
   // dcache channel — LU + SU
   // ==========================================================
-  val cache_load  = Module(new LoadUnit(axiParams, 1))
+  val cache_load = Module(new LoadUnit(axiParams, 1))
   val cache_store = Module(new StoreUnit(axiParams, 2))
 
-  cache_load.ar  <> dcache.ar
-  cache_load.r   <> dcache.r
+  cache_load.ar <> dcache.ar
+  cache_load.r <> dcache.r
   cache_store.aw <> dcache.aw
-  cache_store.w  <> dcache.w
-  cache_store.b  <> dcache.b
+  cache_store.w <> dcache.w
+  cache_store.b <> dcache.b
 
   // ==========================================================
   // perip channel — LU + SU
   // ==========================================================
-  val perip_load  = Module(new LoadUnit(axiParams, 3))
+  val perip_load = Module(new LoadUnit(axiParams, 3))
   val perip_store = Module(new StoreUnit(axiParams, 4))
 
-  perip_load.ar  <> perip.ar
-  perip_load.r   <> perip.r
+  perip_load.ar <> perip.ar
+  perip_load.r <> perip.r
   perip_store.aw <> perip.aw
-  perip_store.w  <> perip.w
-  perip_store.b  <> perip.b
+  perip_store.w <> perip.w
+  perip_store.b <> perip.b
 
   // ==========================================================
   // Common: store wstrb / wdata formatting (4B aligned for both channels)
@@ -236,59 +236,73 @@ class LSU extends NPCModule {
   )
 
   // ==========================================================
-  // Load data extraction (shared — byte lane selection by addr(1,0))
+  // Load data extraction
   // ==========================================================
-  val load_raw = Mux(io.is_mmio, perip_load.in.rdata, cache_load.in.rdata)
-  val load_byte = MuxLookup(io.addr(1, 0), load_raw(7, 0))(
+
+  // Cache: returns full word, need byte lane selection by addr(1,0)
+  val cache_raw = cache_load.in.rdata
+  val cache_byte = MuxLookup(io.addr(1, 0), cache_raw(7, 0))(
     Seq(
-      0.U -> load_raw(7, 0),
-      1.U -> load_raw(15, 8),
-      2.U -> load_raw(23, 16),
-      3.U -> load_raw(31, 24)
+      0.U -> cache_raw(7, 0),
+      1.U -> cache_raw(15, 8),
+      2.U -> cache_raw(23, 16),
+      3.U -> cache_raw(31, 24)
     )
   )
-  val load_half = Mux(io.addr(1), load_raw(31, 16), load_raw(15, 0))
-  val load_final = MuxLookup(io.size, load_raw)(
+  val cache_half = Mux(io.addr(1), cache_raw(31, 16), cache_raw(15, 0))
+  val cache_load_final = MuxLookup(io.size, cache_raw)(
     Seq(
-      0.U -> Mux(io.sign_ext, SignExt(load_byte, 32), ZeroExt(load_byte, 32)),
-      1.U -> Mux(io.sign_ext, SignExt(load_half, 32), ZeroExt(load_half, 32)),
-      2.U -> load_raw
+      0.U -> Mux(io.sign_ext, SignExt(cache_byte, 32), ZeroExt(cache_byte, 32)),
+      1.U -> Mux(io.sign_ext, SignExt(cache_half, 32), ZeroExt(cache_half, 32)),
+      2.U -> cache_raw
     )
   )
+
+  // MMIO: narrow transfer, data already in lower bits — no lane selection
+  val mmio_raw = perip_load.in.rdata
+  val mmio_load_final = MuxLookup(io.size, mmio_raw)(
+    Seq(
+      0.U -> Mux(io.sign_ext, SignExt(mmio_raw(7, 0), 32), ZeroExt(mmio_raw(7, 0), 32)),
+      1.U -> Mux(io.sign_ext, SignExt(mmio_raw(15, 0), 32), ZeroExt(mmio_raw(15, 0), 32)),
+      2.U -> mmio_raw
+    )
+  )
+
+  val load_final = Mux(io.is_mmio, mmio_load_final, cache_load_final)
 
   // ==========================================================
   // dcache LoadUnit defaults — 4B aligned, size=2
   // ==========================================================
-  cache_load.in.req   := false.B
-  cache_load.in.wr    := false.B
-  cache_load.in.size  := 2.U
-  cache_load.in.addr  := aligned_addr
+  cache_load.in.req := false.B
+  cache_load.in.wr := false.B
+  cache_load.in.size := 2.U
+  cache_load.in.addr := aligned_addr
   cache_load.in.wstrb := 0.U
   cache_load.in.wdata := 0.U
 
   // dcache StoreUnit defaults — 4B aligned, size=2
-  cache_store.in.req   := false.B
-  cache_store.in.wr    := true.B
-  cache_store.in.size  := 2.U
-  cache_store.in.addr  := aligned_addr
+  cache_store.in.req := false.B
+  cache_store.in.wr := true.B
+  cache_store.in.size := 2.U
+  cache_store.in.addr := aligned_addr
   cache_store.in.wstrb := store_wstrb
   cache_store.in.wdata := store_wdata
 
   // ==========================================================
   // perip LoadUnit defaults — raw addr, raw size (narrow transfer)
   // ==========================================================
-  perip_load.in.req   := false.B
-  perip_load.in.wr    := false.B
-  perip_load.in.size  := io.size
-  perip_load.in.addr  := io.addr
+  perip_load.in.req := false.B
+  perip_load.in.wr := false.B
+  perip_load.in.size := io.size
+  perip_load.in.addr := io.addr
   perip_load.in.wstrb := 0.U
   perip_load.in.wdata := 0.U
 
   // perip StoreUnit defaults — 4B aligned, size=2
-  perip_store.in.req   := false.B
-  perip_store.in.wr    := true.B
-  perip_store.in.size  := 2.U
-  perip_store.in.addr  := aligned_addr
+  perip_store.in.req := false.B
+  perip_store.in.wr := true.B
+  perip_store.in.size := 2.U
+  perip_store.in.addr := aligned_addr
   perip_store.in.wstrb := store_wstrb
   perip_store.in.wdata := store_wdata
 
@@ -312,10 +326,10 @@ class LSU extends NPCModule {
       when(io.late.req) {
         when(io.r_en) {
           when(io.is_mmio) { perip_load.in.req := true.B }
-            .otherwise     { cache_load.in.req := true.B }
+            .otherwise { cache_load.in.req := true.B }
         }.elsewhen(io.w_en) {
           when(io.is_mmio) { perip_store.in.req := true.B }
-            .otherwise     { cache_store.in.req := true.B }
+            .otherwise { cache_store.in.req := true.B }
         }
         stateQ := LSUState.lsu_req
       }
