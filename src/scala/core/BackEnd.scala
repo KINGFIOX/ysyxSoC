@@ -90,13 +90,13 @@ class BackEnd extends NPCModule {
   PipelineConnect(renameStage_.io.out, dispatcher_.io.in)
 
   // --- RenameStage side-band ---
-  renameStage_.io.rat.rs1 <> rat_.io.read1
-  renameStage_.io.rat.rs2 <> rat_.io.read2
+  renameStage_.io.rat.rs1 <> rat_.io.read(0)
+  renameStage_.io.rat.rs2 <> rat_.io.read(1)
 
-  rfu_.io.in.rs1_i := renameStage_.io.rfu.rs1_i
-  rfu_.io.in.rs2_i := renameStage_.io.rfu.rs2_i
-  renameStage_.io.rfu.rs1_v := rfu_.io.out.rs1_v
-  renameStage_.io.rfu.rs2_v := rfu_.io.out.rs2_v
+  rfu_.io.read(0).addr := renameStage_.io.rfu.rs1_i
+  rfu_.io.read(1).addr := renameStage_.io.rfu.rs2_i
+  renameStage_.io.rfu.rs1_v := rfu_.io.read(0).data
+  renameStage_.io.rfu.rs2_v := rfu_.io.read(1).data
 
   renameStage_.io.rob.fwd1 <> rob_.io.fwd1
   renameStage_.io.rob.fwd2 <> rob_.io.fwd2
@@ -137,12 +137,14 @@ class BackEnd extends NPCModule {
   rob_.io.lookup1.tag := alu_issue_tag
   val alu_rob_entry = rob_.io.lookup1.entry
 
-  val alu_rd_val = Mux(alu_rob_entry.rd_val_valid, alu_rob_entry.rd_val, alu_result)
+  val alu_rd_val =
+    Mux(alu_rob_entry.rd_val_valid, alu_rob_entry.rd_val, alu_result)
   val alu_rd_val_valid = true.B // TODO:
 
   val alu_is_jalr = alu_rob_entry.is_jalr
   val alu_mispredict = alu_is_jalr
-  val alu_target_npc = Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.pc + 4.U)
+  val alu_target_npc =
+    Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.pc + 4.U)
 
   rob_.io.alu.valid := alu_issue_valid
   rob_.io.alu.bits.tag := alu_issue_tag
@@ -227,9 +229,9 @@ class BackEnd extends NPCModule {
   lsu_.io.is_mmio := commitStage_.io.lsu.is_mmio
 
   // --- RFU writeback ---
-  rfu_.io.in.wen := commitStage_.io.rfu.wen
-  rfu_.io.in.rd_i := commitStage_.io.rfu.rd_i
-  rfu_.io.in.wdata := commitStage_.io.rfu.wdata
+  rfu_.io.write.en := commitStage_.io.rfu.wen
+  rfu_.io.write.addr := commitStage_.io.rfu.rd_i
+  rfu_.io.write.data := commitStage_.io.rfu.wdata
 
   // --- RAT commit ---
   rat_.io.commit := commitStage_.io.rat_commit

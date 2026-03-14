@@ -23,13 +23,12 @@ class RATCommitPort extends NPCBundle {
   val tag  = Input(UInt(robEntryBits.W))
 }
 
-class RAT extends NPCModule {
+class RAT(val numReadPorts: Int = 2) extends NPCModule {
   val io = IO(new Bundle {
-    val read1  = new RATReadPort
-    val read2  = new RATReadPort
-    val write  = new RATWritePort
+    val read  = Vec(numReadPorts, new RATReadPort)
+    val write = new RATWritePort
     val commit = new RATCommitPort
-    val flush  = Input(Bool())
+    val flush = Input(Bool())
   })
 
   private val busy = RegInit(VecInit(Seq.fill(NRReg)(false.B))) // inflight
@@ -50,9 +49,8 @@ class RAT extends NPCModule {
     }
   }
 
-  io.read1.busy := busy(io.read1.addr) && io.read1.addr =/= 0.U
-  io.read1.tag  := tags(io.read1.addr)
-
-  io.read2.busy := busy(io.read2.addr) && io.read2.addr =/= 0.U
-  io.read2.tag  := tags(io.read2.addr)
+  for (i <- 0 until numReadPorts) {
+    io.read(i).busy := busy(io.read(i).addr) && io.read(i).addr =/= 0.U
+    io.read(i).tag := tags(io.read(i).addr)
+  }
 }
