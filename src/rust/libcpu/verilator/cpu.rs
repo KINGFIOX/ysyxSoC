@@ -9,7 +9,7 @@ use crate::libdpi::globals::Memory;
 const TOP_NAME: &CStr = c"TOP";
 const VCD_PATH: &CStr = c"build/npc_core.vcd";
 const RESET_CYCLES: usize = 15;
-const MAX_STEP_CYCLES: usize = 1_000_000;
+const MAX_STEP_CYCLES: usize = 1_000_00;
 
 pub struct VerilatorCpu {
     ctx: *mut VerilatedContext,

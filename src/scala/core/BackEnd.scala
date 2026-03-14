@@ -145,8 +145,7 @@ class BackEnd extends NPCModule {
 
   val alu_rd_val = Mux(alu_rob_entry.rd.valid, alu_rob_entry.rd.value, alu_result)
   val alu_rd_valid = !alu_is_csr
-  val alu_target_npc =
-    Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.target_npc)
+  val alu_target_npc = Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.target_npc)
 
   rob_.io.alu.valid := alu_wb_valid
   rob_.io.alu.bits.tag := alu_wb_tag

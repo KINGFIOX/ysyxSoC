@@ -136,26 +136,26 @@ class Rob extends NPCModule {
   // Writeback
   // ============================================================
   when(io.alu.valid && !io.flush) {
-    val e = ram(idx(io.alu.bits.tag))
-    e.rd.value := io.alu.bits.rd_value
-    e.rd.valid := io.alu.bits.rd_valid
-    e.target_npc := io.alu.bits.target_npc
-    e.csr.wdata := io.alu.bits.csr_wdata
-    e.completed := true.B
+    val ent = ram(idx(io.alu.bits.tag))
+    ent.rd.value := io.alu.bits.rd_value
+    ent.rd.valid := io.alu.bits.rd_valid
+    ent.target_npc := io.alu.bits.target_npc
+    ent.csr.wdata := io.alu.bits.csr_wdata
+    ent.completed := true.B
   }
   when(io.bru.valid && !io.flush) {
-    val e = ram(idx(io.bru.bits.tag))
-    e.target_npc := io.bru.bits.target_npc
-    e.completed := true.B
+    val ent = ram(idx(io.bru.bits.tag))
+    ent.target_npc := io.bru.bits.target_npc
+    ent.completed := true.B
   }
   when(io.agu.valid && !io.flush) {
-    val e = ram(idx(io.agu.bits.tag))
-    e.mem.addr := io.agu.bits.addr
-    e.mem.wdata := io.agu.bits.wdata
-    e.mem.addr_rdy := true.B
-    e.mem.wdata_rdy := true.B
-    e.mem.is_mmio := io.agu.bits.is_mmio
-    e.completed := true.B
+    val ent = ram(idx(io.agu.bits.tag))
+    ent.mem.addr := io.agu.bits.addr
+    ent.mem.wdata := io.agu.bits.wdata
+    ent.mem.addr_rdy := true.B
+    ent.mem.wdata_rdy := true.B
+    ent.mem.is_mmio := io.agu.bits.is_mmio
+    ent.completed := true.B
   }
 
   when(io.wb_commit.valid && !io.flush) {

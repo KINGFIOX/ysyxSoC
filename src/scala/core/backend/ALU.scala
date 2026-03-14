@@ -36,7 +36,7 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
   io.out.bits.rob_tag := io.in.bits.rob_tag
   io.out.bits.rd_def := io.in.bits.rd_def
 
-  switch(io.in.bits.aluOp) {
+  switch(io.in.bits.alu_op) {
     is(ALUOpType.alu_ADD) { io.out.bits.result := op1 + op2 }
     is(ALUOpType.alu_SUB) { io.out.bits.result := op1 - op2 }
     is(ALUOpType.alu_AND) { io.out.bits.result := op1 & op2 }
