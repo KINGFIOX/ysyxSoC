@@ -49,4 +49,4 @@ class ALUExtra extends NPCBundle {
   val rd_def = Bool()
 }
 
-class ALUIssueQueue extends IssueQueue(new ALUExtra, entries = 8)
+class ALUIssueQueue extends IssueQueue(new ALUExtra, entries = 8, numOps = 2)

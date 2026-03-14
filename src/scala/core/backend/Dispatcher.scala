@@ -18,9 +18,9 @@ class Dispatcher extends NPCModule {
     val rename_fwd = new DispFwdBundle
     val rob_enq = Decoupled(new RobEnqData)
     val rob_tag = Input(UInt(robEntryBits.W))
-    val disp_alu = Decoupled(new IQEnqData(new ALUExtra))
-    val disp_bru = Decoupled(new IQEnqData(new BRUExtra))
-    val disp_agu = Decoupled(new IQEnqData(new AGUExtra))
+    val disp_alu = Decoupled(new IQEnqData(new ALUExtra, 2))
+    val disp_bru = Decoupled(new IQEnqData(new BRUExtra, 2))
+    val disp_agu = Decoupled(new IQEnqData(new AGUExtra, 2))
     val rat_write = Flipped(new RATWritePort)
   })
 
@@ -80,15 +80,15 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // ALU Issue Queue
   // ============================================================
-  io.disp_alu.bits.src1 := in.src1
+  io.disp_alu.bits.src(0) := in.src(0)
   val alu_imm_src = Wire(new IQSrcBundle)
   alu_imm_src.value := dec.imm
   alu_imm_src.tag := 0.U
   alu_imm_src.ready := true.B
-  io.disp_alu.bits.src2 := Mux(
+  io.disp_alu.bits.src(1) := Mux(
     ctrl.alu_sel2 === ALUSel2.OP2_IMM,
     alu_imm_src,
-    in.src2
+    in.src(1)
   )
   io.disp_alu.bits.extra.aluOp := ctrl.alu_op
   io.disp_alu.bits.extra.rd_def := rd_def
@@ -97,16 +97,16 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // BRU Issue Queue
   // ============================================================
-  io.disp_bru.bits.src1 := in.src1
-  io.disp_bru.bits.src2 := in.src2
+  io.disp_bru.bits.src(0) := in.src(0)
+  io.disp_bru.bits.src(1) := in.src(1)
   io.disp_bru.bits.extra.bru_op := ctrl.bru_op
   io.disp_bru.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // AGU Issue Queue
   // ============================================================
-  io.disp_agu.bits.src1 := in.src1
-  io.disp_agu.bits.src2 := in.src2
+  io.disp_agu.bits.src(0) := in.src(0)
+  io.disp_agu.bits.src(1) := in.src(1)
   io.disp_agu.bits.extra.imm := dec.imm
   io.disp_agu.bits.rob_tag := io.rob_tag
 

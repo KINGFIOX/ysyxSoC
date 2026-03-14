@@ -27,4 +27,4 @@ class AGUExtra extends NPCBundle {
   val imm = UInt(dataBits.W)
 }
 
-class AGUIssueQueue extends IssueQueue(new AGUExtra, entries = 4)
+class AGUIssueQueue extends IssueQueue(new AGUExtra, entries = 4, numOps = 2)

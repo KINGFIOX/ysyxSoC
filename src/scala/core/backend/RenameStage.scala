@@ -11,8 +11,7 @@ import ysyx.core.frontend._
 // However, the instruction in RenameStage retrive the obsolete value.
 class RenameStageOutput extends NPCBundle {
   val dec = new DecodeStageOutput
-  val src1 = new IQSrcBundle
-  val src2 = new IQSrcBundle
+  val src = Vec(2, new IQSrcBundle)
   val disp_rd_val = UInt(dataBits.W)
   val disp_rd_val_valid = Bool()
   val disp_mispredict = Bool()
@@ -95,7 +94,7 @@ class RenameStage extends NPCModule {
   val rs1_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs1_tag)
   val rs1_rob = io.rob.fwd1.valid
 
-  io.out.bits.src1.value := MuxCase(
+  io.out.bits.src(0).value := MuxCase(
     0.U,
     Seq(
       rs1_free -> io.rfu.rs1_v,
@@ -104,8 +103,8 @@ class RenameStage extends NPCModule {
       rs1_rob -> io.rob.fwd1.value
     )
   )
-  io.out.bits.src1.tag := rs1_tag
-  io.out.bits.src1.ready := rs1_free || rs1_cdb1 || rs1_cdb2 || rs1_rob
+  io.out.bits.src(0).tag := rs1_tag
+  io.out.bits.src(0).ready := rs1_free || rs1_cdb1 || rs1_cdb2 || rs1_rob
 
   // --- RS2 ---
   val rs2_free = !ctrl.needs_rs2 || !rs2_busy
@@ -113,7 +112,7 @@ class RenameStage extends NPCModule {
   val rs2_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs2_tag)
   val rs2_rob = io.rob.fwd2.valid
 
-  io.out.bits.src2.value := MuxCase(
+  io.out.bits.src(1).value := MuxCase(
     0.U,
     Seq(
       rs2_free -> io.rfu.rs2_v,
@@ -122,8 +121,8 @@ class RenameStage extends NPCModule {
       rs2_rob -> io.rob.fwd2.value
     )
   )
-  io.out.bits.src2.tag := rs2_tag
-  io.out.bits.src2.ready := rs2_free || rs2_cdb1 || rs2_cdb2 || rs2_rob
+  io.out.bits.src(1).tag := rs2_tag
+  io.out.bits.src(1).ready := rs2_free || rs2_cdb1 || rs2_cdb2 || rs2_rob
 
   // ============================================================
   // Dispatch-time resolved values

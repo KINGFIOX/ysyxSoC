@@ -122,8 +122,8 @@ class BackEnd extends NPCModule {
 
   // --- ALU path ---
   alu_.io.in.valid := alu_iq_.io.issue.valid
-  alu_.io.in.bits.op1 := alu_iq_.io.issue.bits.src1_v
-  alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src2_v
+  alu_.io.in.bits.op1 := alu_iq_.io.issue.bits.src_v(0)
+  alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
   alu_.io.in.bits.aluOp := alu_iq_.io.issue.bits.extra.aluOp
   alu_iq_.io.issue.ready := alu_.io.in.ready
 
@@ -154,8 +154,8 @@ class BackEnd extends NPCModule {
 
   // --- BRU path ---
   bru_.io.in.valid := bru_iq_.io.issue.valid
-  bru_.io.in.bits.rs1_v := bru_iq_.io.issue.bits.src1_v
-  bru_.io.in.bits.rs2_v := bru_iq_.io.issue.bits.src2_v
+  bru_.io.in.bits.rs1_v := bru_iq_.io.issue.bits.src_v(0)
+  bru_.io.in.bits.rs2_v := bru_iq_.io.issue.bits.src_v(1)
   bru_.io.in.bits.op := bru_iq_.io.issue.bits.extra.bru_op
   bru_iq_.io.issue.ready := bru_.io.in.ready
 
@@ -178,7 +178,7 @@ class BackEnd extends NPCModule {
 
   // --- AGU path ---
   agu_.io.in.valid := agu_iq_.io.issue.valid
-  agu_.io.in.bits.base := agu_iq_.io.issue.bits.src1_v
+  agu_.io.in.bits.base := agu_iq_.io.issue.bits.src_v(0)
   agu_.io.in.bits.offset := agu_iq_.io.issue.bits.extra.imm
   agu_iq_.io.issue.ready := agu_.io.in.ready
 
@@ -187,7 +187,7 @@ class BackEnd extends NPCModule {
   rob_.io.agu.valid := agu_iq_.io.issue.fire
   rob_.io.agu.bits.tag := agu_iq_.io.issue.bits.rob_tag
   rob_.io.agu.bits.addr := agu_.io.out.bits.addr
-  rob_.io.agu.bits.wdata := agu_iq_.io.issue.bits.src2_v
+  rob_.io.agu.bits.wdata := agu_iq_.io.issue.bits.src_v(1)
   rob_.io.agu.bits.is_mmio := agu_.io.out.bits.is_mmio
 
   // --- CDB1 — ALU writeback broadcast ---

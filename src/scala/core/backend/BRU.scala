@@ -40,4 +40,4 @@ class BRUExtra extends NPCBundle {
   val bru_op = BRUOpType()
 }
 
-class BRUIssueQueue extends IssueQueue(new BRUExtra, entries = 4)
+class BRUIssueQueue extends IssueQueue(new BRUExtra, entries = 4, numOps = 2)
