@@ -12,6 +12,7 @@ class DebugCommitBundle extends NPCBundle {
   val pc = UInt(dataBits.W)
   val dnpc = UInt(dataBits.W)
   val inst = UInt(instBits.W)
+  val is_mmio = Bool()
 }
 
 class CommitStage extends NPCModule {
@@ -25,37 +26,37 @@ class CommitStage extends NPCModule {
     val csr = new Bundle {
       val exception = new CSRCommitIO
       val retire = new Bundle {
-        val late  = Flipped(new LateExecIO)
-        val addr  = Output(UInt(NRCSRbits.W))
-        val wop   = Output(CSROpType())
-        val wen   = Output(Bool())
+        val late = Flipped(new LateExecIO)
+        val addr = Output(UInt(NRCSRbits.W))
+        val wop = Output(CSROpType())
+        val wen = Output(Bool())
         val wdata = Output(UInt(dataBits.W))
       }
-      val xepc  = Input(UInt(dataBits.W))
+      val xepc = Input(UInt(dataBits.W))
       val xtvec = Input(UInt(dataBits.W))
     }
     // LSU — commit driven
     val lsu = new Bundle {
-      val late     = Flipped(new LateExecIO)
-      val addr     = Output(UInt(addrBits.W))
-      val size     = Output(UInt(2.W))
+      val late = Flipped(new LateExecIO)
+      val addr = Output(UInt(addrBits.W))
+      val size = Output(UInt(2.W))
       val sign_ext = Output(Bool())
-      val r_en     = Output(Bool())
-      val w_en     = Output(Bool())
-      val wdata    = Output(UInt(dataBits.W))
-      val is_mmio  = Output(Bool())
+      val r_en = Output(Bool())
+      val w_en = Output(Bool())
+      val wdata = Output(UInt(dataBits.W))
+      val is_mmio = Output(Bool())
     }
     // RFU writeback
     val rfu = new Bundle {
-      val wen   = Output(Bool())
-      val rd_i  = Output(UInt(NRRegbits.W))
+      val wen = Output(Bool())
+      val rd_i = Output(UInt(NRRegbits.W))
       val wdata = Output(UInt(dataBits.W))
     }
     // RAT commit
     val rat_commit = Flipped(new RATCommitPort)
     // IFU redirect
     val ifu = new Bundle {
-      val flush    = Output(Bool())
+      val flush = Output(Bool())
       val redirect = Output(new RedirectBundle)
     }
     // CDB2 broadcast
@@ -144,6 +145,7 @@ class CommitStage extends NPCModule {
   val dbg_pc = Reg(UInt(dataBits.W))
   val dbg_dnpc = Reg(UInt(dataBits.W))
   val dbg_inst = Reg(UInt(instBits.W))
+  val dbg_is_mmio = Reg(Bool())
   dbg_valid := false.B
 
   // ---- Commit state machine ----
@@ -165,6 +167,7 @@ class CommitStage extends NPCModule {
           dbg_pc := head.pc
           dbg_dnpc := io.csr.xtvec
           dbg_inst := head.inst
+          dbg_is_mmio := false.B
 
         }.elsewhen(head_is_mem) {
           io.lsu.late.req := true.B
@@ -185,6 +188,7 @@ class CommitStage extends NPCModule {
             dbg_pc := head.pc
             dbg_dnpc := head.pc + 4.U
             dbg_inst := head.inst
+            dbg_is_mmio := head.mem.is_mmio
           }.otherwise {
             commitStateQ := CommitState.late_wait
           }
@@ -212,6 +216,7 @@ class CommitStage extends NPCModule {
           dbg_pc := head.pc
           dbg_dnpc := head.pc + 4.U
           dbg_inst := head.inst
+          dbg_is_mmio := false.B
 
         }.elsewhen(head.is_mret) {
           flush := true.B
@@ -224,6 +229,7 @@ class CommitStage extends NPCModule {
           dbg_pc := head.pc
           dbg_dnpc := io.csr.xepc
           dbg_inst := head.inst
+          dbg_is_mmio := false.B
 
         }.otherwise {
           when(head.rd_def) {
@@ -249,6 +255,7 @@ class CommitStage extends NPCModule {
             head.pc + 4.U
           )
           dbg_inst := head.inst
+          dbg_is_mmio := false.B
         }
       }
     }
@@ -274,6 +281,7 @@ class CommitStage extends NPCModule {
         dbg_pc := head.pc
         dbg_dnpc := head.pc + 4.U
         dbg_inst := head.inst
+        dbg_is_mmio := head.mem.is_mmio
       }
     }
   }
@@ -282,4 +290,5 @@ class CommitStage extends NPCModule {
   io.debug.pc := dbg_pc
   io.debug.dnpc := dbg_dnpc
   io.debug.inst := dbg_inst
+  io.debug.is_mmio := dbg_is_mmio
 }

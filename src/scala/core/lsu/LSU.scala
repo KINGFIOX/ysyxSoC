@@ -133,6 +133,7 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   in.data_ok := b.fire
 
   object State extends ChiselEnum {
+    //   0      1          2
     val idle, aw_w_wait, b_wait = Value
   }
   val stateQ = RegInit(State.idle)
@@ -144,9 +145,9 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
   val w_done = w_sent_q || w.fire
 
   // defaults
-  in.addr_ok := (stateQ =/= State.b_wait) && aw_done && w_done
-  aw.valid := in.req && !aw_sent_q
-  w.valid := in.req && !w_sent_q
+  in.addr_ok := (stateQ === State.aw_w_wait) && aw_done && w_done
+  aw.valid := in.req && !aw_sent_q && (stateQ =/= State.b_wait)
+  w.valid := in.req && !w_sent_q && (stateQ =/= State.b_wait)
   b.ready := (stateQ === State.b_wait)
 
   switch(stateQ) {
@@ -156,7 +157,7 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
       when(in.req) {
         when(aw.fire) { aw_sent_q := true.B }
         when(w.fire) { w_sent_q := true.B }
-        stateQ := Mux(aw_done && w_done, State.b_wait, State.aw_w_wait)
+        stateQ := State.aw_w_wait
       }
     }
     is(State.aw_w_wait) {
@@ -167,6 +168,8 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
     is(State.b_wait) {
       when(b.fire) {
         stateQ := State.idle
+        aw_sent_q := false.B
+        w_sent_q := false.B
       }
     }
   }

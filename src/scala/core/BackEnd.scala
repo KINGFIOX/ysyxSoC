@@ -50,7 +50,7 @@ class BackEnd extends NPCModule {
   // AXI — dcache + perip pass-through to LSU
   // ==========================================================
   lsu_.dcache <> dcache
-  lsu_.perip  <> perip
+  lsu_.perip <> perip
 
   // ==========================================================
   // Flush / redirect wiring
@@ -208,34 +208,34 @@ class BackEnd extends NPCModule {
   csru_.io.commit := commitStage_.io.csr.exception
 
   // --- CSR retire (late execute) ---
-  csru_.io.late    <> commitStage_.io.csr.retire.late
-  csru_.io.addr    := commitStage_.io.csr.retire.addr
-  csru_.io.wop     := commitStage_.io.csr.retire.wop
-  csru_.io.wen     := commitStage_.io.csr.retire.wen
-  csru_.io.wdata   := commitStage_.io.csr.retire.wdata
-  commitStage_.io.csr.xepc  := csru_.io.xepc
+  csru_.io.late <> commitStage_.io.csr.retire.late
+  csru_.io.addr := commitStage_.io.csr.retire.addr
+  csru_.io.wop := commitStage_.io.csr.retire.wop
+  csru_.io.wen := commitStage_.io.csr.retire.wen
+  csru_.io.wdata := commitStage_.io.csr.retire.wdata
+  commitStage_.io.csr.xepc := csru_.io.xepc
   commitStage_.io.csr.xtvec := csru_.io.xtvec
 
   // --- LSU commit ---
-  lsu_.io.late     <> commitStage_.io.lsu.late
-  lsu_.io.addr     := commitStage_.io.lsu.addr
-  lsu_.io.size     := commitStage_.io.lsu.size
+  lsu_.io.late <> commitStage_.io.lsu.late
+  lsu_.io.addr := commitStage_.io.lsu.addr
+  lsu_.io.size := commitStage_.io.lsu.size
   lsu_.io.sign_ext := commitStage_.io.lsu.sign_ext
-  lsu_.io.r_en     := commitStage_.io.lsu.r_en
-  lsu_.io.w_en     := commitStage_.io.lsu.w_en
-  lsu_.io.wdata    := commitStage_.io.lsu.wdata
-  lsu_.io.is_mmio  := commitStage_.io.lsu.is_mmio
+  lsu_.io.r_en := commitStage_.io.lsu.r_en
+  lsu_.io.w_en := commitStage_.io.lsu.w_en
+  lsu_.io.wdata := commitStage_.io.lsu.wdata
+  lsu_.io.is_mmio := commitStage_.io.lsu.is_mmio
 
   // --- RFU writeback ---
-  rfu_.io.in.wen   := commitStage_.io.rfu.wen
-  rfu_.io.in.rd_i  := commitStage_.io.rfu.rd_i
+  rfu_.io.in.wen := commitStage_.io.rfu.wen
+  rfu_.io.in.rd_i := commitStage_.io.rfu.rd_i
   rfu_.io.in.wdata := commitStage_.io.rfu.wdata
 
   // --- RAT commit ---
-  rat_.io.commit   := commitStage_.io.rat_commit
+  rat_.io.commit := commitStage_.io.rat_commit
 
   // --- IFU flush + redirect ---
-  flush    := commitStage_.io.ifu.flush
+  flush := commitStage_.io.ifu.flush
   redirect := commitStage_.io.ifu.redirect
 
   // --- CDB2 ---
@@ -248,11 +248,11 @@ class BackEnd extends NPCModule {
   // Debug probe
   // ==========================================================
   val dbg = Wire(new DebugBundle)
-  dbg.valid  := commitStage_.io.debug.valid
-  dbg.pc     := commitStage_.io.debug.pc
-  dbg.dnpc   := commitStage_.io.debug.dnpc
-  dbg.inst   := commitStage_.io.debug.inst
-  dbg.isMMIO := false.B
+  dbg.valid := commitStage_.io.debug.valid
+  dbg.pc := commitStage_.io.debug.pc
+  dbg.dnpc := commitStage_.io.debug.dnpc
+  dbg.inst := commitStage_.io.debug.inst
+  dbg.isMMIO := commitStage_.io.debug.is_mmio
   dbg.gpr := VecInit((0 until NRReg).map(i => read(rfu_.io.probe)(i)))
   dbg.csr := read(csru_.io.probe)
   define(probe, ProbeValue(dbg))
