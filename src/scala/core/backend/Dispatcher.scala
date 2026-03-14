@@ -140,9 +140,9 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // Rename Forward
   // ============================================================
-  io.rename_fwd.rd_def_tag := false.B // TODO: enable when pipeline regs inserted
+  io.rename_fwd.rd_def_tag := io.in.valid && rd_def
   io.rename_fwd.rd_idx := Mux(rd_def, dec.rd_idx, 0.U)
   io.rename_fwd.tag := io.rob_tag
-  io.rename_fwd.rd_def_val := false.B
-  io.rename_fwd.value := 0.U
+  io.rename_fwd.rd_def_val := io.in.valid && in.disp_rd_val_valid
+  io.rename_fwd.value := in.disp_rd_val
 }

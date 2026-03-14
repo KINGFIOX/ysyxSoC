@@ -73,9 +73,11 @@ class RenameStage extends NPCModule {
     // Dispatcher tag forward: override RAT when the in-flight dispatch
     // is defining the same architectural register.
     val disp_tag_hit = disp_fwd.rd_def_tag &&
-      (disp_fwd.rd_idx === rs_idx(i)) && (rs_idx(i) =/= 0.U)
+      (disp_fwd.rd_idx === rs_idx(i)) &&
+      (rs_idx(i) =/= 0.U)
     val disp_val_hit = disp_fwd.rd_def_val &&
-      (disp_fwd.rd_idx === rs_idx(i)) && (rs_idx(i) =/= 0.U)
+      (disp_fwd.rd_idx === rs_idx(i)) &&
+      (rs_idx(i) =/= 0.U)
 
     val tag = Mux(disp_tag_hit, disp_fwd.tag, io.rat_query(i).tag)
     val busy = io.rat_query(i).busy || disp_tag_hit

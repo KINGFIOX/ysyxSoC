@@ -1,3 +1,5 @@
+use log::info;
+
 /// DPI-C callback functions called by Verilator during simulation.
 ///
 /// These must match the `import "DPI-C"` declarations in the Verilog/SystemVerilog
