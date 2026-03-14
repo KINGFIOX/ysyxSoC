@@ -67,12 +67,12 @@ class RenameStage extends NPCModule {
   io.rfu.rs2_i := dec.rs2_idx
 
   // ============================================================
-  // Dispatcher forward (bypass for RAT-not-yet-written hazard)
+  // TODO: Dispatcher forward (bypass for RAT-not-yet-written hazard)
   // ============================================================
-  val disp_rs1_hit = io.disp_fwd.rd_wen &&
-    (io.disp_fwd.rd_idx === dec.rs1_idx) && (dec.rs1_idx =/= 0.U)
-  val disp_rs2_hit = io.disp_fwd.rd_wen &&
-    (io.disp_fwd.rd_idx === dec.rs2_idx) && (dec.rs2_idx =/= 0.U)
+  // format: off
+  val disp_rs1_hit = io.disp_fwd.rd_wen && (io.disp_fwd.rd_idx === dec.rs1_idx) && (dec.rs1_idx =/= 0.U)
+  val disp_rs2_hit = io.disp_fwd.rd_wen && (io.disp_fwd.rd_idx === dec.rs2_idx) && (dec.rs2_idx =/= 0.U)
+  // format: on
 
   val rs1_busy = io.rat.rs1.busy || disp_rs1_hit
   val rs1_tag = Mux(disp_rs1_hit, io.disp_fwd.rd_tag, io.rat.rs1.tag)
@@ -95,14 +95,15 @@ class RenameStage extends NPCModule {
   val rs1_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs1_tag)
   val rs1_rob = io.rob.fwd1.valid
 
-  // format: off
-  io.out.bits.src1.value := MuxCase(0.U, Seq(
-    rs1_free -> io.rfu.rs1_v,
-    rs1_cdb1 -> io.cdb1.value,
-    rs1_cdb2 -> io.cdb2.value,
-    rs1_rob  -> io.rob.fwd1.value,
-  ))
-  // format: on
+  io.out.bits.src1.value := MuxCase(
+    0.U,
+    Seq(
+      rs1_free -> io.rfu.rs1_v,
+      rs1_cdb1 -> io.cdb1.value,
+      rs1_cdb2 -> io.cdb2.value,
+      rs1_rob -> io.rob.fwd1.value
+    )
+  )
   io.out.bits.src1.tag := rs1_tag
   io.out.bits.src1.ready := rs1_free || rs1_cdb1 || rs1_cdb2 || rs1_rob
 
@@ -112,50 +113,57 @@ class RenameStage extends NPCModule {
   val rs2_cdb2 = io.cdb2.valid && (io.cdb2.tag === rs2_tag)
   val rs2_rob = io.rob.fwd2.valid
 
-  // format: off
-  io.out.bits.src2.value := MuxCase(0.U, Seq(
-    rs2_free -> io.rfu.rs2_v,
-    rs2_cdb1 -> io.cdb1.value,
-    rs2_cdb2 -> io.cdb2.value,
-    rs2_rob  -> io.rob.fwd2.value,
-  ))
-  // format: on
+  io.out.bits.src2.value := MuxCase(
+    0.U,
+    Seq(
+      rs2_free -> io.rfu.rs2_v,
+      rs2_cdb1 -> io.cdb1.value,
+      rs2_cdb2 -> io.cdb2.value,
+      rs2_rob -> io.rob.fwd2.value
+    )
+  )
   io.out.bits.src2.tag := rs2_tag
   io.out.bits.src2.ready := rs2_free || rs2_cdb1 || rs2_cdb2 || rs2_rob
 
   // ============================================================
   // Dispatch-time resolved values
   // ============================================================
+  io.out.bits.disp_rd_val := MuxCase(
+    0.U,
+    Seq(
+      ctrl.is_lui -> imm,
+      ctrl.is_auipc -> (pc + imm),
+      ctrl.is_jal -> (pc + 4.U),
+      ctrl.is_jalr -> (pc + 4.U)
+    )
+  )
   // format: off
-  io.out.bits.disp_rd_val := MuxCase(0.U, Seq(
-    ctrl.is_lui   -> imm,
-    ctrl.is_auipc -> (pc + imm),
-    ctrl.is_jal   -> (pc + 4.U),
-    ctrl.is_jalr  -> (pc + 4.U),
-  ))
+  io.out.bits.disp_rd_val_valid := ctrl.is_lui || ctrl.is_auipc || ctrl.is_jal || ctrl.is_jalr
   // format: on
-  io.out.bits.disp_rd_val_valid := ctrl.is_lui || ctrl.is_auipc ||
-    ctrl.is_jal || ctrl.is_jalr
   io.out.bits.disp_mispredict := ctrl.is_jal
   io.out.bits.disp_target_npc := pc + imm
 
   // ============================================================
   // Exception mcause / mtval conversion
   // ============================================================
-  // format: off
-  val ifu_mcause = MuxCase(0.U, Seq(
-    (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ADDRESS_MISALIGNED) -> 0.U,
-    (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT)       -> 1.U,
-    (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_PAGE_FAULT)         -> 12.U,
-  ))
-  val cu_mcause = MuxCase(0.U, Seq(
-    (ctrl.except_type === CUExceptionType.cu_ILLEGAL_INSTRUCTION) -> 2.U,
-    (ctrl.except_type === CUExceptionType.cu_BREAKPOINT)          -> 3.U,
-    (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_U_MODE)   -> 8.U,
-    (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_S_MODE)   -> 9.U,
-    (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_M_MODE)   -> 11.U,
-  ))
-  // format: on
+  val ifu_mcause = MuxCase(
+    0.U,
+    Seq(
+      (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ADDRESS_MISALIGNED) -> 0.U,
+      (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_ACCESS_FAULT) -> 1.U,
+      (dec.ifu.exception === IFUExceptionType.ifu_INSTRUCTION_PAGE_FAULT) -> 12.U
+    )
+  )
+  val cu_mcause = MuxCase(
+    0.U,
+    Seq(
+      (ctrl.except_type === CUExceptionType.cu_ILLEGAL_INSTRUCTION) -> 2.U,
+      (ctrl.except_type === CUExceptionType.cu_BREAKPOINT) -> 3.U,
+      (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_U_MODE) -> 8.U,
+      (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_S_MODE) -> 9.U,
+      (ctrl.except_type === CUExceptionType.cu_ECALL_FROM_M_MODE) -> 11.U
+    )
+  )
   io.out.bits.dispatch_mcause := Mux(
     dec.ifu.exceptionEn,
     ifu_mcause,

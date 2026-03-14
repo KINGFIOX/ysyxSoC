@@ -12,12 +12,15 @@ class AGUInput extends NPCBundle {
 
 class AGUOutput extends NPCBundle {
   val addr = UInt(addrBits.W)
+  val is_mmio = Bool()
 }
 
 class AGU extends ExecUnit(new AGUInput, new AGUOutput) {
   io.in.ready := io.out.ready
   io.out.valid := io.in.valid
-  io.out.bits.addr := io.in.bits.base + io.in.bits.offset
+  val addr = io.in.bits.base + io.in.bits.offset
+  io.out.bits.addr := addr
+  io.out.bits.is_mmio := AddressMap.isMMIO(addr)
 }
 
 class AGUExtra extends NPCBundle {

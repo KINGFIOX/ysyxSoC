@@ -3,7 +3,7 @@ package ysyx.core.common
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.amba.axi4.AXI4BundleParameters
-import ysyx.ChipLinkParam
+import ysyx.{ChipLinkParam, SoCConfig}
 
 /** @brief
   *   有几个通用寄存器
@@ -51,6 +51,15 @@ abstract class NPCModule
     with HasCoreParameter
     with HasCSRParameter
     with HasAXIParameter
+
+object AddressMap {
+  def isMMIO(addr: UInt): Bool = {
+    val inSRAM  = addr >= SoCConfig.sramBase.U  && addr < (SoCConfig.sramBase  + SoCConfig.sramSize).U
+    val inSDRAM = addr >= SoCConfig.sdramBase.U && addr < (SoCConfig.sdramBase + SoCConfig.sdramSize).U
+    val inMROM  = addr >= SoCConfig.mromBase.U  && addr < (SoCConfig.mromBase  + SoCConfig.mromSize).U
+    !(inSRAM || inSDRAM || inMROM)
+  }
+}
 
 abstract class NPCBundle
     extends Bundle

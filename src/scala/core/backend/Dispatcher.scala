@@ -39,13 +39,14 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // Ready / Valid
   // ============================================================
-  // format: off
-  val iq_ready = MuxCase(true.B, Seq(
-    go_to_alu -> io.disp_alu.ready,
-    go_to_bru -> io.disp_bru.ready,
-    go_to_agu -> io.disp_agu.ready,
-  ))
-  // format: on
+  val iq_ready = MuxCase(
+    true.B, // dispatch_resolved: jal,lui,auipc,mret, exception
+    Seq(
+      go_to_alu -> io.disp_alu.ready,
+      go_to_bru -> io.disp_bru.ready,
+      go_to_agu -> io.disp_agu.ready
+    )
+  )
 
   io.in.ready := io.rob_enq.ready && iq_ready && !io.flush
   io.rob_enq.valid := io.in.valid && iq_ready && !io.flush
@@ -56,25 +57,25 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // ROB Enqueue
   // ============================================================
-  val d = io.rob_enq.bits
-  d.mem := ctrl.mem
-  d.csr_op := ctrl.csr_op
-  d.csr_wen := ctrl.csr_wen
-  d.pc := dec.ifu.pc
-  d.inst := dec.ifu.inst
-  d.imm := dec.imm
-  d.rd_idx := dec.rd_idx
-  d.rd_def := rd_def
-  d.except_en := except_en
-  d.mcause := in.dispatch_mcause
-  d.mtval := in.dispatch_mtval
-  d.is_jalr := ctrl.is_jalr
-  d.is_mret := ctrl.is_mret
-  d.dispatch_executed := !go_to_fu
-  d.rd_val := in.disp_rd_val
-  d.rd_val_valid := in.disp_rd_val_valid
-  d.mispredict := in.disp_mispredict
-  d.target_npc := in.disp_target_npc
+  val enq = io.rob_enq.bits
+  enq.mem := ctrl.mem
+  enq.csr_op := ctrl.csr_op
+  enq.csr_wen := ctrl.csr_wen
+  enq.pc := dec.ifu.pc
+  enq.inst := dec.ifu.inst
+  enq.imm := dec.imm // for csr only
+  enq.rd_idx := dec.rd_idx
+  enq.rd_def := rd_def
+  enq.except_en := except_en
+  enq.mcause := in.dispatch_mcause
+  enq.mtval := in.dispatch_mtval
+  enq.is_jalr := ctrl.is_jalr
+  enq.is_mret := ctrl.is_mret
+  enq.dispatch_executed := !go_to_fu
+  enq.rd_val := in.disp_rd_val
+  enq.rd_val_valid := in.disp_rd_val_valid
+  enq.mispredict := in.disp_mispredict
+  enq.target_npc := in.disp_target_npc
 
   // ============================================================
   // ALU Issue Queue
@@ -122,7 +123,7 @@ class Dispatcher extends NPCModule {
   // enabling this would cause a self-dependency on the same
   // instruction. Enable when pipeline registers are inserted.
   // ============================================================
-  io.rename_fwd.rd_wen := false.B
+  io.rename_fwd.rd_wen := false.B // TODO:
   io.rename_fwd.rd_idx := dec.rd_idx
   io.rename_fwd.rd_tag := io.rob_tag
 }

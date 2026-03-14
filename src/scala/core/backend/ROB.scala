@@ -14,6 +14,7 @@ object EntryState extends ChiselEnum {
 class MemRobEntry extends MemInfoBundle {
   val addr_rdy = Bool()
   val wdata_rdy = Bool()
+  val is_mmio = Bool()
 }
 
 class RobEntry extends NPCBundle {
@@ -23,7 +24,7 @@ class RobEntry extends NPCBundle {
 
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
-  val imm = UInt(dataBits.W)
+  val imm = UInt(dataBits.W) // for csr only
 
   val alu_result = UInt(dataBits.W)
   val rd_val = UInt(dataBits.W)
@@ -50,7 +51,7 @@ class RobEnqData extends NPCBundle {
 
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
-  val imm = UInt(dataBits.W)
+  val imm = UInt(dataBits.W) // for csr only
 
   val rd_idx = UInt(NRRegbits.W)
   val rd_def = Bool()
@@ -83,6 +84,7 @@ class WBAGUBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
   val addr = UInt(addrBits.W)
   val wdata = UInt(dataBits.W)
+  val is_mmio = Bool()
 }
 
 // bru
@@ -170,6 +172,7 @@ class Rob extends NPCModule {
     e.mem.wdata := io.agu.bits.wdata
     e.mem.addr_rdy := true.B
     e.mem.wdata_rdy := true.B
+    e.mem.is_mmio := io.agu.bits.is_mmio
     e.state := EntryState.executed
   }
 
@@ -194,30 +197,30 @@ class Rob extends NPCModule {
   io.enq_tag := tail_q.pad(robEntryBits)
 
   when(enq_fire) {
-    val d = io.enq.bits
-    val e = ram(tail_q)
-    e.mem.size := d.mem.size; e.mem.r_en := d.mem.r_en
-    e.mem.sign_ext := d.mem.sign_ext; e.mem.w_en := d.mem.w_en
-    e.mem.addr := d.mem.addr; e.mem.wdata := d.mem.wdata
-    e.mem.addr_rdy := false.B; e.mem.wdata_rdy := false.B
-    e.csr_op := d.csr_op; e.csr_wen := d.csr_wen
-    e.is_jalr := d.is_jalr; e.is_mret := d.is_mret
-    e.pc := d.pc; e.inst := d.inst; e.imm := d.imm
-    e.rd_idx := d.rd_idx; e.rd_def := d.rd_def
+    val enq = io.enq.bits
+    val ent = ram(tail_q)
+    ent.mem.size := enq.mem.size; ent.mem.r_en := enq.mem.r_en
+    ent.mem.sign_ext := enq.mem.sign_ext; ent.mem.w_en := enq.mem.w_en
+    ent.mem.addr := enq.mem.addr; ent.mem.wdata := enq.mem.wdata
+    ent.mem.addr_rdy := false.B; ent.mem.wdata_rdy := false.B; ent.mem.is_mmio := false.B
+    ent.csr_op := enq.csr_op; ent.csr_wen := enq.csr_wen
+    ent.is_jalr := enq.is_jalr; ent.is_mret := enq.is_mret
+    ent.pc := enq.pc; ent.inst := enq.inst; ent.imm := enq.imm
+    ent.rd_idx := enq.rd_idx; ent.rd_def := enq.rd_def
 
-    e.alu_result := 0.U
-    e.rd_val := d.rd_val
-    e.rd_val_valid := d.rd_val_valid
+    ent.alu_result := 0.U
+    ent.rd_val := enq.rd_val
+    ent.rd_val_valid := enq.rd_val_valid
 
-    e.except_en := d.except_en
-    e.mcause := d.mcause
-    e.xtval := d.mtval
+    ent.except_en := enq.except_en
+    ent.mcause := enq.mcause
+    ent.xtval := enq.mtval
 
-    e.mispredict := d.mispredict
-    e.target_npc := d.target_npc
+    ent.mispredict := enq.mispredict
+    ent.target_npc := enq.target_npc
 
-    e.state := Mux(
-      d.except_en || d.dispatch_executed,
+    ent.state := Mux(
+      enq.except_en || enq.dispatch_executed,
       EntryState.executed,
       EntryState.allocated
     )

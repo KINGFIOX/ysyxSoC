@@ -23,6 +23,7 @@ class NPCCore extends NPCModule {
 
   val icache    = IO(AXI4Bundle(axiParams))
   val dcache    = IO(AXI4Bundle(axiParams))
+  val perip     = IO(AXI4Bundle(axiParams))
   val probe     = IO(Output(Probe(new DebugBundle)))
   val interrupt = IO(Input(Bool()))
   val fence_i   = IO(Output(Bool()))
@@ -37,6 +38,7 @@ class NPCCore extends NPCModule {
   // bus
   fe.icache <> icache
   be.dcache <> dcache
+  be.perip <> perip
 
   // int
   be.interrupt := interrupt

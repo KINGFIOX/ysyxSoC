@@ -14,17 +14,15 @@ import ysyx.core.NPCCore
 import ysyx.core.DebugBundle
 import ysyx.core.common.HasAXIParameter
 
-class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule with HasAXIParameter {
+class CPU(idBits: Int)(implicit p: Parameters)
+    extends LazyModule
+    with HasAXIParameter {
 
-  private val icacheNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(
-    masters = Seq(AXI4MasterParameters(
-      name = "icache",
-      id   = IdRange(0, 1 << idBits))))))
-
-  private val dcacheNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(
-    masters = Seq(AXI4MasterParameters(
-      name = "dcache",
-      id   = IdRange(0, 1 << idBits))))))
+  // format: off
+  private val icacheNode = AXI4MasterNode( Seq( AXI4MasterPortParameters( masters = Seq( AXI4MasterParameters(name = "icache", id = IdRange(0, 1 << idBits))))))
+  private val dcacheNode = AXI4MasterNode( Seq( AXI4MasterPortParameters( masters = Seq( AXI4MasterParameters(name = "dcache", id = IdRange(0, 1 << idBits))))))
+  private val peripNode = AXI4MasterNode( Seq( AXI4MasterPortParameters( masters = Seq( AXI4MasterParameters(name = "perip", id = IdRange(0, 1 << idBits))))))
+  // format: on
 
   val masterNode = AXI4Xbar()
   // masterNode := icacheNode
@@ -34,12 +32,14 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule with HasAXIPar
   // masterNode := licache.node := icacheNode
   masterNode := icacheNode
   masterNode := AXI4DCache() := dcacheNode
+  masterNode := peripNode
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
     // --- io ---
     val (icache, _) = icacheNode.out(0)
     val (dcache, _) = dcacheNode.out(0)
+    val (perip, _) = peripNode.out(0)
     val interrupt = IO(Input(Bool()))
     val slave = IO(Flipped(AXI4Bundle(axiParams))) // used for chiplink
     val probe = IO(Output(Probe(new DebugBundle)))
@@ -52,6 +52,7 @@ class CPU(idBits: Int)(implicit p: Parameters) extends LazyModule with HasAXIPar
 
     icache <> core.icache
     dcache <> core.dcache
+    perip  <> core.perip
 
     // Slave interface is not used by NPCCore, tie off
     slave.ar.ready := false.B
