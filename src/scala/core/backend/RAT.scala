@@ -5,30 +5,31 @@ import chisel3.util._
 
 import ysyx.core.common._
 
+// from the master's point-of-view
 class RATReadPort extends NPCBundle {
-  val addr = Input(UInt(NRRegbits.W))
+  val addr = Output(UInt(NRRegbits.W))
   // zero is always not busy
-  val busy = Output(Bool())
-  val tag  = Output(UInt(robEntryBits.W))
+  val busy = Input(Bool())
+  val tag  = Input(UInt(robEntryBits.W))
 }
 
 class RATWritePort extends NPCBundle {
-  val en   = Input(Bool())
-  val addr = Input(UInt(NRRegbits.W))
-  val tag  = Input(UInt(robEntryBits.W))
+  val en   = Bool()
+  val addr = UInt(NRRegbits.W)
+  val tag  = UInt(robEntryBits.W)
 }
 
 class RATCommitPort extends NPCBundle {
-  val en   = Input(Bool())
-  val addr = Input(UInt(NRRegbits.W))
-  val tag  = Input(UInt(robEntryBits.W))
+  val en   = Bool()
+  val addr = UInt(NRRegbits.W)
+  val tag  = UInt(robEntryBits.W)
 }
 
 class RAT(val numReadPorts: Int = 2) extends NPCModule {
   val io = IO(new Bundle {
-    val read  = Vec(numReadPorts, new RATReadPort)
-    val write = new RATWritePort
-    val commit = new RATCommitPort
+    val read  = Flipped(Vec(numReadPorts, new RATReadPort))
+    val write = Flipped(new RATWritePort)
+    val commit = Flipped(new RATCommitPort)
     val flush = Input(Bool())
   })
 

@@ -2,37 +2,37 @@ package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
-import chisel3.probe.{define, Probe, ProbeValue}
 
 import ysyx.core.common._
 
+// from the master's point-of-view
 class RFUReadPort extends NPCBundle {
-  val addr = Input(UInt(NRRegbits.W))
-  val data = Output(UInt(dataBits.W))
+  val addr = Output(UInt(NRRegbits.W))
+  val data = Input(UInt(dataBits.W))
 }
 
 class RFUWritePort extends NPCBundle {
-  val addr = Input(UInt(NRRegbits.W))
-  val data = Input(UInt(dataBits.W))
-  val en = Input(Bool())
+  val addr = UInt(NRRegbits.W)
+  val data = UInt(dataBits.W)
+  val en = Bool()
 }
 
 class RFU(val numReadPorts: Int = 2) extends NPCModule {
   val io = IO(new Bundle {
-    val read = Vec(numReadPorts, new RFUReadPort)
-    val write = new RFUWritePort
-    val probe = Output(Probe(Vec(NRReg, UInt(dataBits.W))))
+    val read = Vec(numReadPorts, Flipped(new RFUReadPort))
+    val write = Flipped(new RFUWritePort)
+    val probe = Output(Vec(NRReg, UInt(dataBits.W)))
   })
 
-  private val rf = RegInit(VecInit(Seq.fill(NRReg)(0.U(dataBits.W))))
+  val regfile = RegInit(VecInit(Seq.fill(NRReg)(0.U(dataBits.W))))
 
   for (i <- 0 until numReadPorts) {
-    io.read(i).data := Mux(io.read(i).addr === 0.U, 0.U, rf(io.read(i).addr))
+    io.read(i).data := Mux(io.read(i).addr === 0.U, 0.U, regfile(io.read(i).addr))
   }
 
   when(io.write.en && (io.write.addr =/= 0.U)) {
-    rf(io.write.addr) := io.write.data
+    regfile(io.write.addr) := io.write.data
   }
 
-  define(io.probe, ProbeValue(rf))
+  io.probe := regfile
 }

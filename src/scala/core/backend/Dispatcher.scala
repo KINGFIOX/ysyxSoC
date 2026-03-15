@@ -23,7 +23,7 @@ class Dispatcher extends NPCModule {
     val disp_alu = Decoupled(new IQEnqData(new ALUExtra, 2))
     val disp_bru = Decoupled(new IQEnqData(new BRUExtra, 2))
     val disp_agu = Decoupled(new IQEnqData(new AGUExtra, 2))
-    val rat_write = Flipped(new RATWritePort)
+    val rat_write = new RATWritePort
   })
 
   val in = io.in.bits

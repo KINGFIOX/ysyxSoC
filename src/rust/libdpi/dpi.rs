@@ -1,5 +1,3 @@
-use log::info;
-
 /// DPI-C callback functions called by Verilator during simulation.
 ///
 /// These must match the `import "DPI-C"` declarations in the Verilog/SystemVerilog
@@ -76,8 +74,12 @@ pub extern "C" fn sdram_read_dpic(addr: i32) -> u16 {
     })
 }
 
+#[allow(unused)]
+use log::info;
+
 #[unsafe(no_mangle)]
 pub extern "C" fn sdram_write(addr: i32, data: u8) {
+    // info!("addr={:#012x}, data={:#012x}", addr, data);
     DPI_SDRAM.with_mut(|sdram| {
         sdram[addr as u32 as usize] = data;
     });

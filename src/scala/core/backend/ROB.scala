@@ -86,11 +86,12 @@ class LookupBundle extends NPCBundle {
 }
 
 class RobFwdBundle extends NPCBundle {
-  val tag = Input(UInt(robEntryBits.W))
-  val value = Output(UInt(dataBits.W))
-  val valid = Output(Bool())
+  val tag = Output(UInt(robEntryBits.W))
+  val value = Input(UInt(dataBits.W))
+  val valid = Input(Bool())
 }
 
+// <tag, entry>
 class CommitBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
   val entry = new RobEntry
@@ -101,7 +102,9 @@ class WBCommitBundle extends NPCBundle {
   val value = UInt(dataBits.W)
 }
 
-class Rob extends NPCModule {
+class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
+    extends NPCModule {
+
   private val entries: Int = (1 << robEntryBits)
 
   val io = IO(new Bundle {
@@ -111,11 +114,9 @@ class Rob extends NPCModule {
     val agu = Flipped(Valid(new WBAGUBundle))
     val bru = Flipped(Valid(new WBBRUBundle))
     val wb_commit = Flipped(Valid(new WBCommitBundle))
-    val lookup1 = Flipped(new LookupBundle)
-    val lookup2 = Flipped(new LookupBundle)
+    val lookup = Vec(numLookupPorts, Flipped(new LookupBundle))
     val commit = Decoupled(new CommitBundle)
-    val fwd1 = new RobFwdBundle
-    val fwd2 = new RobFwdBundle
+    val forward = Vec(numFwdPorts, Flipped(new RobFwdBundle))
     val flush = Input(Bool())
   })
 
@@ -167,8 +168,10 @@ class Rob extends NPCModule {
   // ============================================================
   // Lookup ports
   // ============================================================
-  io.lookup1.entry := ram(idx(io.lookup1.tag))
-  io.lookup2.entry := ram(idx(io.lookup2.tag))
+  for (i <- 0 until numLookupPorts) {
+    val lookup = io.lookup(i)
+    lookup.entry := ram(idx(lookup.tag))
+  }
 
   // ============================================================
   // Enqueue
@@ -218,10 +221,11 @@ class Rob extends NPCModule {
   // ============================================================
   // Forward ports
   // ============================================================
-  io.fwd1.valid := ram(idx(io.fwd1.tag)).rd.valid
-  io.fwd1.value := ram(idx(io.fwd1.tag)).rd.value
-  io.fwd2.valid := ram(idx(io.fwd2.tag)).rd.valid
-  io.fwd2.value := ram(idx(io.fwd2.tag)).rd.value
+  for (i <- 0 until numFwdPorts) {
+    val fwd = io.forward(i)
+    fwd.valid := ram(idx(fwd.tag)).rd.valid
+    fwd.value := ram(idx(fwd.tag)).rd.value
+  }
 
   // ============================================================
   // Flush

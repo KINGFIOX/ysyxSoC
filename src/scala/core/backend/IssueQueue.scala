@@ -5,6 +5,7 @@ import chisel3.util._
 
 import ysyx.core.common._
 
+// from the master's point-of-view
 class CDBBundle extends NPCBundle {
   val valid = Bool()
   val tag = UInt(robEntryBits.W)
@@ -130,8 +131,8 @@ abstract class ExecUnit[I <: Data, O <: Data](inGen: I, outGen: O)
 }
 
 class LateExecIO extends NPCBundle {
-  val req = Input(Bool())
-  val done = Output(Bool())
-  val result = Output(UInt(dataBits.W))
-  val result_valid = Output(Bool())
+  val req = Output(Bool())
+  val done = Input(Bool())
+  val result = Input(UInt(dataBits.W))
+  val result_valid = Input(Bool())
 }

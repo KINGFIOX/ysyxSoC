@@ -38,7 +38,7 @@ class CUOutput extends CUOutputBase {
 }
 
 class MemInfoBundle extends NPCBundle {
-  val size = UInt(2.W) // 0, 1, 2
+  val size = UInt(axiParams.sizeBits.W) // 0, 1, 2
   val r_en = Bool()
   val sign_ext = Bool() // need sign extension ? only used when load
   val w_en = Bool()

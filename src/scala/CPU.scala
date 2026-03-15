@@ -2,7 +2,6 @@ package ysyx
 
 import chisel3._
 import chisel3.util._
-import chisel3.probe.{define, Probe}
 
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.subsystem._
@@ -42,13 +41,13 @@ class CPU(idBits: Int)(implicit p: Parameters)
     val (perip, _) = peripNode.out(0)
     val interrupt = IO(Input(Bool()))
     val slave = IO(Flipped(AXI4Bundle(axiParams))) // used for chiplink
-    val probe = IO(Output(Probe(new DebugBundle)))
+    val probe = IO(Output(new DebugBundle))
 
     // --- modules ---
     val core = Module(new NPCCore)
 
     // --- connect ---
-    define(probe, core.probe)
+    probe := core.probe
 
     icache <> core.icache
     dcache <> core.dcache

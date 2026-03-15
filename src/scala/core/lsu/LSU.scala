@@ -176,20 +176,15 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 
 }
 
+class MemLsuInput extends MemInfoBundle {
+  val is_mmio = Bool()
+}
+
 class LSU extends NPCModule {
   val dcache = IO(AXI4Bundle(axiParams))
   val perip = IO(AXI4Bundle(axiParams))
-
-  val io = IO(new Bundle {
-    val late = new LateExecIO
-    val addr = Input(UInt(addrBits.W))
-    val size = Input(UInt(axiParams.sizeBits.W))
-    val sign_ext = Input(Bool())
-    val r_en = Input(Bool())
-    val w_en = Input(Bool())
-    val wdata = Input(UInt(dataBits.W))
-    val is_mmio = Input(Bool())
-  })
+  val ctrl = IO(Flipped(new MemLsuInput))
+  val late = IO(Flipped(new LateExecIO))
 
   // ==========================================================
   // dcache channel — LU + SU
@@ -218,20 +213,20 @@ class LSU extends NPCModule {
   // ==========================================================
   // Common: store wstrb / wdata formatting (4B aligned for both channels)
   // ==========================================================
-  val aligned_addr = Cat(io.addr(addrBits - 1, 2), 0.U(2.W))
+  val aligned_addr = Cat(ctrl.addr(addrBits - 1, 2), 0.U(2.W))
 
-  val store_wstrb = MuxLookup(io.size, "b1111".U)(
+  val store_wstrb = MuxLookup(ctrl.size, "b1111".U)(
     Seq(
-      0.U -> (1.U(4.W) << io.addr(1, 0)),
-      1.U -> (3.U(4.W) << (io.addr(1, 0) & "b10".U)),
+      0.U -> (1.U(4.W) << ctrl.addr(1, 0)),
+      1.U -> (3.U(4.W) << (ctrl.addr(1, 0) & "b10".U)),
       2.U -> "b1111".U(4.W)
     )
   )
-  val store_wdata = MuxLookup(io.size, io.wdata)(
+  val store_wdata = MuxLookup(ctrl.size, ctrl.wdata)(
     Seq(
-      0.U -> Fill(4, io.wdata(7, 0)),
-      1.U -> Fill(2, io.wdata(15, 0)),
-      2.U -> io.wdata
+      0.U -> Fill(4, ctrl.wdata(7, 0)),
+      1.U -> Fill(2, ctrl.wdata(15, 0)),
+      2.U -> ctrl.wdata
     )
   )
 
@@ -241,7 +236,7 @@ class LSU extends NPCModule {
 
   // Cache: returns full word, need byte lane selection by addr(1,0)
   val cache_raw = cache_load.in.rdata
-  val cache_byte = MuxLookup(io.addr(1, 0), cache_raw(7, 0))(
+  val cache_byte = MuxLookup(ctrl.addr(1, 0), cache_raw(7, 0))(
     Seq(
       0.U -> cache_raw(7, 0),
       1.U -> cache_raw(15, 8),
@@ -249,26 +244,26 @@ class LSU extends NPCModule {
       3.U -> cache_raw(31, 24)
     )
   )
-  val cache_half = Mux(io.addr(1), cache_raw(31, 16), cache_raw(15, 0))
-  val cache_load_final = MuxLookup(io.size, cache_raw)(
+  val cache_half = Mux(ctrl.addr(1), cache_raw(31, 16), cache_raw(15, 0))
+  val cache_load_final = MuxLookup(ctrl.size, cache_raw)(
     Seq(
-      0.U -> Mux(io.sign_ext, SignExt(cache_byte, 32), ZeroExt(cache_byte, 32)),
-      1.U -> Mux(io.sign_ext, SignExt(cache_half, 32), ZeroExt(cache_half, 32)),
+      0.U -> Mux(ctrl.sign_ext, SignExt(cache_byte, 32), ZeroExt(cache_byte, 32)),
+      1.U -> Mux(ctrl.sign_ext, SignExt(cache_half, 32), ZeroExt(cache_half, 32)),
       2.U -> cache_raw
     )
   )
 
   // MMIO: narrow transfer, data already in lower bits — no lane selection
   val mmio_raw = perip_load.in.rdata
-  val mmio_load_final = MuxLookup(io.size, mmio_raw)(
+  val mmio_load_final = MuxLookup(ctrl.size, mmio_raw)(
     Seq(
-      0.U -> Mux(io.sign_ext, SignExt(mmio_raw(7, 0), 32), ZeroExt(mmio_raw(7, 0), 32)),
-      1.U -> Mux(io.sign_ext, SignExt(mmio_raw(15, 0), 32), ZeroExt(mmio_raw(15, 0), 32)),
+      0.U -> Mux(ctrl.sign_ext, SignExt(mmio_raw(7, 0), 32), ZeroExt(mmio_raw(7, 0), 32)),
+      1.U -> Mux(ctrl.sign_ext, SignExt(mmio_raw(15, 0), 32), ZeroExt(mmio_raw(15, 0), 32)),
       2.U -> mmio_raw
     )
   )
 
-  val load_final = Mux(io.is_mmio, mmio_load_final, cache_load_final)
+  val load_final = Mux(ctrl.is_mmio, mmio_load_final, cache_load_final)
 
   // ==========================================================
   // dcache LoadUnit defaults — 4B aligned, size=2
@@ -293,8 +288,8 @@ class LSU extends NPCModule {
   // ==========================================================
   perip_load.in.req := false.B
   perip_load.in.wr := false.B
-  perip_load.in.size := io.size
-  perip_load.in.addr := io.addr
+  perip_load.in.size := ctrl.size
+  perip_load.in.addr := ctrl.addr
   perip_load.in.wstrb := 0.U
   perip_load.in.wdata := 0.U
 
@@ -309,9 +304,9 @@ class LSU extends NPCModule {
   // ==========================================================
   // LateExecIO defaults
   // ==========================================================
-  io.late.done := false.B
-  io.late.result := load_final
-  io.late.result_valid := io.r_en
+  late.done := false.B
+  late.result := load_final
+  late.result_valid := ctrl.r_en
 
   // ==========================================================
   // Internal state machine
@@ -323,28 +318,28 @@ class LSU extends NPCModule {
 
   switch(stateQ) {
     is(LSUState.idle) {
-      when(io.late.req) {
-        when(io.r_en) {
-          when(io.is_mmio) { perip_load.in.req := true.B }
+      when(late.req) {
+        when(ctrl.r_en) {
+          when(ctrl.is_mmio) { perip_load.in.req := true.B }
             .otherwise { cache_load.in.req := true.B }
-        }.elsewhen(io.w_en) {
-          when(io.is_mmio) { perip_store.in.req := true.B }
+        }.elsewhen(ctrl.w_en) {
+          when(ctrl.is_mmio) { perip_store.in.req := true.B }
             .otherwise { cache_store.in.req := true.B }
         }
         stateQ := LSUState.lsu_req
       }
     }
     is(LSUState.lsu_req) {
-      when(io.r_en) {
-        when(io.is_mmio) {
+      when(ctrl.r_en) {
+        when(ctrl.is_mmio) {
           perip_load.in.req := true.B
           when(perip_load.in.addr_ok) { stateQ := LSUState.lsu_wait }
         }.otherwise {
           cache_load.in.req := true.B
           when(cache_load.in.addr_ok) { stateQ := LSUState.lsu_wait }
         }
-      }.elsewhen(io.w_en) {
-        when(io.is_mmio) {
+      }.elsewhen(ctrl.w_en) {
+        when(ctrl.is_mmio) {
           perip_store.in.req := true.B
           when(perip_store.in.addr_ok) { stateQ := LSUState.lsu_wait }
         }.otherwise {
@@ -354,17 +349,17 @@ class LSU extends NPCModule {
       }
     }
     is(LSUState.lsu_wait) {
-      when(io.r_en) {
-        val data_ok = Mux(io.is_mmio, perip_load.in.data_ok, cache_load.in.data_ok)
+      when(ctrl.r_en) {
+        val data_ok = Mux(ctrl.is_mmio, perip_load.in.data_ok, cache_load.in.data_ok)
         when(data_ok) {
-          io.late.done := true.B
+          late.done := true.B
           stateQ := LSUState.idle
         }
-      }.elsewhen(io.w_en) {
-        val data_ok = Mux(io.is_mmio, perip_store.in.data_ok, cache_store.in.data_ok)
+      }.elsewhen(ctrl.w_en) {
+        val data_ok = Mux(ctrl.is_mmio, perip_store.in.data_ok, cache_store.in.data_ok)
         when(data_ok) {
-          io.late.done := true.B
-          io.late.result_valid := false.B
+          late.done := true.B
+          late.result_valid := false.B
           stateQ := LSUState.idle
         }
       }

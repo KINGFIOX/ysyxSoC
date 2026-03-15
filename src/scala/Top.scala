@@ -1,7 +1,6 @@
 package ysyx
 
 import chisel3._
-import chisel3.probe.{Probe, read}
 import org.chipsalliance.cde.config.{Parameters, Config}
 import freechips.rocketchip.system._
 import freechips.rocketchip.diplomacy.LazyModule
@@ -59,7 +58,7 @@ class NPCSoC
   val mdut = Module(dut.module)
   mdut.externalPins <> io.externalPins
 
-  io.debug := read(mdut.probe)
+  io.debug := mdut.probe
 }
 
 object Elaborate extends App {

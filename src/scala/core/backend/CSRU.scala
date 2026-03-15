@@ -2,15 +2,22 @@ package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
-import chisel3.probe.{define, Probe, ProbeValue}
 
 import ysyx.core.common._
 
 // from the master's point-of-view
-class CSRCommitIO extends Bundle with HasCoreParameter {
+class CsrExceptWritePort extends Bundle with HasCoreParameter {
   val xepc = UInt(dataBits.W); val xepc_wen = Bool()
   val xcause = UInt(dataBits.W); val xcause_wen = Bool()
   val xtval = UInt(dataBits.W); val xtval_wen = Bool()
+}
+
+class CsrWriteOnlyPort extends CsrRobEntry {
+  val wen = Bool()
+}
+
+class CsrReadWritePort extends CsrWriteOnlyPort {
+  val rdata = Input(UInt(dataBits.W))
 }
 
 class CSRUDebugBundle extends Bundle with HasCoreParameter with HasCSRParameter {
@@ -25,20 +32,12 @@ class CSRUDebugBundle extends Bundle with HasCoreParameter with HasCSRParameter 
 
 class CSRU extends Module with HasCoreParameter with HasCSRParameter {
   val io = IO(new Bundle {
-    val late = new LateExecIO
-
-    val addr = Input(UInt(NRCSRbits.W))
-    val wop = Input(CSROpType())
-    val wen = Input(Bool())
-    val wdata = Input(UInt(dataBits.W))
-    val rdata = Output(UInt(dataBits.W))
-
-    val commit = Flipped(new CSRCommitIO)
-
+    val late = Flipped(new LateExecIO)
+    val rw = Flipped(new CsrReadWritePort)
+    val commit = Flipped(new CsrExceptWritePort)
     val xepc  = Output(UInt(dataBits.W))
     val xtvec = Output(UInt(dataBits.W))
-
-    val probe = Output(Probe(new CSRUDebugBundle))
+    val probe = Output(new CSRUDebugBundle)
   })
 
   io.late.done         := io.late.req
@@ -78,26 +77,26 @@ class CSRU extends Module with HasCoreParameter with HasCSRParameter {
   )
 
   // ==================== 读取 CSR() ====================
-  private val csrRdata = MuxLookup(io.addr, 0.U)(csrReadMap)
-  io.rdata := csrRdata
+  private val csrRdata = MuxLookup(io.rw.addr, 0.U)(csrReadMap)
+  io.rw.rdata := csrRdata
   io.late.result := csrRdata
 
   // ==================== 计算写入数据(wdata, waddr, wen) ====================
   // CSRRW: wdata = rs1
   // CSRRS: wdata = csr | rs1
   private val csrWdata = MuxCase(
-    io.wdata,
+    io.rw.wdata,
     Seq(
-      (io.wop === CSROpType.CSR_RW) -> io.wdata,
-      (io.wop === CSROpType.CSR_RS) -> (csrRdata | io.wdata)
+      (io.rw.op === CSROpType.CSR_RW) -> io.rw.wdata,
+      (io.rw.op === CSROpType.CSR_RS) -> (csrRdata | io.rw.wdata)
     )
   )
-  when(io.wen) {
-    when(io.addr === MSTATUS.U) { mstatus := csrWdata }
-    when(io.addr === MTVEC.U) { mtvec := csrWdata }
-    when(io.addr === MEPC.U) { mepc := csrWdata }
-    when(io.addr === MCAUSE.U) { mcause := csrWdata }
-    when(io.addr === MTVAL.U) { mtval := csrWdata }
+  when(io.rw.wen) {
+    when(io.rw.addr === MSTATUS.U) { mstatus := csrWdata }
+    when(io.rw.addr === MTVEC.U) { mtvec := csrWdata }
+    when(io.rw.addr === MEPC.U) { mepc := csrWdata }
+    when(io.rw.addr === MCAUSE.U) { mcause := csrWdata }
+    when(io.rw.addr === MTVAL.U) { mtval := csrWdata }
   }
 
   // probe
@@ -109,5 +108,5 @@ class CSRU extends Module with HasCoreParameter with HasCSRParameter {
   csrDebugBundle.mtval := mtval
   csrDebugBundle.mvendorid := mvendorid
   csrDebugBundle.marchid := marchid
-  define(io.probe, ProbeValue(csrDebugBundle))
+  io.probe := csrDebugBundle
 }

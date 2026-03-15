@@ -2,7 +2,6 @@ package ysyx.core.backend
 
 import chisel3._
 import chisel3.util._
-import chisel3.probe.{define, Probe, ProbeValue, read}
 
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
@@ -14,18 +13,19 @@ import ysyx.core.DebugBundle
 
 class BackEnd extends NPCModule {
 
+  // connect to frontend
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new IFUOutput))
     val redirect = Output(new RedirectBundle)
     val flush = Output(Bool())
   })
 
-  // bus
+  // connect to bus
   val dcache = IO(AXI4Bundle(axiParams))
   val perip = IO(AXI4Bundle(axiParams))
-  val probe = IO(Output(Probe(new DebugBundle)))
   val interrupt = IO(Input(Bool()))
   val fence_i = IO(Output(Bool()))
+  val probe = IO(Output(new DebugBundle))
 
   // ==========================================================
   // Sub-modules
@@ -35,11 +35,11 @@ class BackEnd extends NPCModule {
   val dispatcher_ = Module(new Dispatcher)
 
   val rfu_ = Module(new RFU)
+  val rob_ = Module(new Rob)
+  val rat_ = Module(new RAT)
   val alu_ = Module(new ALU)
   val bru_ = Module(new BRU)
   val agu_ = Module(new AGU)
-  val rob_ = Module(new Rob)
-  val rat_ = Module(new RAT)
   val alu_iq_ = Module(new ALUIssueQueue)
   val bru_iq_ = Module(new BRUIssueQueue)
   val agu_iq_ = Module(new AGUIssueQueue)
@@ -99,8 +99,8 @@ class BackEnd extends NPCModule {
   renameStage_.io.rfu_query(0).data := rfu_.io.read(0).data
   renameStage_.io.rfu_query(1).data := rfu_.io.read(1).data
 
-  renameStage_.io.rob_query(0) <> rob_.io.fwd1
-  renameStage_.io.rob_query(1) <> rob_.io.fwd2
+  renameStage_.io.rob_query(0) <> rob_.io.forward(0)
+  renameStage_.io.rob_query(1) <> rob_.io.forward(1)
 
   renameStage_.io.disp_fwd <> dispatcher_.io.rename_fwd
 
@@ -137,8 +137,8 @@ class BackEnd extends NPCModule {
   val alu_wb_rd_def = alu_.io.out.bits.rd_def
   val alu_result = alu_.io.out.bits.result
 
-  rob_.io.lookup1.tag := alu_wb_tag
-  val alu_rob_entry = rob_.io.lookup1.entry
+  rob_.io.lookup(0).tag := alu_wb_tag
+  val alu_rob_entry = rob_.io.lookup(0).entry
 
   val alu_is_jalr = alu_rob_entry.inst_type === InstType.JALR
   val alu_is_csr = alu_rob_entry.inst_type === InstType.CSR
@@ -168,8 +168,8 @@ class BackEnd extends NPCModule {
   val bru_wb_tag = bru_.io.out.bits.rob_tag
   val br_flag = bru_.io.out.bits.br_flag
 
-  rob_.io.lookup2.tag := bru_wb_tag
-  val bru_rob_entry = rob_.io.lookup2.entry
+  rob_.io.lookup(1).tag := bru_wb_tag
+  val bru_rob_entry = rob_.io.lookup(1).entry
 
   val bru_target_npc = Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
 
@@ -204,59 +204,49 @@ class BackEnd extends NPCModule {
   val commitStage_ = Module(new CommitStage)
 
   // --- ROB commit ---
-  commitStage_.io.rob.commit <> rob_.io.commit
-  rob_.io.wb_commit := commitStage_.io.rob.wb_commit
+  commitStage_.rob.commit <> rob_.io.commit
+  rob_.io.wb_commit := commitStage_.rob.wb_commit
 
   // --- CSR exception ---
-  csru_.io.commit := commitStage_.io.csr.exception
+  csru_.io.commit := commitStage_.csr.except
 
   // --- CSR retire (late execute) ---
-  csru_.io.late <> commitStage_.io.csr.retire.late
-  csru_.io.addr := commitStage_.io.csr.retire.addr
-  csru_.io.wop := commitStage_.io.csr.retire.wop
-  csru_.io.wen := commitStage_.io.csr.retire.wen
-  csru_.io.wdata := commitStage_.io.csr.retire.wdata
-  commitStage_.io.csr.xepc := csru_.io.xepc
-  commitStage_.io.csr.xtvec := csru_.io.xtvec
+  csru_.io.late <> commitStage_.csr.retire.late
+  csru_.io.rw.addr := commitStage_.csr.retire.wo.addr
+  csru_.io.rw.op := commitStage_.csr.retire.wo.op
+  csru_.io.rw.wen := commitStage_.csr.retire.wo.wen
+  csru_.io.rw.wdata := commitStage_.csr.retire.wo.wdata
+  commitStage_.csr.xepc := csru_.io.xepc // for `mret`
+  commitStage_.csr.xtvec := csru_.io.xtvec // for `except`
 
   // --- LSU commit ---
-  lsu_.io.late <> commitStage_.io.lsu.late
-  lsu_.io.addr := commitStage_.io.lsu.addr
-  lsu_.io.size := commitStage_.io.lsu.size
-  lsu_.io.sign_ext := commitStage_.io.lsu.sign_ext
-  lsu_.io.r_en := commitStage_.io.lsu.r_en
-  lsu_.io.w_en := commitStage_.io.lsu.w_en
-  lsu_.io.wdata := commitStage_.io.lsu.wdata
-  lsu_.io.is_mmio := commitStage_.io.lsu.is_mmio
+  lsu_.late <> commitStage_.lsu.late
+  lsu_.ctrl <> commitStage_.lsu.ctrl
 
   // --- RFU writeback ---
-  rfu_.io.write.en := commitStage_.io.rfu.wen
-  rfu_.io.write.addr := commitStage_.io.rfu.rd_i
-  rfu_.io.write.data := commitStage_.io.rfu.wdata
-
-  // --- RAT commit ---
-  rat_.io.commit := commitStage_.io.rat_commit
+  rfu_.io.write <> commitStage_.rfu_w
+  rat_.io.commit <> commitStage_.rat_commit
 
   // --- IFU flush + redirect ---
-  flush := commitStage_.io.ifu.flush
-  redirect := commitStage_.io.ifu.redirect
+  flush := commitStage_.ifu.flush
+  redirect := commitStage_.ifu.redirect
 
   // --- CDB2 ---
-  cdb2 := commitStage_.io.cdb2
+  cdb2 := commitStage_.cdb
 
   // --- fence_i ---
-  fence_i := commitStage_.io.fence_i
+  fence_i := commitStage_.fence_i
 
   // ==========================================================
   // Debug probe
   // ==========================================================
   val dbg = Wire(new DebugBundle)
-  dbg.valid := commitStage_.io.debug.valid
-  dbg.pc := commitStage_.io.debug.pc
-  dbg.dnpc := commitStage_.io.debug.dnpc
-  dbg.inst := commitStage_.io.debug.inst
-  dbg.isMMIO := commitStage_.io.debug.is_mmio
-  dbg.gpr := VecInit((0 until NRReg).map(i => read(rfu_.io.probe)(i)))
-  dbg.csr := read(csru_.io.probe)
-  define(probe, ProbeValue(dbg))
+  dbg.valid := commitStage_.probe.valid
+  dbg.pc := commitStage_.probe.pc
+  dbg.dnpc := commitStage_.probe.dnpc
+  dbg.inst := commitStage_.probe.inst
+  dbg.isMMIO := commitStage_.probe.is_mmio
+  dbg.gpr := rfu_.io.probe
+  dbg.csr := csru_.io.probe
+  probe := dbg
 }

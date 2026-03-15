@@ -18,10 +18,10 @@ class RenameStage extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
-    val rat_query = Vec(2, Flipped(new RATReadPort))
-    val rob_query = Vec(2, Flipped(new RobFwdBundle))
+    val rat_query = Vec(2, new RATReadPort)
+    val rob_query = Vec(2, new RobFwdBundle)
     val disp_fwd = Flipped(new DispFwdBundle)
-    val rfu_query = Vec(2, Flipped(new RFUReadPort))
+    val rfu_query = Vec(2, new RFUReadPort)
     val cdb = Vec(2, Flipped(new CDBBundle))
   })
 

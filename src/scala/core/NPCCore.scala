@@ -24,7 +24,7 @@ class NPCCore extends NPCModule {
   val icache    = IO(AXI4Bundle(axiParams))
   val dcache    = IO(AXI4Bundle(axiParams))
   val perip     = IO(AXI4Bundle(axiParams))
-  val probe     = IO(Output(Probe(new DebugBundle)))
+  val probe     = IO(Output(new DebugBundle))
   val interrupt = IO(Input(Bool()))
   val fence_i   = IO(Output(Bool()))
 
@@ -47,5 +47,5 @@ class NPCCore extends NPCModule {
   fence_i := be.fence_i
 
   // probe
-  define(probe, be.probe)
+  probe := be.probe
 }
