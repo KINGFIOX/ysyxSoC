@@ -205,23 +205,22 @@ class BackEnd extends NPCModule {
 
   // --- ROB commit ---
   commitStage_.rob.commit <> rob_.io.commit
-  rob_.io.wb_commit := commitStage_.rob.wb_commit
 
-  // --- CSR exception ---
+  // --- LSU late execution (driven by ROB) ---
+  lsu_.late <> rob_.io.lsu_late
+  lsu_.ctrl <> rob_.io.lsu_ctrl
+
+  // --- CSR late execution (driven by ROB) ---
+  csru_.io.late <> rob_.io.csr_late
+  csru_.io.rw.addr := rob_.io.csr_wo.addr
+  csru_.io.rw.op := rob_.io.csr_wo.op
+  csru_.io.rw.wen := rob_.io.csr_wo.wen
+  csru_.io.rw.wdata := rob_.io.csr_wo.wdata
+
+  // --- CSR exception (driven by CommitStage) ---
   csru_.io.commit := commitStage_.csr.except
-
-  // --- CSR retire (late execute) ---
-  csru_.io.late <> commitStage_.csr.retire.late
-  csru_.io.rw.addr := commitStage_.csr.retire.wo.addr
-  csru_.io.rw.op := commitStage_.csr.retire.wo.op
-  csru_.io.rw.wen := commitStage_.csr.retire.wo.wen
-  csru_.io.rw.wdata := commitStage_.csr.retire.wo.wdata
-  commitStage_.csr.xepc := csru_.io.xepc // for `mret`
-  commitStage_.csr.xtvec := csru_.io.xtvec // for `except`
-
-  // --- LSU commit ---
-  lsu_.late <> commitStage_.lsu.late
-  lsu_.ctrl <> commitStage_.lsu.ctrl
+  commitStage_.csr.xepc := csru_.io.xepc
+  commitStage_.csr.xtvec := csru_.io.xtvec
 
   // --- RFU writeback ---
   rfu_.io.write <> commitStage_.rfu_w

@@ -101,11 +101,6 @@ class CommitBundle extends NPCBundle {
   val entry = new RobEntry
 }
 
-class WBCommitBundle extends NPCBundle {
-  val tag = UInt(robEntryBits.W)
-  val value = UInt(dataBits.W)
-}
-
 class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     extends NPCModule {
 
@@ -117,7 +112,10 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     val alu = Flipped(Valid(new WBALUBundle))
     val agu = Flipped(Valid(new WBAGUBundle))
     val bru = Flipped(Valid(new WBBRUBundle))
-    val wb_commit = Flipped(Valid(new WBCommitBundle))
+    val lsu_late = new LateExecIO
+    val lsu_ctrl = new MemLsuInput
+    val csr_late = new LateExecIO
+    val csr_wo = new CsrWriteOnlyPort
     val lookup = Vec(numLookupPorts, Flipped(new LookupBundle))
     val commit = Decoupled(new CommitBundle)
     val forward = Vec(numFwdPorts, Flipped(new RobFwdBundle))
@@ -163,12 +161,6 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     ent.state := RobState.late
   }
 
-  when(io.wb_commit.valid && !io.flush) {
-    val i = idx(io.wb_commit.bits.tag)
-    ram(i).rd.value := io.wb_commit.bits.value
-    ram(i).rd.valid := true.B
-  }
-
   // ============================================================
   // Lookup ports
   // ============================================================
@@ -210,10 +202,46 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   }
 
   // ============================================================
-  // Commit
+  // Late execution at head
   // ============================================================
   val head_entry = ram(head_q)
-  io.commit.valid := !empty_w && head_entry.state =/= RobState.inflight
+  val head_is_late = !empty_w && head_entry.state === RobState.late
+  val head_is_mem = head_entry.mem.r_en || head_entry.mem.w_en
+  val head_is_csr = head_entry.inst_type === InstType.CSR
+
+  io.lsu_ctrl.addr := head_entry.mem.addr
+  io.lsu_ctrl.size := head_entry.mem.size
+  io.lsu_ctrl.sign_ext := head_entry.mem.sign_ext
+  io.lsu_ctrl.r_en := head_entry.mem.r_en
+  io.lsu_ctrl.w_en := head_entry.mem.w_en
+  io.lsu_ctrl.wdata := head_entry.mem.wdata
+  io.lsu_ctrl.is_mmio := head_entry.mem.is_mmio
+
+  io.csr_wo.addr := head_entry.csr.addr
+  io.csr_wo.op := head_entry.csr.op
+  io.csr_wo.wdata := head_entry.csr.wdata
+
+  io.lsu_late.req := head_is_late && head_is_mem && !io.flush
+  io.csr_late.req := head_is_late && head_is_csr && !io.flush
+  io.csr_wo.wen := head_is_late && head_is_csr && !io.flush
+
+  when(head_is_late && head_is_mem && io.lsu_late.done && !io.flush) {
+    when(io.lsu_late.result_valid) {
+      head_entry.rd.value := io.lsu_late.result
+      head_entry.rd.valid := true.B
+    }
+    head_entry.state := RobState.complete
+  }
+  when(head_is_late && head_is_csr && io.csr_late.done && !io.flush) {
+    head_entry.rd.value := io.csr_late.result
+    head_entry.rd.valid := true.B
+    head_entry.state := RobState.complete
+  }
+
+  // ============================================================
+  // Commit
+  // ============================================================
+  io.commit.valid := !empty_w && head_entry.state === RobState.complete
   io.commit.bits.tag := head_q.pad(robEntryBits)
   io.commit.bits.entry := head_entry
 

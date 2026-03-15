@@ -5,7 +5,6 @@ import chisel3.util._
 
 import ysyx.core.common._
 import ysyx.core.frontend._
-import ysyx.core.lsu._
 
 class DebugCommitBundle extends NPCBundle {
   val valid = Bool()
@@ -16,25 +15,16 @@ class DebugCommitBundle extends NPCBundle {
 }
 
 class CommitStage extends NPCModule {
-  val lsu = IO(new Bundle {
-    val late = new LateExecIO
-    val ctrl = new MemLsuInput
-  })
   val rfu_w = IO(new RFUWritePort)
   val rat_commit = IO(new RATCommitPort)
   val csr = IO(new Bundle {
     val except = new CsrExceptWritePort
-    val retire = new Bundle {
-      val late = new LateExecIO
-      val wo = new CsrWriteOnlyPort
-    }
-    val xepc = Input(UInt(dataBits.W)) // for `mret`
-    val xtvec = Input(UInt(dataBits.W)) // for `ecall`
+    val xepc = Input(UInt(dataBits.W))
+    val xtvec = Input(UInt(dataBits.W))
   })
   val probe = IO(new DebugCommitBundle)
   val rob = IO(new Bundle {
     val commit = Flipped(Decoupled(new CommitBundle))
-    val wb_commit = Valid(new WBCommitBundle) // for late exec unit
   })
   val ifu = IO(new Bundle {
     val flush = Bool()
@@ -60,12 +50,6 @@ class CommitStage extends NPCModule {
   // format: on
   val mispredict = is_control && (head.target_npc =/= head.predict_npc)
 
-  // ---- State machine ----
-  object CommitState extends ChiselEnum {
-    val idle, late_wait = Value
-  }
-  val state_q = RegInit(CommitState.idle)
-
   // ---- Defaults ----
   val flush = WireDefault(false.B)
   val redirect = Wire(new RedirectBundle)
@@ -79,10 +63,6 @@ class CommitStage extends NPCModule {
   cdb.valid := false.B
   cdb.tag := head_tag
   cdb.value := 0.U
-
-  rob.wb_commit.valid := false.B
-  rob.wb_commit.bits.tag := head_tag
-  rob.wb_commit.bits.value := 0.U
 
   rob.commit.ready := false.B
 
@@ -101,22 +81,6 @@ class CommitStage extends NPCModule {
   csr.except.xtval := head.except.mtval
   csr.except.xtval_wen := false.B
 
-  csr.retire.late.req := false.B
-  csr.retire.wo.addr := head.csr.addr
-  csr.retire.wo.op := head.csr.op
-  csr.retire.wo.wen := false.B
-  csr.retire.wo.wdata := head.csr.wdata
-
-  // defaults
-  lsu.late.req := false.B
-  lsu.ctrl.addr := head.mem.addr
-  lsu.ctrl.size := head.mem.size
-  lsu.ctrl.sign_ext := head.mem.sign_ext
-  lsu.ctrl.r_en := head.mem.r_en
-  lsu.ctrl.w_en := head.mem.w_en
-  lsu.ctrl.wdata := head.mem.wdata
-  lsu.ctrl.is_mmio := head.mem.is_mmio
-
   fence_i := false.B
 
   val dbg_valid = RegInit(false.B)
@@ -126,140 +90,65 @@ class CommitStage extends NPCModule {
   val dbg_is_mmio = Reg(Bool())
   dbg_valid := false.B
 
-  // ---- Commit state machine ----
-  switch(state_q) {
-    is(CommitState.idle) {
-      when(head_valid) {
-        when(head.except.valid) { // except happen
-          csr.except.xepc_wen := true.B
-          csr.except.xcause_wen := true.B
-          csr.except.xtval_wen := true.B
+  // ---- Commit logic ----
+  when(head_valid) {
+    when(head.except.valid) {
+      csr.except.xepc_wen := true.B
+      csr.except.xcause_wen := true.B
+      csr.except.xtval_wen := true.B
 
-          flush := true.B
-          redirect.valid := true.B
-          redirect.correct_npc := csr.xtvec
-          redirect.wrong_pc := head.pc
+      flush := true.B
+      redirect.valid := true.B
+      redirect.correct_npc := csr.xtvec
+      redirect.wrong_pc := head.pc
 
-          rob.commit.ready := true.B // rob could pop
+      rob.commit.ready := true.B
 
-          dbg_valid := true.B
-          dbg_pc := head.pc
-          dbg_dnpc := csr.xtvec
-          dbg_inst := head.inst
-          dbg_is_mmio := false.B
+      dbg_valid := true.B
+      dbg_pc := head.pc
+      dbg_dnpc := csr.xtvec
+      dbg_inst := head.inst
+      dbg_is_mmio := false.B
 
-        }.elsewhen(head_is_mem) {
-          lsu.late.req := true.B
-          when(lsu.late.done) {
-            when(rd_def) {
-              rfu_w.en := true.B
-              rfu_w.data := lsu.late.result
-            }
-            rob.wb_commit.valid := rd_def
-            rob.wb_commit.bits.value := lsu.late.result
-            cdb.valid := rd_def
-            cdb.value := lsu.late.result
+    }.elsewhen(head_is_mret) {
+      flush := true.B
+      redirect.valid := true.B
+      redirect.correct_npc := csr.xepc
+      redirect.wrong_pc := head.pc
 
-            rat_commit.en := rd_def
-            rob.commit.ready := true.B
+      rob.commit.ready := true.B
 
-            dbg_valid := true.B
-            dbg_pc := head.pc
-            dbg_dnpc := head.pc + 4.U
-            dbg_inst := head.inst
-            dbg_is_mmio := head.mem.is_mmio
-          }.otherwise {
-            state_q := CommitState.late_wait
-          }
+      dbg_valid := true.B
+      dbg_pc := head.pc
+      dbg_dnpc := csr.xepc
+      dbg_inst := head.inst
+      dbg_is_mmio := false.B
 
-        }.elsewhen(head_is_csr) {
-          csr.retire.late.req := true.B
-          csr.retire.wo.wen := true.B
-          val csr_rd = csr.retire.late.result
-
-          when(rd_def) {
-            rfu_w.en := true.B
-            rfu_w.data := csr_rd
-          }
-
-          rob.wb_commit.valid := rd_def
-          rob.wb_commit.bits.value := csr_rd
-          cdb.valid := rd_def
-          cdb.value := csr_rd
-
-          rat_commit.en := rd_def
-
-          rob.commit.ready := true.B
-
-          dbg_valid := true.B
-          dbg_pc := head.pc
-          dbg_dnpc := head.pc + 4.U
-          dbg_inst := head.inst
-          dbg_is_mmio := false.B
-
-        }.elsewhen(head_is_mret) {
-          flush := true.B
-          redirect.valid := true.B
-          redirect.correct_npc := csr.xepc
-          redirect.wrong_pc := head.pc
-
-          rob.commit.ready := true.B
-
-          dbg_valid := true.B
-          dbg_pc := head.pc
-          dbg_dnpc := csr.xepc
-          dbg_inst := head.inst
-          dbg_is_mmio := false.B
-
-        }.otherwise {
-          when(rd_def) {
-            rfu_w.en := true.B
-            rfu_w.data := head.rd.value
-          }
-
-          rat_commit.en := rd_def
-
-          when(mispredict) {
-            flush := true.B
-            redirect.valid := true.B
-            redirect.correct_npc := head.target_npc
-            redirect.wrong_pc := head.pc
-          }
-
-          rob.commit.ready := true.B
-
-          dbg_valid := true.B
-          dbg_pc := head.pc
-          dbg_dnpc := Mux(mispredict, head.target_npc, head.pc + 4.U)
-          dbg_inst := head.inst
-          dbg_is_mmio := false.B
-        }
+    }.otherwise {
+      when(rd_def) {
+        rfu_w.en := true.B
+        rfu_w.data := head.rd.value
       }
-    }
 
-    is(CommitState.late_wait) {
-      lsu.late.req := true.B
-      when(lsu.late.done) {
-        when(rd_def) {
-          rfu_w.en := true.B
-          rfu_w.data := lsu.late.result
-        }
+      rat_commit.en := rd_def
 
-        rob.wb_commit.valid := rd_def
-        rob.wb_commit.bits.value := lsu.late.result
-        cdb.valid := rd_def
-        cdb.value := lsu.late.result
+      cdb.valid := rd_def && (head_is_mem || head_is_csr)
+      cdb.value := head.rd.value
 
-        rat_commit.en := rd_def
-        rob.commit.ready := true.B
-        state_q := CommitState.idle
-
-        dbg_valid := true.B
-        dbg_pc := head.pc
-        dbg_dnpc := head.pc + 4.U
-        dbg_inst := head.inst
-        dbg_is_mmio := head.mem.is_mmio
+      when(mispredict) {
+        flush := true.B
+        redirect.valid := true.B
+        redirect.correct_npc := head.target_npc
+        redirect.wrong_pc := head.pc
       }
+
+      rob.commit.ready := true.B
+
+      dbg_valid := true.B
+      dbg_pc := head.pc
+      dbg_dnpc := Mux(mispredict, head.target_npc, head.pc + 4.U)
+      dbg_inst := head.inst
+      dbg_is_mmio := head_is_mem && head.mem.is_mmio
     }
   }
 
