@@ -99,7 +99,7 @@ class Dispatcher extends NPCModule {
     )
   )
   enq.predict_npc := dec.predict_npc
-  enq.completed := !go_to_fu
+  enq.state := Mux(!go_to_fu, RobState.complete, RobState.inflight)
 
   // ============================================================
   // ALU Issue Queue

@@ -32,10 +32,10 @@ class CommitStage extends NPCModule {
     val xtvec = Input(UInt(dataBits.W)) // for `ecall`
   })
   val probe = IO(new DebugCommitBundle)
-  val rob = new Bundle {
+  val rob = IO(new Bundle {
     val commit = Flipped(Decoupled(new CommitBundle))
     val wb_commit = Valid(new WBCommitBundle) // for late exec unit
-  }
+  })
   val ifu = IO(new Bundle {
     val flush = Bool()
     val redirect = new RedirectBundle
@@ -55,7 +55,8 @@ class CommitStage extends NPCModule {
 
   // format: off
   val is_control = Seq(InstType.JAL, InstType.JALR, InstType.BRANCH)
-    .map(head.inst_type === _).reduce(_ || _)
+    .map(head.inst_type === _)
+    .reduce(_ || _)
   // format: on
   val mispredict = is_control && (head.target_npc =/= head.predict_npc)
 
@@ -63,7 +64,7 @@ class CommitStage extends NPCModule {
   object CommitState extends ChiselEnum {
     val idle, late_wait = Value
   }
-  val commitStateQ = RegInit(CommitState.idle)
+  val state_q = RegInit(CommitState.idle)
 
   // ---- Defaults ----
   val flush = WireDefault(false.B)
@@ -126,10 +127,10 @@ class CommitStage extends NPCModule {
   dbg_valid := false.B
 
   // ---- Commit state machine ----
-  switch(commitStateQ) {
+  switch(state_q) {
     is(CommitState.idle) {
       when(head_valid) {
-        when(head.except.valid) {
+        when(head.except.valid) { // except happen
           csr.except.xepc_wen := true.B
           csr.except.xcause_wen := true.B
           csr.except.xtval_wen := true.B
@@ -139,7 +140,7 @@ class CommitStage extends NPCModule {
           redirect.correct_npc := csr.xtvec
           redirect.wrong_pc := head.pc
 
-          rob.commit.ready := true.B
+          rob.commit.ready := true.B // rob could pop
 
           dbg_valid := true.B
           dbg_pc := head.pc
@@ -168,7 +169,7 @@ class CommitStage extends NPCModule {
             dbg_inst := head.inst
             dbg_is_mmio := head.mem.is_mmio
           }.otherwise {
-            commitStateQ := CommitState.late_wait
+            state_q := CommitState.late_wait
           }
 
         }.elsewhen(head_is_csr) {
@@ -251,7 +252,7 @@ class CommitStage extends NPCModule {
 
         rat_commit.en := rd_def
         rob.commit.ready := true.B
-        commitStateQ := CommitState.idle
+        state_q := CommitState.idle
 
         dbg_valid := true.B
         dbg_pc := head.pc

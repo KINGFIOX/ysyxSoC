@@ -30,6 +30,10 @@ class ExceptRobEntry extends NPCBundle {
   val mtval = UInt(dataBits.W)
 }
 
+object RobState extends ChiselEnum {
+  val inflight, late, complete = Value
+}
+
 class RobEntry extends NPCBundle {
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
@@ -42,7 +46,7 @@ class RobEntry extends NPCBundle {
   val is_ret = Bool()
   val target_npc = UInt(addrBits.W)
   val predict_npc = UInt(addrBits.W)
-  val completed = Bool()
+  val state = RobState()
 }
 
 class RobEnqData extends NPCBundle {
@@ -57,7 +61,7 @@ class RobEnqData extends NPCBundle {
   val is_ret = Bool()
   val target_npc = UInt(addrBits.W)
   val predict_npc = UInt(addrBits.W)
-  val completed = Bool()
+  val state = RobState()
 }
 
 class WBALUBundle extends NPCBundle {
@@ -142,12 +146,12 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     ent.rd.valid := io.alu.bits.rd_valid
     ent.target_npc := io.alu.bits.target_npc
     ent.csr.wdata := io.alu.bits.csr_wdata
-    ent.completed := true.B
+    ent.state := Mux(ent.inst_type === InstType.CSR, RobState.late, RobState.complete)
   }
   when(io.bru.valid && !io.flush) {
     val ent = ram(idx(io.bru.bits.tag))
     ent.target_npc := io.bru.bits.target_npc
-    ent.completed := true.B
+    ent.state := RobState.complete
   }
   when(io.agu.valid && !io.flush) {
     val ent = ram(idx(io.agu.bits.tag))
@@ -156,7 +160,7 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     ent.mem.addr_rdy := true.B
     ent.mem.wdata_rdy := true.B
     ent.mem.is_mmio := io.agu.bits.is_mmio
-    ent.completed := true.B
+    ent.state := RobState.late
   }
 
   when(io.wb_commit.valid && !io.flush) {
@@ -202,14 +206,14 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     ent.is_ret := enq.is_ret
     ent.target_npc := enq.target_npc
     ent.predict_npc := enq.predict_npc
-    ent.completed := enq.completed
+    ent.state := enq.state
   }
 
   // ============================================================
   // Commit
   // ============================================================
   val head_entry = ram(head_q)
-  io.commit.valid := !empty_w && head_entry.completed
+  io.commit.valid := !empty_w && head_entry.state =/= RobState.inflight
   io.commit.bits.tag := head_q.pad(robEntryBits)
   io.commit.bits.entry := head_entry
 

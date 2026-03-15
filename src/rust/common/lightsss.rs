@@ -15,6 +15,7 @@ struct SharedInfo {
     oldest_pid: AtomicI32,
 }
 
+/// wrapper of shared memory
 struct ForkShareMemory {
     info: *mut SharedInfo,
 }
@@ -84,8 +85,17 @@ pub enum ForkResult {
     Child { end_cycles: u64 },
 }
 
+/// because of the machanism about fork
+/// every process has an object of LightSSS, which is different from each other
+/// - `pid_slots` is not used by child, only be used by parent
+/// - `last_fork`:
+///   - for child, holding the timestamp of do_fork;
+///   - for parent, holding the timestamp of LightSSS::new()
+/// - `shm` is the shared memory between process, both parent and child
 pub struct LightSSS {
     shm: ForkShareMemory,
+    /// Queue holding the pid of child
+    /// not including the parent process
     pid_slots: VecDeque<i32>,
     is_child_process: bool,
     /// timestamp of the last fork
@@ -123,13 +133,17 @@ impl LightSSS {
             // parent
             self.pid_slots.push_front(pid);
             self.last_fork = Instant::now();
-            info!("[lightsss] forked checkpoint pid={pid}, slots={}", self.pid_slots.len());
+            info!(
+                "[lightsss] forked checkpoint pid={pid}, slots={}",
+                self.pid_slots.len()
+            );
             ForkResult::Ok
         } else {
             // child: P operation — blocks until parent V's
             self.is_child_process = true;
-            self.shm.shwait();
+            self.shm.shwait(); // dead loop
 
+            // only the oldest
             let my_pid = unsafe { libc::getpid() };
             assert!(self.shm.info().oldest_pid.load(Ordering::Acquire) == my_pid);
             let end_cycles = self.shm.info().end_cycles.load(Ordering::Acquire);
