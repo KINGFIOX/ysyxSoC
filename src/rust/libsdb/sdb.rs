@@ -7,11 +7,12 @@ use log::{error, info, warn};
 
 use rustyline::DefaultEditor;
 
+use crate::common::lightsss::{ForkResult, LightSSS};
 use crate::libcpu::abstract_cpu::AbstractCpu;
 use crate::libcpu::verilator::cpu::VerilatorCpu;
-use crate::libsdb::{command, expression};
 use crate::libsdb::scoreboard::{ScoreBoard, StepResult};
 use crate::libsdb::watchpoint::WatchpointPool;
+use crate::libsdb::{command, expression};
 
 struct SigIntGuard {
     flag: Arc<AtomicBool>,
@@ -118,20 +119,36 @@ pub struct Sdb<'a> {
     state: State,
     last_cmd: Option<String>,
     scoreboard: &'a mut ScoreBoard,
+    lightsss: Option<LightSSS>,
 }
 
 impl<'a> Sdb<'a> {
-    pub fn new(scoreboard: &'a mut ScoreBoard) -> Self {
+    pub fn new(scoreboard: &'a mut ScoreBoard, enable_fork: bool) -> Self {
+        let lightsss = if enable_fork {
+            info!("[lightsss] enabled");
+            Some(LightSSS::new())
+        } else {
+            None
+        };
         Self {
             breakpoints: Vec::new(),
             watchpoints: WatchpointPool::new(),
             state: State::Stop,
             last_cmd: None,
             scoreboard,
+            lightsss,
         }
     }
 
     pub fn mainloop(&mut self, dut: &mut VerilatorCpu, batch: bool) -> miette::Result<()> {
+        // generate a checkpoint at the start time
+        if let Some(ref mut lightsss) = self.lightsss {
+            match lightsss.do_fork() {
+                ForkResult::Ok => {} // parent
+                ForkResult::Child { end_cycles } => child_run_to_end(dut, end_cycles),
+            }
+        }
+
         if batch {
             self.execute_steps(usize::MAX, dut);
             match self.state {
@@ -201,9 +218,20 @@ impl<'a> Sdb<'a> {
                 self.state = State::Stop;
                 return;
             }
+
+            if let Some(ref mut lightsss) = self.lightsss {
+                if lightsss.should_fork() {
+                    match lightsss.do_fork() {
+                        ForkResult::Ok => {}
+                        ForkResult::Child { end_cycles } => child_run_to_end(dut, end_cycles),
+                    }
+                }
+            }
+
             if let Err(e) = dut.step() {
                 self.state = State::Abort;
                 error!("step error: {e}");
+                self.lightsss_on_error(dut);
                 return;
             }
             match self.scoreboard.scoreboard(dut) {
@@ -215,12 +243,14 @@ impl<'a> Sdb<'a> {
                     } else {
                         error!("program exited with failure (a0 = {a0:#x})");
                         self.state = State::Abort;
+                        self.lightsss_on_error(dut);
                     }
                     return;
                 }
                 StepResult::DifftestFail => {
                     self.state = State::Abort;
                     error!("difftest failed");
+                    self.lightsss_on_error(dut);
                     return;
                 }
             }
@@ -234,7 +264,16 @@ impl<'a> Sdb<'a> {
                 return;
             }
         }
-        self.state = State::Stop; // normal exit
+        self.state = State::Stop;
+    }
+
+    fn lightsss_on_error(&mut self, dut: &VerilatorCpu) {
+        if let Some(ref mut lightsss) = self.lightsss {
+            if !lightsss.is_child() {
+                // parent crashed,
+                lightsss.wakeup_child(dut.sim_time());
+            }
+        }
     }
 
     fn check_breakpoints(&self, dut: &VerilatorCpu) -> bool {
@@ -440,4 +479,16 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
         }
         Err(e) => error!("expression error: {e}"),
     }
+}
+
+fn child_run_to_end(dut: &mut VerilatorCpu, end_cycles: u64) {
+    dut.enable_wave();
+    info!(
+        "[lightsss] child dumping wave from {} to {end_cycles}...",
+        dut.sim_time()
+    );
+    dut.run_until(end_cycles);
+    dut.flush_wave();
+    info!("[lightsss] child wave dump finished, exiting");
+    std::process::exit(0);
 }

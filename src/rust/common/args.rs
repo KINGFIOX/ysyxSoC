@@ -16,6 +16,9 @@ pub struct MonitorArgs {
     #[arg(short, long, help = "write log to specified file")]
     pub log: Option<PathBuf>, /// TODO: temporarily not used
 
+    #[arg(long, help = "enable LightSSS fork-based waveform snapshot")]
+    pub enable_fork: bool,
+
     #[arg(short, long, help = "RISC-V image file path (.bin)")]
     pub image: PathBuf,
 }

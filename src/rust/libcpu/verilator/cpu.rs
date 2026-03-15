@@ -1,13 +1,15 @@
 use autocxx::c_void;
 
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
+
+use log::info;
 
 use crate::ffi::*;
 use crate::libcpu::abstract_cpu::AbstractCpu;
 use crate::libdpi::globals::Memory;
 
 const TOP_NAME: &CStr = c"TOP";
-const VCD_PATH: &CStr = c"build/npc_core.vcd";
+// const VCD_PATH: &CStr = c"build/npc_core.vcd";
 const RESET_CYCLES: usize = 15;
 const MAX_STEP_CYCLES: usize = 1_000_00;
 
@@ -21,7 +23,7 @@ pub struct VerilatorCpu {
 }
 
 impl VerilatorCpu {
-    pub fn new(flash_data: &[u8], wave: bool, nvboard: bool) -> Self {
+    pub fn new(flash_data: &[u8], nvboard: bool) -> Self {
         let mem = Memory::new(flash_data);
         mem.init_dpi();
 
@@ -29,20 +31,12 @@ impl VerilatorCpu {
         let top = unsafe { vnpcsoc_new(ctx, TOP_NAME.as_ptr()) };
 
         vl_trace_ever_on(true);
-        let tfp = if wave {
-            let tfp = vl_vcd_new();
-            unsafe { vnpcsoc_trace(top, tfp, autocxx::c_int(99)) };
-            unsafe { vl_vcd_open(tfp, VCD_PATH.as_ptr()) };
-            Some(tfp)
-        } else {
-            None
-        };
 
         if nvboard {
             unsafe { nvboard_bridge_init(top as *mut c_void, autocxx::c_int(1)) };
         }
 
-        let mut cpu = Self { ctx, top, tfp, sim_time: 0, nvboard, mem };
+        let mut cpu = Self { ctx, top, tfp: None, sim_time: 0, nvboard, mem };
         cpu.reset();
         cpu
     }
@@ -67,6 +61,43 @@ impl VerilatorCpu {
                 nvboard_bridge_update();
             }
         }
+    }
+}
+
+impl VerilatorCpu {
+    pub fn sim_time(&self) -> u64 {
+        self.sim_time
+    }
+
+    pub fn run_until(&mut self, target_sim_time: u64) {
+        while self.sim_time < target_sim_time {
+            self.tick();
+        }
+    }
+
+    pub fn flush_wave(&mut self) {
+        if let Some(tfp) = self.tfp.take() {
+            unsafe {
+                vl_vcd_flush(tfp);
+                vl_vcd_close(tfp);
+                vl_vcd_delete(tfp);
+            }
+        }
+    }
+
+    pub fn enable_wave(&mut self) {
+        if self.tfp.is_some() {
+            return;
+        }
+        let path = format!("build/lightsss_{}.vcd", self.sim_time);
+        info!("[lightsss] enabling VCD: {path}");
+        let c_path = CString::new(path).unwrap();
+        let tfp = vl_vcd_new();
+        unsafe {
+            vnpcsoc_trace(self.top, tfp, autocxx::c_int(99));
+            vl_vcd_open(tfp, c_path.as_ptr());
+        }
+        self.tfp = Some(tfp);
     }
 }
 
