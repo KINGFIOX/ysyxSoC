@@ -44,10 +44,12 @@ $(MESON_SOC_CONFIG): $(MESON_BDIR)/build.ninja
 
 SCALA_FILES := $(shell find src/scala -name "*.scala" ! -name "SoCConfig.scala" 2>/dev/null)
 
-V_SIM := $(BUILD_DIR)/NPCSoC.sv
+RTL_DIR    := $(BUILD_DIR)/rtl
+V_SIM      := $(RTL_DIR)/NPCSoC.sv
 
 $(V_SIM): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
-	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(@D)
+	@mkdir -p $(RTL_DIR)
+	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(RTL_DIR)
 
 verilog: $(V_SIM)
 
@@ -61,16 +63,16 @@ VERILATOR_MK   := $(VERILATOR_MDIR)/V$(VERILATOR_TOP).mk
 VERILATOR_LIB  := $(VERILATOR_MDIR)/V$(VERILATOR_TOP)__ALL.a
 
 VERILATOR_SRCS := $(V_SIM)
-VERILATOR_SRCS += $(shell find $(BUILD_DIR) -name "*.sv" 2>/dev/null)
+VERILATOR_SRCS += $(shell find $(RTL_DIR) -name "*.sv" 2>/dev/null)
 VERILATOR_PERIP_SRCS := $(shell find src/verilog -name "*.v" 2>/dev/null)
 VERILATOR_SRCS += $(VERILATOR_PERIP_SRCS)
 
 VERILATOR_INCS := -I$(NPC_HOME)/src/verilog/spi/rtl
 VERILATOR_INCS += -I$(NPC_HOME)/src/verilog/uart16550/rtl
-VERILATOR_INCS += -I$(BUILD_DIR)/verification
-VERILATOR_INCS += -I$(BUILD_DIR)/verification/assert
-VERILATOR_INCS += -I$(BUILD_DIR)/verification/assume
-VERILATOR_INCS += -I$(BUILD_DIR)/verification/cover
+VERILATOR_INCS += -I$(RTL_DIR)/verification
+VERILATOR_INCS += -I$(RTL_DIR)/verification/assert
+VERILATOR_INCS += -I$(RTL_DIR)/verification/assume
+VERILATOR_INCS += -I$(RTL_DIR)/verification/cover
 
 VERILATOR_DEFINES := $(if $(findstring true,$(DIFFTEST)),+define+CONFIG_DIFFTEST,)
 VERILATOR_DEFINES += $(if $(findstring true,$(VERILATOR_TRACE)),+define+CONFIG_VERILATOR_TRACE,)
