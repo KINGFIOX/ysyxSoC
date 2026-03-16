@@ -1,6 +1,4 @@
 use std::fmt::Write;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{error, info, warn};
 
@@ -12,30 +10,6 @@ use crate::libcpu::verilator::cpu::VerilatorCpu;
 use crate::libsdb::scoreboard::{ScoreBoard, StepResult};
 use crate::libsdb::watchpoint::WatchpointPool;
 use crate::libsdb::{command, expression};
-
-struct SigIntGuard {
-    flag: Arc<AtomicBool>,
-    sig_id: signal_hook::SigId,
-}
-
-impl SigIntGuard {
-    fn new() -> Self {
-        let flag = Arc::new(AtomicBool::new(false));
-        let sig_id = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&flag))
-            .expect("failed to register SIGINT handler");
-        Self { flag, sig_id }
-    }
-
-    fn interrupted(&self) -> bool {
-        self.flag.load(Ordering::Relaxed)
-    }
-}
-
-impl Drop for SigIntGuard {
-    fn drop(&mut self) {
-        signal_hook::low_level::unregister(self.sig_id);
-    }
-}
 
 const GPR_NAMES: &[&str] = &[
     "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
@@ -204,13 +178,8 @@ impl<'a> Sdb<'a> {
     }
 
     fn execute_steps(&mut self, n: usize, dut: &mut VerilatorCpu) -> CmdResult {
-        let guard = SigIntGuard::new();
 
         for _ in 0..n {
-            if guard.interrupted() {
-                return Ok(Action::Continue);
-            }
-
             if let Some(ref mut lightsss) = self.lightsss {
                 if lightsss.should_fork() {
                     match lightsss.do_fork() {
