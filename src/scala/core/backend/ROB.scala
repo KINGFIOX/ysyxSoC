@@ -112,10 +112,8 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     val alu = Flipped(Valid(new WBALUBundle))
     val agu = Flipped(Valid(new WBAGUBundle))
     val bru = Flipped(Valid(new WBBRUBundle))
-    val lsu_late = new LateExecIO
-    val lsu_ctrl = new MemLsuInput
-    val csr_late = new LateExecIO
-    val csr_wo = new CsrWriteOnlyPort
+    val lsu = new LateExecIO(new MemLsuInput)
+    val csr = new LateExecIO(new CsrWriteOnlyPort)
     val lookup = Vec(numLookupPorts, Flipped(new LookupBundle))
     val commit = Decoupled(new CommitBundle)
     val forward = Vec(numFwdPorts, Flipped(new RobFwdBundle))
@@ -209,32 +207,34 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   val head_is_mem = head_entry.mem.r_en || head_entry.mem.w_en
   val head_is_csr = head_entry.inst_type === InstType.CSR
 
-  io.lsu_ctrl.addr := head_entry.mem.addr
-  io.lsu_ctrl.size := head_entry.mem.size
-  io.lsu_ctrl.sign_ext := head_entry.mem.sign_ext
-  io.lsu_ctrl.r_en := head_entry.mem.r_en
-  io.lsu_ctrl.w_en := head_entry.mem.w_en
-  io.lsu_ctrl.wdata := head_entry.mem.wdata
-  io.lsu_ctrl.is_mmio := head_entry.mem.is_mmio
+  io.lsu.extra.addr := head_entry.mem.addr
+  io.lsu.extra.size := head_entry.mem.size
+  io.lsu.extra.sign_ext := head_entry.mem.sign_ext
+  io.lsu.extra.r_en := head_entry.mem.r_en
+  io.lsu.extra.w_en := head_entry.mem.w_en
+  io.lsu.extra.wdata := head_entry.mem.wdata
+  io.lsu.extra.is_mmio := head_entry.mem.is_mmio
 
-  io.csr_wo.addr := head_entry.csr.addr
-  io.csr_wo.op := head_entry.csr.op
-  io.csr_wo.wdata := head_entry.csr.wdata
+  io.csr.extra.addr := head_entry.csr.addr
+  io.csr.extra.op := head_entry.csr.op
+  io.csr.extra.wdata := head_entry.csr.wdata
 
-  io.lsu_late.req := head_is_late && head_is_mem && !io.flush
-  io.csr_late.req := head_is_late && head_is_csr && !io.flush
-  io.csr_wo.wen := head_is_late && head_is_csr && !io.flush
+  io.lsu.req := head_is_late && head_is_mem && !io.flush
+  io.csr.req := head_is_late && head_is_csr && !io.flush
+  io.csr.extra.wen := head_is_late && head_is_csr && !io.flush
 
-  when(head_is_late && head_is_mem && io.lsu_late.done && !io.flush) {
-    when(io.lsu_late.result_valid) {
-      head_entry.rd.value := io.lsu_late.result
+  when(head_is_late && head_is_mem && io.lsu.done && !io.flush) {
+    when(io.lsu.result_valid) {
+      head_entry.rd.value := io.lsu.result
       head_entry.rd.valid := true.B
     }
     head_entry.state := RobState.complete
   }
-  when(head_is_late && head_is_csr && io.csr_late.done && !io.flush) {
-    head_entry.rd.value := io.csr_late.result
-    head_entry.rd.valid := true.B
+  when(head_is_late && head_is_csr && io.csr.done && !io.flush) {
+    when(io.csr.result_valid) {
+      head_entry.rd.value := io.csr.result
+      head_entry.rd.valid := true.B
+    }
     head_entry.state := RobState.complete
   }
 
@@ -281,4 +281,18 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
       tail_q := tail_q + 1.U
     }
   }
+}
+
+// from the master's point-of-view
+// req-done handshake
+class LateExecIO[T <: Data](gen: => T) extends NPCBundle {
+  val req = Output(Bool())
+  val done = Input(Bool())
+  val result = Input(UInt(dataBits.W))
+  val result_valid = Input(Bool()) // for rob entry's rd valid
+  val extra = gen
+}
+
+abstract class LateExecUnit[T <: Data](gen: => T) extends NPCModule {
+  val late = IO(Flipped(new LateExecIO(gen)))
 }

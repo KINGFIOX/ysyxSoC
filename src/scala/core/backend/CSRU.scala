@@ -7,9 +7,12 @@ import ysyx.core.common._
 
 // from the master's point-of-view
 class CsrExceptWritePort extends Bundle with HasCoreParameter {
-  val xepc = UInt(dataBits.W); val xepc_wen = Bool()
-  val xcause = UInt(dataBits.W); val xcause_wen = Bool()
-  val xtval = UInt(dataBits.W); val xtval_wen = Bool()
+  val xepc = UInt(dataBits.W)
+  val xepc_wen = Bool()
+  val xcause = UInt(dataBits.W)
+  val xcause_wen = Bool()
+  val xtval = UInt(dataBits.W)
+  val xtval_wen = Bool()
 }
 
 class CsrWriteOnlyPort extends CsrRobEntry {
@@ -20,83 +23,78 @@ class CsrReadWritePort extends CsrWriteOnlyPort {
   val rdata = Input(UInt(dataBits.W))
 }
 
-class CSRUDebugBundle extends Bundle with HasCoreParameter with HasCSRParameter {
-  val mstatus   = UInt(dataBits.W)
-  val mtvec     = UInt(dataBits.W)
-  val mepc      = UInt(dataBits.W)
-  val mcause    = UInt(dataBits.W)
-  val mtval     = UInt(dataBits.W)
+class CSRUDebugBundle
+    extends Bundle
+    with HasCoreParameter
+    with HasCSRParameter {
+  val mstatus = UInt(dataBits.W)
+  val mtvec = UInt(dataBits.W)
+  val mepc = UInt(dataBits.W)
+  val mcause = UInt(dataBits.W)
+  val mtval = UInt(dataBits.W)
   val mvendorid = UInt(dataBits.W)
-  val marchid   = UInt(dataBits.W)
+  val marchid = UInt(dataBits.W)
 }
 
-class CSRU extends Module with HasCoreParameter with HasCSRParameter {
-  val io = IO(new Bundle {
-    val late = Flipped(new LateExecIO)
-    val rw = Flipped(new CsrReadWritePort)
-    val commit = Flipped(new CsrExceptWritePort)
-    val xepc  = Output(UInt(dataBits.W))
-    val xtvec = Output(UInt(dataBits.W))
-    val probe = Output(new CSRUDebugBundle)
-  })
+class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
+  val probe = IO(new CSRUDebugBundle)
+  val except = IO(Flipped(new CsrExceptWritePort)) // for exception
+  val xepc = IO(UInt(dataBits.W)) // for `mret`
+  val xtvec = IO(UInt(dataBits.W)) // for `ecall`
 
-  io.late.done         := io.late.req
-  io.late.result       := 0.U
-  io.late.result_valid := true.B
+  late.done := late.req
+  late.result := 0.U
+  late.result_valid := true.B
 
-  // ==================== CSR 寄存器定义 ====================
   // readable && writable register
-  val mstatus = RegInit(0x1800.U(dataBits.W)) // TODO: 写入时某些位无效果
-  val mtvec   = RegInit(0.U(dataBits.W))
-  val mepc    = RegInit(0.U(dataBits.W))
-  val mcause  = RegInit(0.U(dataBits.W))
-  val mtval   = RegInit(0.U(dataBits.W))
+  val mstatus = RegInit(0x1800.U(dataBits.W)) // TODO: write any, read legal
+  val mtvec = RegInit(0.U(dataBits.W))
+  val mepc = RegInit(0.U(dataBits.W))
+  val mcause = RegInit(0.U(dataBits.W))
+  val mtval = RegInit(0.U(dataBits.W))
 
-  // 只读寄存器
-  private val mvendorid = 0x79737978.U(dataBits.W) // "ysyx" in ASCII
-  private val marchid   = 26010003.U(dataBits.W)
+  // read only register
+  val mvendorid = 0x7973_7978.U(dataBits.W) // "ysyx" in ASCII
+  val marchid = 26010003.U(dataBits.W)
 
-  // ==================== commit ====================
-  when(io.commit.xcause_wen) { mcause := io.commit.xcause }
-  when(io.commit.xepc_wen) { mepc := io.commit.xepc }
-  when(io.commit.xtval_wen) { mtval := io.commit.xtval }
+  when(except.xcause_wen) { mcause := except.xcause }
+  when(except.xepc_wen) { mepc := except.xepc }
+  when(except.xtval_wen) { mtval := except.xtval }
 
-  // ==================== commit ====================
-  io.xepc := mepc
-  io.xtvec := mtvec
+  xepc := mepc
+  xtvec := mtvec
 
-  // ==================== 读取映射表 ====================
-  private val csrReadMap = Seq(
+  // map of csr
+  private val csr_map = Seq(
     (MSTATUS.U, mstatus),
     (MTVEC.U, mtvec),
     (MEPC.U, mepc),
     (MCAUSE.U, mcause),
     (MTVAL.U, mtval),
     (MVENDORID.U, mvendorid), // mvendorid 地址
-    (MARCHID.U, marchid)      // marchid 地址
+    (MARCHID.U, marchid) // marchid 地址
   )
 
-  // ==================== 读取 CSR() ====================
-  private val csrRdata = MuxLookup(io.rw.addr, 0.U)(csrReadMap)
-  io.rw.rdata := csrRdata
-  io.late.result := csrRdata
+  // read
+  val csr_read = MuxLookup(late.extra.addr, 0.U)(csr_map)
+  late.result := csr_read
 
-  // ==================== 计算写入数据(wdata, waddr, wen) ====================
+  // calculate results
   // CSRRW: wdata = rs1
   // CSRRS: wdata = csr | rs1
   private val csrWdata = MuxCase(
-    io.rw.wdata,
+    late.extra.wdata,
     Seq(
-      (io.rw.op === CSROpType.CSR_RW) -> io.rw.wdata,
-      (io.rw.op === CSROpType.CSR_RS) -> (csrRdata | io.rw.wdata)
+      (late.extra.op === CSROpType.CSR_RW) -> late.extra.wdata,
+      (late.extra.op === CSROpType.CSR_RS) -> (csr_read | late.extra.wdata)
     )
   )
-  when(io.rw.wen) {
-    when(io.rw.addr === MSTATUS.U) { mstatus := csrWdata }
-    when(io.rw.addr === MTVEC.U) { mtvec := csrWdata }
-    when(io.rw.addr === MEPC.U) { mepc := csrWdata }
-    when(io.rw.addr === MCAUSE.U) { mcause := csrWdata }
-    when(io.rw.addr === MTVAL.U) { mtval := csrWdata }
+  when(late.extra.wen) {
+    when(late.extra.addr === MSTATUS.U) { mstatus := csrWdata }
+    when(late.extra.addr === MTVEC.U) { mtvec := csrWdata }
+    when(late.extra.addr === MEPC.U) { mepc := csrWdata }
+    when(late.extra.addr === MCAUSE.U) { mcause := csrWdata }
+    when(late.extra.addr === MTVAL.U) { mtval := csrWdata }
   }
 
   // probe
@@ -108,5 +106,5 @@ class CSRU extends Module with HasCoreParameter with HasCSRParameter {
   csrDebugBundle.mtval := mtval
   csrDebugBundle.mvendorid := mvendorid
   csrDebugBundle.marchid := marchid
-  io.probe := csrDebugBundle
+  probe := csrDebugBundle
 }

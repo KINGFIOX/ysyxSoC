@@ -129,10 +129,3 @@ abstract class ExecUnit[I <: Data, O <: Data](inGen: I, outGen: O)
     val out = Decoupled(outGen)
   })
 }
-
-class LateExecIO extends NPCBundle {
-  val req = Output(Bool())
-  val done = Input(Bool())
-  val result = Input(UInt(dataBits.W))
-  val result_valid = Input(Bool())
-}

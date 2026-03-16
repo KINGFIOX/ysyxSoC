@@ -180,11 +180,9 @@ class MemLsuInput extends MemInfoBundle {
   val is_mmio = Bool()
 }
 
-class LSU extends NPCModule {
+class LSU extends LateExecUnit(new MemLsuInput) {
   val dcache = IO(AXI4Bundle(axiParams))
   val perip = IO(AXI4Bundle(axiParams))
-  val ctrl = IO(Flipped(new MemLsuInput))
-  val late = IO(Flipped(new LateExecIO))
 
   // ==========================================================
   // dcache channel — LU + SU
@@ -213,6 +211,8 @@ class LSU extends NPCModule {
   // ==========================================================
   // Common: store wstrb / wdata formatting (4B aligned for both channels)
   // ==========================================================
+  val ctrl = late.extra
+
   val aligned_addr = Cat(ctrl.addr(addrBits - 1, 2), 0.U(2.W))
 
   val store_wstrb = MuxLookup(ctrl.size, "b1111".U)(

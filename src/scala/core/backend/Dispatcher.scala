@@ -104,6 +104,8 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // ALU Issue Queue
   // ============================================================
+  // for the reason that rob is unable to wait for rs1, rs2
+  // so the instruction waitting for sources should be dispatched to the ALU's issuse queue
   io.disp_alu.bits.src(0) := in.src(0)
   val alu_imm_src = Wire(new IQSrcBundle)
   alu_imm_src.value := Mux(is_csr, 0.U, dec.imm)

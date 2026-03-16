@@ -16,27 +16,23 @@ class DebugCommitBundle extends NPCBundle {
 
 class CommitStage extends NPCModule {
   val rfu_w = IO(new RFUWritePort)
-  val rat_commit = IO(new RATCommitPort)
+  val rat = IO(new RATCommitPort)
   val csr = IO(new Bundle {
     val except = new CsrExceptWritePort
     val xepc = Input(UInt(dataBits.W))
     val xtvec = Input(UInt(dataBits.W))
   })
   val probe = IO(new DebugCommitBundle)
-  val rob = IO(new Bundle {
-    val commit = Flipped(Decoupled(new CommitBundle))
-  })
-  val ifu = IO(new Bundle {
-    val flush = Bool()
-    val redirect = new RedirectBundle
-  })
+  val rob = IO(Flipped(Decoupled(new CommitBundle)))
+  val flush = IO(Bool())
+  val ifu = IO(new RedirectBundle)
   val cdb = IO(new CDBBundle)
   val fence_i = IO(Bool())
 
   // ---- Head entry aliases ----
-  val head = rob.commit.bits.entry
-  val head_tag = rob.commit.bits.tag
-  val head_valid = rob.commit.valid
+  val head = rob.bits.entry
+  val head_tag = rob.bits.tag
+  val head_valid = rob.valid
 
   val rd_def = head.rd.idx =/= 0.U
   val head_is_mem = head.mem.r_en || head.mem.w_en
@@ -51,28 +47,24 @@ class CommitStage extends NPCModule {
   val mispredict = is_control && (head.target_npc =/= head.predict_npc)
 
   // ---- Defaults ----
-  val flush = WireDefault(false.B)
-  val redirect = Wire(new RedirectBundle)
-  redirect.valid := false.B
-  redirect.correct_npc := 0.U
-  redirect.wrong_pc := 0.U
-
-  ifu.flush := flush
-  ifu.redirect := redirect
+  flush := false.B
+  ifu.valid := false.B
+  ifu.correct_npc := 0.U
+  ifu.wrong_pc := 0.U
 
   cdb.valid := false.B
   cdb.tag := head_tag
   cdb.value := 0.U
 
-  rob.commit.ready := false.B
+  rob.ready := false.B
 
   rfu_w.en := false.B
   rfu_w.addr := head.rd.idx
   rfu_w.data := head.rd.value
 
-  rat_commit.en := false.B
-  rat_commit.addr := head.rd.idx
-  rat_commit.tag := head_tag
+  rat.en := false.B
+  rat.addr := head.rd.idx
+  rat.tag := head_tag
 
   csr.except.xepc := head.pc
   csr.except.xepc_wen := false.B
@@ -98,11 +90,11 @@ class CommitStage extends NPCModule {
       csr.except.xtval_wen := true.B
 
       flush := true.B
-      redirect.valid := true.B
-      redirect.correct_npc := csr.xtvec
-      redirect.wrong_pc := head.pc
+      ifu.valid := true.B
+      ifu.correct_npc := csr.xtvec
+      ifu.wrong_pc := head.pc
 
-      rob.commit.ready := true.B
+      rob.ready := true.B
 
       dbg_valid := true.B
       dbg_pc := head.pc
@@ -112,11 +104,11 @@ class CommitStage extends NPCModule {
 
     }.elsewhen(head_is_mret) {
       flush := true.B
-      redirect.valid := true.B
-      redirect.correct_npc := csr.xepc
-      redirect.wrong_pc := head.pc
+      ifu.valid := true.B
+      ifu.correct_npc := csr.xepc
+      ifu.wrong_pc := head.pc
 
-      rob.commit.ready := true.B
+      rob.ready := true.B
 
       dbg_valid := true.B
       dbg_pc := head.pc
@@ -130,19 +122,19 @@ class CommitStage extends NPCModule {
         rfu_w.data := head.rd.value
       }
 
-      rat_commit.en := rd_def
+      rat.en := rd_def
 
       cdb.valid := rd_def && (head_is_mem || head_is_csr)
       cdb.value := head.rd.value
 
       when(mispredict) {
         flush := true.B
-        redirect.valid := true.B
-        redirect.correct_npc := head.target_npc
-        redirect.wrong_pc := head.pc
+        ifu.valid := true.B
+        ifu.correct_npc := head.target_npc
+        ifu.wrong_pc := head.pc
       }
 
-      rob.commit.ready := true.B
+      rob.ready := true.B
 
       dbg_valid := true.B
       dbg_pc := head.pc

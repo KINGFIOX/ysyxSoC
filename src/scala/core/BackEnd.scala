@@ -45,6 +45,7 @@ class BackEnd extends NPCModule {
   val agu_iq_ = Module(new AGUIssueQueue)
   val lsu_ = Module(new LSU)
   val csru_ = Module(new CSRU)
+  val commitStage_ = Module(new CommitStage)
 
   // ==========================================================
   // AXI — dcache + perip pass-through to LSU
@@ -55,14 +56,10 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Flush / redirect wiring
   // ==========================================================
-  val flush = WireDefault(false.B)
-  val redirect = Wire(new RedirectBundle)
-  redirect.valid := false.B
-  redirect.correct_npc := 0.U
-  redirect.wrong_pc := 0.U
+  val flush = commitStage_.flush
 
   io.flush := flush
-  io.redirect := redirect
+  io.redirect := commitStage_.ifu
 
   rob_.io.flush := flush
   rat_.io.flush := flush
@@ -201,34 +198,24 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Stage 5 — Commit (CommitStage module)
   // ==========================================================
-  val commitStage_ = Module(new CommitStage)
 
   // --- ROB commit ---
-  commitStage_.rob.commit <> rob_.io.commit
+  commitStage_.rob <> rob_.io.commit
 
   // --- LSU late execution (driven by ROB) ---
-  lsu_.late <> rob_.io.lsu_late
-  lsu_.ctrl <> rob_.io.lsu_ctrl
+  lsu_.late <> rob_.io.lsu
 
   // --- CSR late execution (driven by ROB) ---
-  csru_.io.late <> rob_.io.csr_late
-  csru_.io.rw.addr := rob_.io.csr_wo.addr
-  csru_.io.rw.op := rob_.io.csr_wo.op
-  csru_.io.rw.wen := rob_.io.csr_wo.wen
-  csru_.io.rw.wdata := rob_.io.csr_wo.wdata
+  csru_.late <> rob_.io.csr
 
   // --- CSR exception (driven by CommitStage) ---
-  csru_.io.commit := commitStage_.csr.except
-  commitStage_.csr.xepc := csru_.io.xepc
-  commitStage_.csr.xtvec := csru_.io.xtvec
+  csru_.except := commitStage_.csr.except
+  commitStage_.csr.xepc := csru_.xepc
+  commitStage_.csr.xtvec := csru_.xtvec
 
   // --- RFU writeback ---
   rfu_.io.write <> commitStage_.rfu_w
-  rat_.io.commit <> commitStage_.rat_commit
-
-  // --- IFU flush + redirect ---
-  flush := commitStage_.ifu.flush
-  redirect := commitStage_.ifu.redirect
+  rat_.io.commit <> commitStage_.rat
 
   // --- CDB2 ---
   cdb2 := commitStage_.cdb
@@ -245,7 +232,7 @@ class BackEnd extends NPCModule {
   dbg.dnpc := commitStage_.probe.dnpc
   dbg.inst := commitStage_.probe.inst
   dbg.isMMIO := commitStage_.probe.is_mmio
-  dbg.gpr := rfu_.io.probe
-  dbg.csr := csru_.io.probe
+  dbg.gpr := rfu_.probe
+  dbg.csr := csru_.probe
   probe := dbg
 }
