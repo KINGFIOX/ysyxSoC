@@ -12,6 +12,7 @@ class DebugCommitBundle extends NPCBundle {
   val dnpc = UInt(dataBits.W)
   val inst = UInt(instBits.W)
   val is_mmio = Bool()
+  // val has_except = Bool()
 }
 
 class CommitStage extends NPCModule {

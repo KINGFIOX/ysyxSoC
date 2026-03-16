@@ -96,7 +96,7 @@ impl VerilatorCpu {
 
 impl VerilatorCpu {
     pub fn is_mmio(&self) -> bool {
-        unsafe { vnpcsoc_get_debug_isMMIO(self.top) != 0 }
+        unsafe { vnpcsoc_get_debug_is_mmio(self.top) != 0 }
     }
 
     pub fn dnpc(&self) -> u32 {

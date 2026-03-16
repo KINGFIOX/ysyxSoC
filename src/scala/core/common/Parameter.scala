@@ -58,11 +58,12 @@ abstract class NPCModule
 
 // format: off
 object AddressMap {
-  def isMMIO(addr: UInt): Bool = {
+  def is_mmio(addr: UInt): Bool = {
     val inSRAM = addr >= SoCConfig.sramBase.U && addr < (SoCConfig.sramBase + SoCConfig.sramSize).U
     val inSDRAM = addr >= SoCConfig.sdramBase.U && addr < (SoCConfig.sdramBase + SoCConfig.sdramSize).U
     val inMROM = addr >= SoCConfig.mromBase.U && addr < (SoCConfig.mromBase + SoCConfig.mromSize).U
-    !(inSRAM || inSDRAM || inMROM)
+    val inFlash = addr >= SoCConfig.xipFlashBase.U && addr < (SoCConfig.xipFlashBase + SoCConfig.xipFlashSize).U
+    !(inSRAM || inSDRAM || inMROM || inFlash)
   }
 }
 // format: on

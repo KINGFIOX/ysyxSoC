@@ -1,5 +1,4 @@
 use std::fmt::Write;
-use std::panic;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -44,10 +43,22 @@ const GPR_NAMES: &[&str] = &[
     "t6",
 ];
 
+enum Action {
+    Continue,
+    Quit,
+}
+
+enum SdbError {
+    Input(String),
+    Fatal(miette::Error),
+}
+
+type CmdResult = Result<Action, SdbError>;
+
 struct CommandDef {
     names: &'static [&'static str],
     help: &'static str,
-    func: fn(&str, &mut Sdb, &mut VerilatorCpu),
+    func: fn(&str, &mut Sdb, &mut VerilatorCpu) -> CmdResult,
 }
 
 const COMMANDS: &[CommandDef] = &[
@@ -103,20 +114,10 @@ const COMMANDS: &[CommandDef] = &[
     },
 ];
 
-#[derive(PartialEq)]
-enum State {
-    Stop,
-    Running,
-    Quit,
-    #[allow(unused)]
-    Abort,
-}
-
 #[allow(unused)]
 pub struct Sdb<'a> {
     breakpoints: Vec<u32>,
     watchpoints: WatchpointPool,
-    state: State,
     last_cmd: Option<String>,
     scoreboard: &'a mut ScoreBoard,
     lightsss: Option<LightSSS>,
@@ -133,7 +134,6 @@ impl<'a> Sdb<'a> {
         Self {
             breakpoints: Vec::new(),
             watchpoints: WatchpointPool::new(),
-            state: State::Stop,
             last_cmd: None,
             scoreboard,
             lightsss,
@@ -144,37 +144,29 @@ impl<'a> Sdb<'a> {
         // generate a checkpoint at the start time
         if let Some(ref mut lightsss) = self.lightsss {
             match lightsss.do_fork() {
-                ForkResult::Ok => {} // parent
+                ForkResult::Ok => {}
                 ForkResult::Child { end_cycles } => child_run_to_end(dut, end_cycles),
             }
         }
 
         if batch {
-            self.execute_steps(usize::MAX, dut);
-            match self.state {
-                State::Stop => { /*do nothing*/ }
-                State::Running => panic!("impossible"),
-                State::Quit => return Ok(()),
-                State::Abort => return Err(miette::Error::msg("abort")),
+            match self.execute_steps(usize::MAX, dut) {
+                Ok(Action::Continue) => {}
+                Ok(Action::Quit) => return Ok(()),
+                Err(SdbError::Input(_)) => unreachable!(),
+                Err(SdbError::Fatal(e)) => return Err(e),
             }
         }
 
         let mut rl = DefaultEditor::new().expect("failed to create readline editor");
 
         loop {
-            // check state after executing a line
-            match self.state {
-                State::Stop => { /*continue*/ }
-                State::Running => panic!("impossible to be in running state"),
-                State::Quit => return Ok(()),
-                State::Abort => return Err(miette::Error::msg("abort")),
-            }
             match rl.readline("(sdb) ") {
                 Ok(line) => {
                     let line = line.trim().to_string();
                     let input = if line.is_empty() {
                         match &self.last_cmd {
-                            Some(prev) => prev.clone(), // last command
+                            Some(prev) => prev.clone(),
                             None => continue,
                         }
                     } else {
@@ -182,11 +174,14 @@ impl<'a> Sdb<'a> {
                         self.last_cmd = Some(line.clone());
                         line
                     };
-                    self.execute_line(&input, dut); // this will change the state of the Sdb
+                    match self.execute_line(&input, dut) {
+                        Ok(Action::Continue) => {}
+                        Ok(Action::Quit) => return Ok(()),
+                        Err(SdbError::Input(msg)) => warn!("{msg}"),
+                        Err(SdbError::Fatal(e)) => return Err(e),
+                    }
                 }
-                Err(rustyline::error::ReadlineError::Eof) => {
-                    self.state = State::Quit;
-                }
+                Err(rustyline::error::ReadlineError::Eof) => return Ok(()),
                 Err(e) => {
                     error!("readline error: {e}");
                 }
@@ -194,29 +189,26 @@ impl<'a> Sdb<'a> {
         }
     }
 
-    fn execute_line(&mut self, input: &str, dut: &mut VerilatorCpu) {
+    fn execute_line(&mut self, input: &str, dut: &mut VerilatorCpu) -> CmdResult {
         let Some(cmd) = command::parse(input) else {
-            return;
+            return Ok(Action::Continue);
         };
 
         for def in COMMANDS {
             if def.names.contains(&cmd.name.as_str()) {
-                (def.func)(&cmd.args, self, dut); // this will change the state of the Sdb
-                return;
+                return (def.func)(&cmd.args, self, dut);
             }
         }
 
-        warn!("unknown command: {}", cmd.name);
+        Err(SdbError::Input(format!("unknown command: {}", cmd.name)))
     }
 
-    fn execute_steps(&mut self, n: usize, dut: &mut VerilatorCpu) {
-        self.state = State::Running;
+    fn execute_steps(&mut self, n: usize, dut: &mut VerilatorCpu) -> CmdResult {
         let guard = SigIntGuard::new();
 
         for _ in 0..n {
             if guard.interrupted() {
-                self.state = State::Stop;
-                return;
+                return Ok(Action::Continue);
             }
 
             if let Some(ref mut lightsss) = self.lightsss {
@@ -228,46 +220,36 @@ impl<'a> Sdb<'a> {
                 }
             }
 
-            if let Err(e) = dut.step() {
-                self.state = State::Abort;
-                error!("step error: {e}");
-                self.lightsss_on_error(dut);
-                return;
-            }
+            dut.step().map_err(|e| SdbError::Fatal(e))?;
+
             match self.scoreboard.scoreboard(dut) {
                 StepResult::Continue => {}
                 StepResult::EBreak(a0) => {
                     if a0 == 0 {
                         info!("program exited successfully");
-                        self.state = State::Quit;
+                        return Ok(Action::Quit);
                     } else {
-                        error!("program exited with failure (a0 = {a0:#x})");
-                        self.state = State::Abort;
-                        self.lightsss_on_error(dut);
+                        return Err(SdbError::Fatal(miette::miette!(
+                            "program exited with failure (a0 = {a0:#x})"
+                        )));
                     }
-                    return;
                 }
                 StepResult::DifftestFail => {
-                    self.state = State::Abort;
-                    error!("difftest failed");
-                    self.lightsss_on_error(dut);
-                    return;
+                    return Err(SdbError::Fatal(miette::miette!("difftest failed")));
                 }
             }
             if self.check_breakpoints(dut) {
-                self.state = State::Stop;
-                return;
+                return Ok(Action::Continue);
             }
             let mut buf = String::new();
             if self.watchpoints.check(dut, &mut buf) {
-                self.state = State::Stop;
-                return;
+                return Ok(Action::Continue);
             }
         }
-        self.state = State::Stop;
+        Ok(Action::Continue)
     }
 
-    fn lightsss_on_error(&mut self, dut: &VerilatorCpu) {
+    pub fn lightsss_on_error(&mut self, dut: &VerilatorCpu) {
         if let Some(ref mut lightsss) = self.lightsss {
             if !lightsss.is_child() {
                 // parent crashed,
@@ -276,6 +258,7 @@ impl<'a> Sdb<'a> {
         }
     }
 
+    /// @return: hit a breakpoint -> true
     fn check_breakpoints(&self, dut: &VerilatorCpu) -> bool {
         let pc = dut.pc();
         for &bp in &self.breakpoints {
@@ -288,41 +271,36 @@ impl<'a> Sdb<'a> {
     }
 }
 
-fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
+fn cmd_help(_args: &str, _sdb: &mut Sdb, _cpu: &mut VerilatorCpu) -> CmdResult {
     let mut buf = String::from("Commands:\n");
     for def in COMMANDS {
         let names = def.names.join(", ");
         let _ = writeln!(buf, "  {names:20} {}", def.help);
     }
     info!("{buf}");
+    Ok(Action::Continue)
 }
 
-fn cmd_quit(_args: &str, sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
-    sdb.state = State::Quit;
+fn cmd_quit(_args: &str, _sdb: &mut Sdb, _cpu: &mut VerilatorCpu) -> CmdResult {
+    Ok(Action::Quit)
 }
 
-fn cmd_continue(_args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
-    sdb.execute_steps(usize::MAX, dut); // this will change the state of the Sdb
-    assert!(sdb.state != State::Running)
+fn cmd_continue(_args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
+    sdb.execute_steps(usize::MAX, dut)
 }
 
-fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
+fn cmd_step(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     let n: usize = if args.is_empty() {
         1
     } else {
-        match args.trim().parse() {
-            Ok(v) => v,
-            Err(_) => {
-                warn!("usage: step [N]");
-                return;
-            }
-        }
+        args.trim()
+            .parse()
+            .map_err(|_| SdbError::Input("usage: step [N]".into()))?
     };
-    sdb.execute_steps(n, dut);
-    assert!(sdb.state != State::Running)
+    sdb.execute_steps(n, dut)
 }
 
-fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
+fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     let sub = args.trim();
     match sub {
         "r" | "registers" | "reg" => {
@@ -351,30 +329,22 @@ fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
                 info!("{buf}");
             }
         }
-        _ => warn!("usage: info r|w|b"),
+        _ => return Err(SdbError::Input("usage: info r|w|b".into())),
     }
+    Ok(Action::Continue)
 }
 
-fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
+fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     let parts: Vec<&str> = args.splitn(2, char::is_whitespace).collect();
     if parts.len() < 2 {
-        warn!("usage: x N EXPR");
-        return;
+        return Err(SdbError::Input("usage: x N EXPR".into()));
     }
-    let n: usize = match parts[0].trim().parse() {
-        Ok(v) => v,
-        Err(_) => {
-            warn!("bad count: {}", parts[0]);
-            return;
-        }
-    };
-    let addr = match expression::eval(parts[1].trim(), dut) {
-        Ok(v) => v,
-        Err(e) => {
-            error!("expression error: {e}");
-            return;
-        }
-    };
+    let n: usize = parts[0]
+        .trim()
+        .parse()
+        .map_err(|_| SdbError::Input(format!("bad count: {}", parts[0])))?;
+    let addr = expression::eval(parts[1].trim(), dut)
+        .map_err(|e| SdbError::Input(format!("expression error: {e}")))?;
 
     let mut buf = String::new();
     for i in 0..n {
@@ -395,51 +365,49 @@ fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
         }
     }
     info!("{buf}");
+    Ok(Action::Continue)
 }
 
-fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) {
+fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     if args.trim().is_empty() {
-        warn!("usage: p EXPR");
-        return;
+        return Err(SdbError::Input("usage: p EXPR".into()));
     }
-    match expression::eval(args.trim(), dut) {
-        Ok(val) => info!("{val:#010x} ({val})"),
-        Err(e) => error!("expression error: {e}"),
-    }
+    let val = expression::eval(args.trim(), dut)
+        .map_err(|e| SdbError::Input(format!("expression error: {e}")))?;
+    info!("{val:#010x} ({val})");
+    Ok(Action::Continue)
 }
 
-fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
+fn cmd_watch(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     let expr = args.trim();
     if expr.is_empty() {
-        warn!("usage: w EXPR");
-        return;
+        return Err(SdbError::Input("usage: w EXPR".into()));
     }
-    match sdb.watchpoints.add(expr, dut) {
-        Ok(id) => info!("watchpoint #{id}: {expr}"),
-        Err(e) => error!("expression error: {e}"),
-    }
+    let id = sdb
+        .watchpoints
+        .add(expr, dut)
+        .map_err(|e| SdbError::Input(format!("expression error: {e}")))?;
+    info!("watchpoint #{id}: {expr}");
+    Ok(Action::Continue)
 }
 
-fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut VerilatorCpu) {
-    let id: usize = match args.trim().parse() {
-        Ok(v) => v,
-        Err(_) => {
-            warn!("usage: d N");
-            return;
-        }
-    };
+fn cmd_delete(args: &str, sdb: &mut Sdb, _cpu: &mut VerilatorCpu) -> CmdResult {
+    let id: usize = args
+        .trim()
+        .parse()
+        .map_err(|_| SdbError::Input("usage: d N".into()))?;
     if sdb.watchpoints.remove(id) {
         info!("deleted watchpoint #{id}");
     } else {
-        warn!("watchpoint #{id} not found");
+        return Err(SdbError::Input(format!("watchpoint #{id} not found")));
     }
+    Ok(Action::Continue)
 }
 
-fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
+fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     let expr = args.trim();
     if expr.is_empty() {
-        warn!("usage: b ADDR");
-        return;
+        return Err(SdbError::Input("usage: b ADDR".into()));
     }
 
     let sub = expr.split_whitespace().next().unwrap();
@@ -454,31 +422,26 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) {
                 }
                 info!("{buf}");
             }
-            return;
+            return Ok(Action::Continue);
         }
         "rm" | "remove" => {
             let rest = expr[sub.len()..].trim();
             let idx: usize = match rest.parse::<usize>() {
                 Ok(v) if v >= 1 && v <= sdb.breakpoints.len() => v - 1,
-                _ => {
-                    warn!("usage: b rm N");
-                    return;
-                }
+                _ => return Err(SdbError::Input("usage: b rm N".into())),
             };
             let addr = sdb.breakpoints.remove(idx);
             info!("deleted breakpoint #{} at {addr:#010x}", idx + 1);
-            return;
+            return Ok(Action::Continue);
         }
         _ => {}
     }
 
-    match expression::eval(expr, dut) {
-        Ok(addr) => {
-            sdb.breakpoints.push(addr);
-            info!("breakpoint #{} at {addr:#010x}", sdb.breakpoints.len());
-        }
-        Err(e) => error!("expression error: {e}"),
-    }
+    let addr = expression::eval(expr, dut)
+        .map_err(|e| SdbError::Input(format!("expression error: {e}")))?;
+    sdb.breakpoints.push(addr);
+    info!("breakpoint #{} at {addr:#010x}", sdb.breakpoints.len());
+    Ok(Action::Continue)
 }
 
 fn child_run_to_end(dut: &mut VerilatorCpu, end_cycles: u64) {

@@ -25,7 +25,7 @@ include_cpp! {
     generate!("vnpcsoc_set_clock")
     generate!("vnpcsoc_set_reset")
     generate!("vnpcsoc_get_debug_valid")
-    generate!("vnpcsoc_get_debug_isMMIO")
+    generate!("vnpcsoc_get_debug_is_mmio")
     generate!("vnpcsoc_get_debug_pc")
     generate!("vnpcsoc_get_debug_dnpc")
     generate!("vnpcsoc_get_debug_inst")

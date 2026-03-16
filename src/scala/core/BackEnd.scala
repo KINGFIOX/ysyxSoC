@@ -231,7 +231,7 @@ class BackEnd extends NPCModule {
   dbg.pc := commitStage_.probe.pc
   dbg.dnpc := commitStage_.probe.dnpc
   dbg.inst := commitStage_.probe.inst
-  dbg.isMMIO := commitStage_.probe.is_mmio
+  dbg.is_mmio := commitStage_.probe.is_mmio
   dbg.gpr := rfu_.probe
   dbg.csr := csru_.probe
   probe := dbg

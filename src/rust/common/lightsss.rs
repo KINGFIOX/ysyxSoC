@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use log::{info, warn};
@@ -7,105 +6,30 @@ use log::{info, warn};
 const FORK_INTERVAL: Duration = Duration::from_secs(3);
 const SLOT_SIZE: usize = 2;
 
-#[repr(C)]
-struct SharedInfo {
-    /// POSIX semaphore for parent-to-child wakeup (pshared, init=0)
-    wakeup: libc::sem_t,
-    end_cycles: AtomicU64,
-    oldest_pid: AtomicI32,
-}
-
-/// wrapper of shared memory
-struct ForkShareMemory {
-    info: *mut SharedInfo,
-}
-
-unsafe impl Send for ForkShareMemory {}
-
-impl ForkShareMemory {
-    fn new() -> Self {
-        let size = std::mem::size_of::<SharedInfo>();
-        let ptr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                size,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED | libc::MAP_ANONYMOUS,
-                -1,
-                0,
-            )
-        };
-        assert!(ptr != libc::MAP_FAILED, "mmap failed for shared memory");
-
-        let info = ptr as *mut SharedInfo;
-        unsafe {
-            let ret = libc::sem_init(&raw mut (*info).wakeup, 1, 0);
-            assert!(ret == 0, "sem_init failed");
-            (*info).end_cycles = AtomicU64::new(0);
-            (*info).oldest_pid = AtomicI32::new(0);
-        }
-
-        Self { info }
-    }
-
-    fn info(&self) -> &SharedInfo {
-        unsafe { &*self.info }
-    }
-
-    /// Child blocks here until parent calls sem_post.
-    fn shwait(&self) {
-        unsafe {
-            libc::sem_wait(&raw mut (*self.info).wakeup);
-        }
-    }
-
-    /// Parent posts to wake the blocked child.
-    fn post(&self) {
-        unsafe {
-            libc::sem_post(&raw mut (*self.info).wakeup);
-        }
-    }
-}
-
-impl Drop for ForkShareMemory {
-    fn drop(&mut self) {
-        unsafe {
-            libc::sem_destroy(&raw mut (*self.info).wakeup);
-            libc::munmap(
-                self.info as *mut libc::c_void,
-                std::mem::size_of::<SharedInfo>(),
-            );
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub enum ForkResult {
     Ok,
     Child { end_cycles: u64 },
 }
 
-/// because of the machanism about fork
-/// every process has an object of LightSSS, which is different from each other
-/// - `pid_slots` is not used by child, only be used by parent
-/// - `last_fork`:
-///   - for child, holding the timestamp of do_fork;
-///   - for parent, holding the timestamp of LightSSS::new()
-/// - `shm` is the shared memory between process, both parent and child
+/// Every process has its own `LightSSS` instance after fork.
+/// - `pid_slots`: only used by parent, stores `(child_pid, pipe_write_fd)`
+/// - `last_fork`: timestamp of last fork (parent) or of creation (child)
 pub struct LightSSS {
-    shm: ForkShareMemory,
-    /// Queue holding the pid of child
-    /// not including the parent process
+    /// (rfd, wfd)
+    pipe: (i32, i32),
     pid_slots: VecDeque<i32>,
     is_child_process: bool,
-    /// timestamp of the last fork
     last_fork: Instant,
 }
 
 impl LightSSS {
     pub fn new() -> Self {
+        let mut fds = [0i32; 2];
+        let ret = unsafe { libc::pipe(fds.as_mut_ptr()) };
+        assert!(ret == 0, "pipe() failed");
         Self {
-            shm: ForkShareMemory::new(),
+            pipe: (fds[0], fds[1]),
             pid_slots: VecDeque::new(),
             is_child_process: false,
             last_fork: Instant::now(),
@@ -121,16 +45,17 @@ impl LightSSS {
     }
 
     pub fn do_fork(&mut self) -> ForkResult {
+        // queue full, pop one
         if self.pid_slots.len() >= SLOT_SIZE {
-            let oldest = self.pid_slots.pop_back().unwrap();
-            unsafe { libc::kill(oldest, libc::SIGKILL) };
-            unsafe { libc::waitpid(oldest, std::ptr::null_mut(), 0) };
+            let oldest_pid = self.pid_slots.pop_back().unwrap();
+            unsafe { libc::kill(oldest_pid, libc::SIGKILL) };
+            unsafe { libc::waitpid(oldest_pid, std::ptr::null_mut(), 0) };
         }
 
         let pid = unsafe { libc::fork() };
-        assert!(pid >= 0);
+        assert!(pid >= 0, "fork() failed");
+
         if pid > 0 {
-            // parent
             self.pid_slots.push_front(pid);
             self.last_fork = Instant::now();
             info!(
@@ -139,49 +64,61 @@ impl LightSSS {
             );
             ForkResult::Ok
         } else {
-            // child: P operation — blocks until parent V's
+            self.pid_slots.clear(); // child, no use of pid_slots
             self.is_child_process = true;
-            self.shm.shwait(); // dead loop
-
-            // only the oldest
+            let mut buf = [0u8; size_of::<u64>()];
+            let ret = unsafe {
+                libc::read(
+                    self.pipe.0,
+                    buf.as_mut_ptr() as *mut libc::c_void,
+                    size_of::<u64>(),
+                )
+            };
+            assert!((ret as usize) == size_of::<u64>(), "read() failed");
+            let end_cycles = u64::from_ne_bytes(buf);
             let my_pid = unsafe { libc::getpid() };
-            assert!(self.shm.info().oldest_pid.load(Ordering::Acquire) == my_pid);
-            let end_cycles = self.shm.info().end_cycles.load(Ordering::Acquire);
             info!("[lightsss] child pid={my_pid} woke up, will dump wave until cycle {end_cycles}");
             ForkResult::Child { end_cycles }
         }
     }
 
-    /// called by `lightsss_on_error`, which means parent crashed
-    /// only parent could enter in this
     pub fn wakeup_child(&mut self, cycles: u64) {
         if self.pid_slots.is_empty() {
             warn!("[lightsss] no checkpoint to wake up");
             return;
         }
 
-        self.shm.info().end_cycles.store(cycles, Ordering::Release);
-        let oldest = *self.pid_slots.back().unwrap();
-        self.shm.info().oldest_pid.store(oldest, Ordering::Release);
+        let oldest_pid = self.pid_slots.pop_back().unwrap();
 
         for &pid in &self.pid_slots {
-            if pid != oldest {
-                unsafe { libc::kill(pid, libc::SIGKILL) };
-                unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-            }
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
         }
 
-        // V operation — wakes the oldest child blocked on sem_wait
-        self.shm.post();
+        let buf: [u8; size_of::<u64>()] = cycles.to_ne_bytes();
+        let n = unsafe {
+            libc::write(
+                self.pipe.1,
+                buf.as_ptr() as *const libc::c_void,
+                size_of::<u64>(),
+            )
+        };
+        assert!((n as usize) == size_of::<u64>(), "pipe write failed");
 
-        info!("[lightsss] waking child pid={oldest}, waiting...");
-        unsafe { libc::waitpid(oldest, std::ptr::null_mut(), 0) };
+        info!("[lightsss] waking child pid={oldest_pid}, waiting...");
+        unsafe { libc::waitpid(oldest_pid, std::ptr::null_mut(), 0) };
         info!("[lightsss] child finished");
 
         self.pid_slots.clear();
     }
 
     pub fn do_clear(&mut self) {
+        unsafe {
+            libc::close(self.pipe.0);
+        }
+        unsafe {
+            libc::close(self.pipe.1);
+        }
         while let Some(pid) = self.pid_slots.pop_back() {
             unsafe { libc::kill(pid, libc::SIGKILL) };
             unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };

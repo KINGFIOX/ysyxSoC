@@ -134,7 +134,7 @@ menuconfig: $(MESON_BDIR)/build.ninja
 # =============================== 开发工具 ===============================
 
 wave:
-	@gtkwave $(BUILD_DIR)/npc_core.vcd
+	@gtkwave $(BUILD_DIR)/npc_core.fst
 
 dev-init:
 	git submodule update --init --recursive

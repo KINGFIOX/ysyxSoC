@@ -20,7 +20,7 @@ void vnpcsoc_set_clock(VNPCSoC* top, uint8_t val);
 void vnpcsoc_set_reset(VNPCSoC* top, uint8_t val);
 
 uint8_t  vnpcsoc_get_debug_valid(const VNPCSoC* top);
-uint8_t  vnpcsoc_get_debug_isMMIO(const VNPCSoC* top);
+uint8_t  vnpcsoc_get_debug_is_mmio(const VNPCSoC* top);
 uint32_t vnpcsoc_get_debug_pc(const VNPCSoC* top);
 uint32_t vnpcsoc_get_debug_dnpc(const VNPCSoC* top);
 uint32_t vnpcsoc_get_debug_inst(const VNPCSoC* top);

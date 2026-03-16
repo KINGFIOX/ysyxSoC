@@ -24,7 +24,7 @@ class AGU extends ExecUnit(new AGUInput, new AGUOutput) {
   io.out.valid := io.in.valid
   val addr = io.in.bits.base + io.in.bits.offset
   io.out.bits.addr := addr
-  io.out.bits.is_mmio := AddressMap.isMMIO(addr)
+  io.out.bits.is_mmio := AddressMap.is_mmio(addr)
   io.out.bits.rob_tag := io.in.bits.rob_tag
   io.out.bits.wdata := io.in.bits.wdata
 }
