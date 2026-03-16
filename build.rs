@@ -47,6 +47,7 @@ fn main() -> miette::Result<()> {
     println!("cargo:rustc-link-arg={}", verilator_mdir.join("VNPCSoC__ALL.a").display());
     println!("cargo:rustc-link-search=native={}", verilator_mdir.display());
     println!("cargo:rustc-link-lib=static=verilated");
+    println!("cargo:rustc-link-lib=z"); // FST tracing depending zlib
 
     // Spike libraries
     println!("cargo:rustc-link-search=native={}", spike_lib.display());

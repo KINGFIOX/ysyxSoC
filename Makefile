@@ -82,7 +82,7 @@ $(VERILATOR_MK): $(V_SIM) $(VERILATOR_PERIP_SRCS)
 		--Mdir $(VERILATOR_MDIR) \
 		--top-module $(VERILATOR_TOP) \
 		--timescale "1ns/1ns" \
-		--trace --no-timing --autoflush --assert \
+		--trace-fst --no-timing --autoflush --assert \
 		-O2 -Wall -Wno-fatal \
 		$(VERILATOR_INCS) \
 		$(VERILATOR_DEFINES) \

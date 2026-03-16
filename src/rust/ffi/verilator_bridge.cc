@@ -2,7 +2,7 @@
 #include "VNPCSoC.h"
 #include "VNPCSoC___024root.h"
 #include "verilated.h"
-#include "verilated_vcd_c.h"
+#include "verilated_fst_c.h"
 
 // VerilatedContext
 
@@ -57,13 +57,13 @@ uint32_t vnpcsoc_get_debug_csr_mtval(const VNPCSoC* top)     { return top->debug
 uint32_t vnpcsoc_get_debug_csr_mvendorid(const VNPCSoC* top) { return top->debug_csr_mvendorid; }
 uint32_t vnpcsoc_get_debug_csr_marchid(const VNPCSoC* top)   { return top->debug_csr_marchid; }
 
-// VCD trace
+// FST trace
 
 void vl_trace_ever_on(bool flag) { Verilated::traceEverOn(flag); }
-VerilatedVcdC* vl_vcd_new() { return new VerilatedVcdC; }
-void vl_vcd_delete(VerilatedVcdC* tfp) { delete tfp; }
-void vl_vcd_open(VerilatedVcdC* tfp, const char* filename) { tfp->open(filename); }
-void vl_vcd_close(VerilatedVcdC* tfp) { tfp->close(); }
-void vl_vcd_flush(VerilatedVcdC* tfp) { tfp->flush(); }
-void vl_vcd_dump(VerilatedVcdC* tfp, uint64_t time) { tfp->dump(time); }
-void vnpcsoc_trace(VNPCSoC* top, VerilatedVcdC* tfp, int levels) { top->trace(tfp, levels); }
+VerilatedFstC* vl_fst_new() { return new VerilatedFstC; }
+void vl_fst_delete(VerilatedFstC* tfp) { delete tfp; }
+void vl_fst_open(VerilatedFstC* tfp, const char* filename) { tfp->open(filename); }
+void vl_fst_close(VerilatedFstC* tfp) { tfp->close(); }
+void vl_fst_flush(VerilatedFstC* tfp) { tfp->flush(); }
+void vl_fst_dump(VerilatedFstC* tfp, uint64_t time) { tfp->dump(time); }
+void vnpcsoc_trace(VNPCSoC* top, VerilatedFstC* tfp, int levels) { top->trace(tfp, levels); }

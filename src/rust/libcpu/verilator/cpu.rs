@@ -1,22 +1,20 @@
 use autocxx::c_void;
 
-use std::ffi::{CStr, CString};
-
-use log::info;
+use std::ffi::{CStr};
 
 use crate::ffi::*;
 use crate::libcpu::abstract_cpu::AbstractCpu;
 use crate::libdpi::globals::Memory;
 
 const TOP_NAME: &CStr = c"TOP";
-// const VCD_PATH: &CStr = c"build/npc_core.vcd";
+const FST_PATH: &CStr = c"build/npc_core.fst";
 const RESET_CYCLES: usize = 15;
 const MAX_STEP_CYCLES: usize = 1_000_00;
 
 pub struct VerilatorCpu {
     ctx: *mut VerilatedContext,
     top: *mut VNPCSoC,
-    tfp: Option<*mut VerilatedVcdC>,
+    tfp: Option<*mut VerilatedFstC>,
     sim_time: u64,
     nvboard: bool,
     mem: Memory,
@@ -46,14 +44,14 @@ impl VerilatorCpu {
             vnpcsoc_set_clock(self.top, 0);
             vnpcsoc_eval(self.top);
             if let Some(tfp) = self.tfp {
-                vl_vcd_dump(tfp, self.sim_time);
+                vl_fst_dump(tfp, self.sim_time);
             }
             self.sim_time += 1;
 
             vnpcsoc_set_clock(self.top, 1);
             vnpcsoc_eval(self.top);
             if let Some(tfp) = self.tfp {
-                vl_vcd_dump(tfp, self.sim_time);
+                vl_fst_dump(tfp, self.sim_time);
             }
             self.sim_time += 1;
 
@@ -78,24 +76,19 @@ impl VerilatorCpu {
     pub fn flush_wave(&mut self) {
         if let Some(tfp) = self.tfp.take() {
             unsafe {
-                vl_vcd_flush(tfp);
-                vl_vcd_close(tfp);
-                vl_vcd_delete(tfp);
+                vl_fst_flush(tfp);
+                vl_fst_close(tfp);
+                vl_fst_delete(tfp);
             }
         }
     }
 
     pub fn enable_wave(&mut self) {
-        if self.tfp.is_some() {
-            return;
-        }
-        let path = format!("build/lightsss_{}.vcd", self.sim_time);
-        info!("[lightsss] enabling VCD: {path}");
-        let c_path = CString::new(path).unwrap();
-        let tfp = vl_vcd_new();
+        assert!(self.tfp.is_none());
+        let tfp = vl_fst_new();
         unsafe {
             vnpcsoc_trace(self.top, tfp, autocxx::c_int(99));
-            vl_vcd_open(tfp, c_path.as_ptr());
+            vl_fst_open(tfp, FST_PATH.as_ptr());
         }
         self.tfp = Some(tfp);
     }
@@ -122,9 +115,9 @@ impl Drop for VerilatorCpu {
         }
         unsafe {
             if let Some(tfp) = self.tfp {
-                vl_vcd_flush(tfp);
-                vl_vcd_close(tfp);
-                vl_vcd_delete(tfp);
+                vl_fst_flush(tfp);
+                vl_fst_close(tfp);
+                vl_fst_delete(tfp);
             }
             vnpcsoc_delete(self.top);
             vl_context_delete(self.ctx);

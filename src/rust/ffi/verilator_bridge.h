@@ -33,14 +33,14 @@ uint32_t vnpcsoc_get_debug_csr_mtval(const VNPCSoC* top);
 uint32_t vnpcsoc_get_debug_csr_mvendorid(const VNPCSoC* top);
 uint32_t vnpcsoc_get_debug_csr_marchid(const VNPCSoC* top);
 
-// VCD trace
-class VerilatedVcdC;
+// FST trace
+class VerilatedFstC;
 
 void vl_trace_ever_on(bool flag);
-VerilatedVcdC* vl_vcd_new();
-void vl_vcd_delete(VerilatedVcdC* tfp);
-void vl_vcd_open(VerilatedVcdC* tfp, const char* filename);
-void vl_vcd_close(VerilatedVcdC* tfp);
-void vl_vcd_flush(VerilatedVcdC* tfp);
-void vl_vcd_dump(VerilatedVcdC* tfp, uint64_t time);
-void vnpcsoc_trace(VNPCSoC* top, VerilatedVcdC* tfp, int levels);
+VerilatedFstC* vl_fst_new();
+void vl_fst_delete(VerilatedFstC* tfp);
+void vl_fst_open(VerilatedFstC* tfp, const char* filename);
+void vl_fst_close(VerilatedFstC* tfp);
+void vl_fst_flush(VerilatedFstC* tfp);
+void vl_fst_dump(VerilatedFstC* tfp, uint64_t time);
+void vnpcsoc_trace(VNPCSoC* top, VerilatedFstC* tfp, int levels);

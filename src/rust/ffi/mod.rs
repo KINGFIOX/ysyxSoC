@@ -38,12 +38,12 @@ include_cpp! {
     generate!("vnpcsoc_get_debug_csr_mvendorid")
     generate!("vnpcsoc_get_debug_csr_marchid")
     generate!("vl_trace_ever_on")
-    generate!("vl_vcd_new")
-    generate!("vl_vcd_delete")
-    generate!("vl_vcd_open")
-    generate!("vl_vcd_close")
-    generate!("vl_vcd_flush")
-    generate!("vl_vcd_dump")
+    generate!("vl_fst_new")
+    generate!("vl_fst_delete")
+    generate!("vl_fst_open")
+    generate!("vl_fst_close")
+    generate!("vl_fst_flush")
+    generate!("vl_fst_dump")
     generate!("vnpcsoc_trace")
 }
 
