@@ -18,8 +18,8 @@ class RenameStage extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
-    val rat_query = Vec(2, new RATReadPort)
-    val rob_query = Vec(2, new RobFwdBundle)
+    val rat = Vec(2, new RATReadPort)
+    val rob = Vec(2, new RobFwdBundle)
     val disp_fwd = Flipped(new DispFwdBundle)
     val rfu_query = Vec(2, new RFUReadPort)
     val cdb = Vec(2, Flipped(new CDBBundle))
@@ -62,7 +62,7 @@ class RenameStage extends NPCModule {
   // RAT lookup + RFU read
   // ============================================================
   for (i <- 0 until 2) {
-    io.rat_query(i).addr := rs_idx(i)
+    io.rat(i).addr := rs_idx(i)
     io.rfu_query(i).addr := rs_idx(i)
   }
 
@@ -79,15 +79,15 @@ class RenameStage extends NPCModule {
       (disp_fwd.rd_idx === rs_idx(i)) &&
       (rs_idx(i) =/= 0.U)
 
-    val tag = Mux(disp_tag_hit, disp_fwd.tag, io.rat_query(i).tag)
-    val busy = io.rat_query(i).busy || disp_tag_hit
+    val tag = Mux(disp_tag_hit, disp_fwd.tag, io.rat(i).tag)
+    val busy = io.rat(i).busy || disp_tag_hit
 
-    io.rob_query(i).tag := tag
+    io.rob(i).tag := tag
 
     val free = !busy
     val cdb0_hit = io.cdb(0).valid && (io.cdb(0).tag === tag)
     val cdb1_hit = io.cdb(1).valid && (io.cdb(1).tag === tag)
-    val rob_hit = io.rob_query(i).valid
+    val rob_hit = io.rob(i).valid
 
     out.src(i).ready := free || disp_val_hit || cdb0_hit || cdb1_hit || rob_hit
     out.src(i).tag := tag
@@ -98,7 +98,7 @@ class RenameStage extends NPCModule {
         disp_val_hit -> disp_fwd.value,
         cdb0_hit -> io.cdb(0).value,
         cdb1_hit -> io.cdb(1).value,
-        rob_hit -> io.rob_query(i).value
+        rob_hit -> io.rob(i).value
       )
     )
   }

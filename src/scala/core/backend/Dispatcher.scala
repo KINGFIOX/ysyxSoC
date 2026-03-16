@@ -23,7 +23,7 @@ class Dispatcher extends NPCModule {
     val disp_alu = Decoupled(new IQEnqData(new ALUExtra, 2))
     val disp_bru = Decoupled(new IQEnqData(new BRUExtra, 2))
     val disp_agu = Decoupled(new IQEnqData(new AGUExtra, 2))
-    val rat_write = new RATWritePort
+    val rat = new RATWritePort
   })
 
   val in = io.in.bits
@@ -135,9 +135,9 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // RAT Write
   // ============================================================
-  io.rat_write.en := io.in.fire && rd_def
-  io.rat_write.addr := dec.rd_idx
-  io.rat_write.tag := io.rob_tag
+  io.rat.en := io.in.fire && rd_def
+  io.rat.addr := dec.rd_idx
+  io.rat.tag := io.rob_tag
 
   // ============================================================
   // Rename Forward

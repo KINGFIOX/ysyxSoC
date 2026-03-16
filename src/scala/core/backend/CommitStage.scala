@@ -40,12 +40,11 @@ class CommitStage extends NPCModule {
   val head_is_csr = head.inst_type === InstType.CSR
   val head_is_mret = head.inst_type === InstType.MRET
 
-  // format: off
-  val is_control = Seq(InstType.JAL, InstType.JALR, InstType.BRANCH)
+  // is control flow instruction, but not `mret` or `ecall`
+  val is_control_normal = Seq(InstType.JAL, InstType.JALR, InstType.BRANCH)
     .map(head.inst_type === _)
     .reduce(_ || _)
-  // format: on
-  val mispredict = is_control && (head.target_npc =/= head.predict_npc)
+  val mispredict = is_control_normal && (head.target_npc =/= head.predict_npc)
 
   // ---- Defaults ----
   flush := false.B
@@ -76,12 +75,9 @@ class CommitStage extends NPCModule {
 
   fence_i := false.B
 
-  val dbg_valid = RegInit(false.B)
-  val dbg_pc = Reg(UInt(dataBits.W))
-  val dbg_dnpc = Reg(UInt(dataBits.W))
-  val dbg_inst = Reg(UInt(instBits.W))
-  val dbg_is_mmio = Reg(Bool())
-  dbg_valid := false.B
+  val dbg_valid = WireDefault(false.B)
+  val dbg_dnpc = WireDefault(head.pc)
+  val dbg_is_mmio = WireDefault(false.B)
 
   // ---- Commit logic ----
   when(head_valid) {
@@ -98,9 +94,7 @@ class CommitStage extends NPCModule {
       rob.ready := true.B
 
       dbg_valid := true.B
-      dbg_pc := head.pc
       dbg_dnpc := csr.xtvec
-      dbg_inst := head.inst
       dbg_is_mmio := false.B
 
     }.elsewhen(head_is_mret) {
@@ -112,9 +106,7 @@ class CommitStage extends NPCModule {
       rob.ready := true.B
 
       dbg_valid := true.B
-      dbg_pc := head.pc
       dbg_dnpc := csr.xepc
-      dbg_inst := head.inst
       dbg_is_mmio := false.B
 
     }.otherwise {
@@ -138,16 +130,15 @@ class CommitStage extends NPCModule {
       rob.ready := true.B
 
       dbg_valid := true.B
-      dbg_pc := head.pc
       dbg_dnpc := Mux(mispredict, head.target_npc, head.pc + 4.U)
-      dbg_inst := head.inst
       dbg_is_mmio := head_is_mem && head.mem.is_mmio
     }
   }
 
-  probe.valid := dbg_valid
-  probe.pc := dbg_pc
-  probe.dnpc := dbg_dnpc
-  probe.inst := dbg_inst
-  probe.is_mmio := dbg_is_mmio
+  // sequential sync
+  probe.valid := RegNext(dbg_valid)
+  probe.pc := RegNext(head.pc)
+  probe.dnpc := RegNext(dbg_dnpc)
+  probe.inst := RegNext(head.inst)
+  probe.is_mmio := RegNext(dbg_is_mmio)
 }

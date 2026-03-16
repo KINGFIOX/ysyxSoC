@@ -176,8 +176,11 @@ class StoreUnit(axiParams: AXI4BundleParameters, id: Int) extends Module {
 
 }
 
+// from the view of Rob -> LSU
 class MemLsuInput extends MemInfoBundle {
   val is_mmio = Bool()
+  // val mcause = Input(UInt(dataBits.W))
+  // val has_except = Input(Bool())
 }
 
 class LSU extends LateExecUnit(new MemLsuInput) {
@@ -213,6 +216,7 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   // ==========================================================
   val ctrl = late.extra
 
+  // aligned
   val aligned_addr = Cat(ctrl.addr(addrBits - 1, 2), 0.U(2.W))
 
   val store_wstrb = MuxLookup(ctrl.size, "b1111".U)(
@@ -236,7 +240,7 @@ class LSU extends LateExecUnit(new MemLsuInput) {
 
   // Cache: returns full word, need byte lane selection by addr(1,0)
   val cache_raw = cache_load.in.rdata
-  val cache_byte = MuxLookup(ctrl.addr(1, 0), cache_raw(7, 0))(
+  val cache_byte = MuxLookup(ctrl.addr(1, 0), 0.U)(
     Seq(
       0.U -> cache_raw(7, 0),
       1.U -> cache_raw(15, 8),
@@ -247,9 +251,9 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   val cache_half = Mux(ctrl.addr(1), cache_raw(31, 16), cache_raw(15, 0))
   val cache_load_final = MuxLookup(ctrl.size, cache_raw)(
     Seq(
-      0.U -> Mux(ctrl.sign_ext, SignExt(cache_byte, 32), ZeroExt(cache_byte, 32)),
-      1.U -> Mux(ctrl.sign_ext, SignExt(cache_half, 32), ZeroExt(cache_half, 32)),
-      2.U -> cache_raw
+      0.U -> Mux(ctrl.sign_ext, SignExt(cache_byte, 32), ZeroExt(cache_byte, 32)), // lb, lbu
+      1.U -> Mux(ctrl.sign_ext, SignExt(cache_half, 32), ZeroExt(cache_half, 32)), // lh, lhu
+      2.U -> cache_raw // lw
     )
   )
 
@@ -272,7 +276,7 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   cache_load.in.wr := false.B
   cache_load.in.size := 2.U
   cache_load.in.addr := aligned_addr
-  cache_load.in.wstrb := 0.U
+  cache_load.in.wstrb := 0.U // disable
   cache_load.in.wdata := 0.U
 
   // dcache StoreUnit defaults — 4B aligned, size=2

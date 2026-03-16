@@ -33,6 +33,7 @@ class BackEnd extends NPCModule {
   val decodeStage_ = Module(new DecodeStage)
   val renameStage_ = Module(new RenameStage)
   val dispatcher_ = Module(new Dispatcher)
+  val commitStage_ = Module(new CommitStage)
 
   val rfu_ = Module(new RFU)
   val rob_ = Module(new Rob)
@@ -45,7 +46,6 @@ class BackEnd extends NPCModule {
   val agu_iq_ = Module(new AGUIssueQueue)
   val lsu_ = Module(new LSU)
   val csru_ = Module(new CSRU)
-  val commitStage_ = Module(new CommitStage)
 
   // ==========================================================
   // AXI — dcache + perip pass-through to LSU
@@ -88,16 +88,16 @@ class BackEnd extends NPCModule {
   PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush)
 
   // --- RenameStage side-band ---
-  renameStage_.io.rat_query(0) <> rat_.io.read(0)
-  renameStage_.io.rat_query(1) <> rat_.io.read(1)
+  renameStage_.io.rat(0) <> rat_.io.rename(0)
+  renameStage_.io.rat(1) <> rat_.io.rename(1)
 
   rfu_.io.read(0).addr := renameStage_.io.rfu_query(0).addr
   rfu_.io.read(1).addr := renameStage_.io.rfu_query(1).addr
   renameStage_.io.rfu_query(0).data := rfu_.io.read(0).data
   renameStage_.io.rfu_query(1).data := rfu_.io.read(1).data
 
-  renameStage_.io.rob_query(0) <> rob_.io.forward(0)
-  renameStage_.io.rob_query(1) <> rob_.io.forward(1)
+  renameStage_.io.rob(0) <> rob_.io.rename(0)
+  renameStage_.io.rob(1) <> rob_.io.rename(1)
 
   renameStage_.io.disp_fwd <> dispatcher_.io.rename_fwd
 
@@ -112,36 +112,35 @@ class BackEnd extends NPCModule {
   dispatcher_.io.disp_bru <> bru_iq_.io.enq
   dispatcher_.io.disp_agu <> agu_iq_.io.enq
 
-  rat_.io.write <> dispatcher_.io.rat_write
+  rat_.io.disp <> dispatcher_.io.rat
 
   // ==========================================================
   // Stage 4 — Issue + Execute + Writeback
   // ==========================================================
 
   // --- ALU path ---
+  alu_.io.out.ready := true.B // backpress
   alu_.io.in.valid := alu_iq_.io.issue.valid
+  alu_iq_.io.issue.ready := alu_.io.in.ready
   alu_.io.in.bits.op1 := alu_iq_.io.issue.bits.src_v(0)
   alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
   alu_.io.in.bits.alu_op := alu_iq_.io.issue.bits.extra.alu_op
   alu_.io.in.bits.rob_tag := alu_iq_.io.issue.bits.rob_tag
   alu_.io.in.bits.rd_def := alu_iq_.io.issue.bits.extra.rd_def
-  alu_iq_.io.issue.ready := alu_.io.in.ready
-
-  alu_.io.out.ready := true.B
 
   val alu_wb_valid = alu_.io.out.fire
   val alu_wb_tag = alu_.io.out.bits.rob_tag
   val alu_wb_rd_def = alu_.io.out.bits.rd_def
   val alu_result = alu_.io.out.bits.result
 
-  rob_.io.lookup(0).tag := alu_wb_tag
-  val alu_rob_entry = rob_.io.lookup(0).entry
+  rob_.io.exec(0).tag := alu_wb_tag
+  val alu_rob_entry = rob_.io.exec(0).entry // write alu target entry
 
   val alu_is_jalr = alu_rob_entry.inst_type === InstType.JALR
   val alu_is_csr = alu_rob_entry.inst_type === InstType.CSR
 
-  val alu_rd_val = Mux(alu_rob_entry.rd.valid, alu_rob_entry.rd.value, alu_result)
-  val alu_rd_valid = !alu_is_csr
+  val alu_rd_val = Mux(alu_rob_entry.rd.valid, alu_rob_entry.rd.value /*loopback*/, alu_result)
+  val alu_rd_valid = !alu_is_csr // alu is late execution
   val alu_target_npc = Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.target_npc)
 
   rob_.io.alu.valid := alu_wb_valid
@@ -165,8 +164,8 @@ class BackEnd extends NPCModule {
   val bru_wb_tag = bru_.io.out.bits.rob_tag
   val br_flag = bru_.io.out.bits.br_flag
 
-  rob_.io.lookup(1).tag := bru_wb_tag
-  val bru_rob_entry = rob_.io.lookup(1).entry
+  rob_.io.exec(1).tag := bru_wb_tag
+  val bru_rob_entry = rob_.io.exec(1).entry
 
   val bru_target_npc = Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
 

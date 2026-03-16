@@ -27,8 +27,8 @@ class RATCommitPort extends NPCBundle {
 
 class RAT(val numReadPorts: Int = 2) extends NPCModule {
   val io = IO(new Bundle {
-    val read  = Flipped(Vec(numReadPorts, new RATReadPort))
-    val write = Flipped(new RATWritePort)
+    val rename  = Flipped(Vec(numReadPorts, new RATReadPort))
+    val disp = Flipped(new RATWritePort)
     val commit = Flipped(new RATCommitPort)
     val flush = Input(Bool())
   })
@@ -45,14 +45,14 @@ class RAT(val numReadPorts: Int = 2) extends NPCModule {
         busy(io.commit.addr) := false.B
       }
     }
-    when(io.write.en && io.write.addr =/= 0.U) {
-      busy(io.write.addr) := true.B
-      tags(io.write.addr) := io.write.tag
+    when(io.disp.en && io.disp.addr =/= 0.U) {
+      busy(io.disp.addr) := true.B
+      tags(io.disp.addr) := io.disp.tag
     }
   }
 
   for (i <- 0 until numReadPorts) {
-    io.read(i).busy := busy(io.read(i).addr) && io.read(i).addr =/= 0.U
-    io.read(i).tag := tags(io.read(i).addr)
+    io.rename(i).busy := busy(io.rename(i).addr) && io.rename(i).addr =/= 0.U
+    io.rename(i).tag := tags(io.rename(i).addr)
   }
 }

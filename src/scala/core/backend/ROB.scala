@@ -89,6 +89,7 @@ class LookupBundle extends NPCBundle {
   val entry = Input(new RobEntry)
 }
 
+// forward to rename stage
 class RobFwdBundle extends NPCBundle {
   val tag = Output(UInt(robEntryBits.W))
   val value = Input(UInt(dataBits.W))
@@ -114,9 +115,9 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     val bru = Flipped(Valid(new WBBRUBundle))
     val lsu = new LateExecIO(new MemLsuInput)
     val csr = new LateExecIO(new CsrWriteOnlyPort)
-    val lookup = Vec(numLookupPorts, Flipped(new LookupBundle))
+    val exec = Vec(numLookupPorts, Flipped(new LookupBundle)) // lookup
     val commit = Decoupled(new CommitBundle)
-    val forward = Vec(numFwdPorts, Flipped(new RobFwdBundle))
+    val rename = Vec(numFwdPorts, Flipped(new RobFwdBundle))
     val flush = Input(Bool())
   })
 
@@ -163,7 +164,7 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   // Lookup ports
   // ============================================================
   for (i <- 0 until numLookupPorts) {
-    val lookup = io.lookup(i)
+    val lookup = io.exec(i)
     lookup.entry := ram(idx(lookup.tag))
   }
 
@@ -251,10 +252,10 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   }
 
   // ============================================================
-  // Forward ports
+  // name Forward ports
   // ============================================================
   for (i <- 0 until numFwdPorts) {
-    val fwd = io.forward(i)
+    val fwd = io.rename(i)
     fwd.valid := ram(idx(fwd.tag)).rd.valid
     fwd.value := ram(idx(fwd.tag)).rd.value
   }
@@ -285,6 +286,7 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
 
 // from the master's point-of-view
 // req-done handshake
+// master is rob
 class LateExecIO[T <: Data](gen: => T) extends NPCBundle {
   val req = Output(Bool())
   val done = Input(Bool())
