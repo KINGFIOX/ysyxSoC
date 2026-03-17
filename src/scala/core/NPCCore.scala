@@ -8,6 +8,7 @@ import freechips.rocketchip.amba.axi4._
 import ysyx.core.common._
 import ysyx.core.backend._
 import ysyx.core.frontend._
+import ysyx.core.sram.SRAMBundle
 
 class DebugBundle extends NPCBundle {
   val valid = Bool()
@@ -21,9 +22,9 @@ class DebugBundle extends NPCBundle {
 
 class NPCCore extends NPCModule {
 
-  val icache    = IO(AXI4Bundle(axiParams))
-  val dcache    = IO(AXI4Bundle(axiParams))
-  val perip     = IO(AXI4Bundle(axiParams))
+  val icache    = IO(SRAMBundle(sramParams))
+  val dcache    = IO(SRAMBundle(sramParams))
+  val perip     = IO(SRAMBundle(sramParams))
   val probe     = IO(Output(new DebugBundle))
   val interrupt = IO(Input(Bool()))
   val fence_i   = IO(Output(Bool()))

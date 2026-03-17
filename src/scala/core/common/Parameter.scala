@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import freechips.rocketchip.amba.axi4.AXI4BundleParameters
 import ysyx.{ChipLinkParam, SoCConfig}
+import ysyx.core.sram.SRAMBundleParameters
 
 /** @brief
   *   有几个通用寄存器
@@ -41,6 +42,13 @@ trait HasCoreParameter {
   val robEntryBits = 6 // 2^6 = 64
 }
 
+trait HasSRAMParameter extends HasCoreParameter {
+  val sramParams: SRAMBundleParameters = SRAMBundleParameters(
+    addrBits = addrBits,
+    dataBits = dataBits
+  )
+}
+
 trait HasAXIParameter extends HasCoreParameter {
   val axiParams: AXI4BundleParameters = AXI4BundleParameters(
     addrBits = addrBits,
@@ -55,6 +63,7 @@ abstract class NPCModule
     with HasCoreParameter
     with HasCSRParameter
     with HasAXIParameter
+    with HasSRAMParameter
 
 // format: off
 object AddressMap {
@@ -74,6 +83,7 @@ abstract class NPCBundle
     with HasCoreParameter
     with HasCSRParameter
     with HasAXIParameter
+    with HasSRAMParameter
 
 object PipelineConnect {
   def apply[T <: Data](

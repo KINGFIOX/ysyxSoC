@@ -10,6 +10,7 @@ import ysyx.core.common._
 import ysyx.core.frontend._
 import ysyx.core.lsu._
 import ysyx.core.DebugBundle
+import ysyx.core.sram._
 
 class BackEnd extends NPCModule {
 
@@ -21,8 +22,8 @@ class BackEnd extends NPCModule {
   })
 
   // connect to bus
-  val dcache = IO(AXI4Bundle(axiParams))
-  val perip = IO(AXI4Bundle(axiParams))
+  val dcache = IO(SRAMBundle(sramParams))
+  val perip = IO(SRAMBundle(sramParams))
   val interrupt = IO(Input(Bool()))
   val fence_i = IO(Output(Bool()))
   val probe = IO(Output(new DebugBundle))

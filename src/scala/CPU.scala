@@ -13,23 +13,24 @@ import ysyx.core.NPCCore
 import ysyx.core.DebugBundle
 import ysyx.core.cache.{AXI4DCache, AXI4ICache}
 import ysyx.core.common.HasAXIParameter
+import ysyx.core.sram._
 
 class CPU(idBits: Int)(implicit p: Parameters)
     extends LazyModule
     with HasAXIParameter {
 
   // format: off
-  private val icacheNode = AXI4MasterNode( Seq( AXI4MasterPortParameters( masters = Seq( AXI4MasterParameters(name = "icache", id = IdRange(0, 1 << idBits))))))
-  private val dcacheNode = AXI4MasterNode( Seq( AXI4MasterPortParameters( masters = Seq( AXI4MasterParameters(name = "dcache", id = IdRange(0, 1 << idBits))))))
-  private val peripNode = AXI4MasterNode( Seq( AXI4MasterPortParameters( masters = Seq( AXI4MasterParameters(name = "perip", id = IdRange(0, 1 << idBits))))))
+  val icacheNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "icache")))))
+  val dcacheNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "dcache")))))
+  val peripNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "perip")))))
   // format: on
 
   val masterNode = AXI4Xbar()
   // masterNode := icacheNode
 
-  masterNode := icacheNode
-  masterNode := dcacheNode
-  masterNode := peripNode
+  masterNode := SRAMToAXI4() := icacheNode
+  masterNode := SRAMToAXI4() := dcacheNode
+  masterNode := SRAMToAXI4() := peripNode
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {

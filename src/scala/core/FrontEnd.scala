@@ -6,10 +6,11 @@ import chisel3.util._
 import freechips.rocketchip.amba.axi4._
 
 import ysyx.core.common._
+import ysyx.core.sram._
 
 class FrontEnd extends NPCModule {
 
-  val icache = IO(AXI4Bundle(axiParams))
+  val icache = IO(SRAMBundle(sramParams))
 
   val io = IO(new Bundle {
     val out = Decoupled(new IFUOutput)

@@ -39,8 +39,7 @@ class APBArbiter()(implicit p: Parameters) extends LazyModule {
     override def circuitIdentity = outputs.size == 1 && inputs.size == 1
   }
 
-  lazy val module = new Impl
-  class Impl extends LazyModuleImp(this) {
+  lazy val module = new LazyModuleImp(this) {
     if (node.edges.out.size >= 1) {
       require(node.edges.out.size == 1, "APBArbiter supports only one slave")
       require(node.edges.in.size > 0, "APBArbiter requires at least one master")

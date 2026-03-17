@@ -52,8 +52,7 @@ class AXI4MROM(address: Seq[AddressSet])(implicit p: Parameters)
     )
   )
 
-  lazy val module = new Impl
-  class Impl extends LazyModuleImp(this) {
+  lazy val module = new LazyModuleImp(this) {
     val (in, _) = node.in(0)
     val (ar, r, aw, w, b) = (in.ar, in.r, in.aw, in.w, in.b)
     val mrom = Module(new MROMHelper)

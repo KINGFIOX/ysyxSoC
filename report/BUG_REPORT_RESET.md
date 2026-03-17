@@ -249,7 +249,7 @@ static void reset(int cycles = 5) {
 ```scala
 // src/scala/SoC.scala
 class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
-  override lazy val module = new Impl
+  lazy val module = new Impl
   class Impl extends LazyModuleImp(this) with DontTouch {
     // generate delayed reset for cpu, since chiplink should finish reset
     // to initialize some async modules before accept any requests from cpu

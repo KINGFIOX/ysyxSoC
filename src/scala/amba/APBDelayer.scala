@@ -22,8 +22,7 @@ class apb_delayer(params: APBBundleParameters) extends Module {
 class APBDelayerWrapper(implicit p: Parameters) extends LazyModule {
   val node = APBIdentityNode()
 
-  lazy val module = new Impl
-  class Impl extends LazyModuleImp(this) {
+  lazy val module = new LazyModuleImp(this) {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val params = edgeIn.bundle
       val delayer = Module(new apb_delayer(params))

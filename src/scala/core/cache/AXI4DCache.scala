@@ -9,35 +9,30 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
-class AXI4DCacheIO(params: AXI4BundleParameters) extends Bundle {
-  val in = Flipped(new AXI4Bundle(params))
-  val out = new AXI4Bundle(params)
-}
+import ysyx.core.sram._
 
-class axi4_dcache(params: AXI4BundleParameters) extends Module {
-  val io = IO(new AXI4DCacheIO(params))
-  io.in <> io.out
+class DCacheImpl(
+    sramParams: SRAMBundleParameters,
+    axiParams: AXI4BundleParameters
+) extends Module {
+  val io = IO(new Bundle {
+    val in = Flipped(new SRAMBundle(sramParams))
+    val out = new AXI4Bundle(axiParams)
+  })
 }
 
 class AXI4DCache(implicit p: Parameters) extends LazyModule {
 
-  val node = AXI4IdentityNode()
+  val node = SRAMToAXI4Node()
 
-  lazy val module = new Impl
-  class Impl extends LazyModuleImp(this) {
+  lazy val module = new LazyModuleImp(this) {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
-      val params = edgeIn.bundle
-      val cache = Module(new axi4_dcache(params))
+      val sramParams = edgeIn.bundle
+      val axiParams = edgeOut.bundle
+      val cache = Module(new DCacheImpl(sramParams, axiParams))
       cache.io.in <> in
       out <> cache.io.out
     }
   }
 
-}
-
-object AXI4DCache {
-  def apply()(implicit p: Parameters): AXI4Node = {
-    val axi4cache = LazyModule(new AXI4DCache)
-    axi4cache.node
-  }
 }

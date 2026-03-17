@@ -48,7 +48,7 @@ case class AXI4ToAPBNode()(implicit valName: ValName) extends MixedAdapterNode(A
   }
 )
 
-class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyModule {
+class AXI4ToAPB()(implicit p: Parameters) extends LazyModule {
   val node = AXI4ToAPBNode()
 
   lazy val module = new LazyModuleImp(this) {
@@ -112,8 +112,8 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
 }
 
 object AXI4ToAPB {
-  def apply(aFlow: Boolean = true)(implicit p: Parameters) = {
-    val axi42apb = LazyModule(new AXI4ToAPB(aFlow))
+  def apply()(implicit p: Parameters) : AXI4ToAPBNode = {
+    val axi42apb = LazyModule(new AXI4ToAPB)
     axi42apb.node
   }
 }

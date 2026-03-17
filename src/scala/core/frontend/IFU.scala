@@ -8,6 +8,7 @@ import freechips.rocketchip.util._
 
 import ysyx.core.common._
 import ysyx.core.lsu._
+import ysyx.core.sram._
 
 class IFUOutput extends NPCBundle {
   val inst = UInt(instBits.W)
@@ -38,43 +39,30 @@ class IFU extends NPCModule {
     val redirect = Input(new RedirectBundle)
   })
 
-  val icache = IO(AXI4Bundle(axiParams))
-
-  private val loadUnit = Module(new LoadUnit(axiParams, 0))
-
-  loadUnit.ar <> icache.ar
-  loadUnit.r <> icache.r
-
-  // write disable
-  icache.b.ready := false.B
-  icache.aw.valid := false.B
-  icache.aw.bits := DontCare
-  icache.w.valid := false.B
-  icache.w.bits := DontCare
+  val icache = IO(SRAMBundle(sramParams))
 
   private val pcQ = RegInit(ysyx.SoCConfig.resetVector.U(addrBits.W))
   private val instQ = RegInit(0.U(dataBits.W))
-  private val mcauseQ = RegInit(0.U(dataBits.W))
-  private val has_except_q = loadUnit.in.bits.resp holdUnless loadUnit.in.done
 
   object State extends ChiselEnum {
     val idle, addr_req, data_wait, output_wait = Value
   }
   private val stateQ = RegInit(State.idle)
 
-  loadUnit.in.req := (stateQ === State.addr_req)
-  loadUnit.in.bits.wr := false.B
-  loadUnit.in.bits.size := 2.U
-  loadUnit.in.bits.addr := pcQ
-  loadUnit.in.bits.wstrb := 0.U
-  loadUnit.in.bits.wdata := 0.U
+  // icache defaults (read-only, word-sized fetch)
+  icache.req := (stateQ === State.addr_req)
+  icache.wen := false.B
+  icache.size := 2.U
+  icache.addr := pcQ
+  icache.wstrb := 0.U
+  icache.wdata := 0.U
 
   io.out.valid := (stateQ === State.output_wait)
   io.out.bits.inst := instQ
   io.out.bits.pc := pcQ
-  io.out.bits.mcause := mcauseQ
-  io.out.bits.mtval := pcQ
-  io.out.bits.has_except := has_except_q
+  io.out.bits.mcause := 0.U
+  io.out.bits.mtval := 0.U
+  io.out.bits.has_except := false.B
   io.out.bits.predict_npc := pcQ + 4.U
 
   switch(stateQ) {
@@ -86,7 +74,7 @@ class IFU extends NPCModule {
     is(State.addr_req) {
       when(io.redirect.valid) {
         pcQ := io.redirect.correct_npc
-      }.elsewhen(loadUnit.in.ack) {
+      }.elsewhen(icache.ack) {
         stateQ := State.data_wait
       }
     }
@@ -95,12 +83,9 @@ class IFU extends NPCModule {
       when(io.redirect.valid) {
         stateQ := State.addr_req
         pcQ := io.redirect.correct_npc
-      }.elsewhen(loadUnit.in.done) {
+      }.elsewhen(icache.done) {
         stateQ := State.output_wait
-        instQ := loadUnit.in.bits.rdata
-        when(loadUnit.in.bits.resp =/= AXI4Resp.OKAY) {
-          mcauseQ := 1.U // instruction access fault
-        }
+        instQ := icache.rdata
       }
     }
 

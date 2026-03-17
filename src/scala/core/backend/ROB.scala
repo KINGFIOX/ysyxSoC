@@ -5,7 +5,6 @@ import chisel3.util._
 
 import ysyx.core.common._
 import ysyx.core.lsu._
-import ysyx.util.ReqDone
 
 class MemRobEntry extends MemInfoBundle {
   val addr_rdy = Bool()

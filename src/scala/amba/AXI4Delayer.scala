@@ -22,8 +22,7 @@ class axi4_delayer(params: AXI4BundleParameters) extends Module {
 class AXI4Delayer(implicit p: Parameters) extends LazyModule {
   val node = AXI4IdentityNode()
 
-  lazy val module = new Impl
-  class Impl extends LazyModuleImp(this) {
+  lazy val module = new LazyModuleImp(this) {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val params = edgeIn.bundle
       val delayer = Module(new axi4_delayer(params))

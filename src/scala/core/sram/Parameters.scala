@@ -17,7 +17,8 @@ case class SRAMBundleParameters(
   require(addrBits >= 1)
   require(isPow2(dataBits))
 
-  val maskBits = dataBits / 8
+  val maskBits: Int = dataBits / 8
+  val sizeBits: Int = log2Ceil(maskBits)
 
   def union(x: SRAMBundleParameters) = SRAMBundleParameters(
     max(addrBits, x.addrBits),

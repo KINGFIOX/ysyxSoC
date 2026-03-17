@@ -145,8 +145,7 @@ class APBXIPController(address: Seq[AddressSet], config: XIPConfig)(implicit
     )
   )
 
-  lazy val module = new Impl
-  class Impl extends LazyModuleImp(this) {
+  lazy val module = new LazyModuleImp(this) {
     val (in, _) = node.in(0)
     val (spi_apb, _) = masterNode.out(0)
 
