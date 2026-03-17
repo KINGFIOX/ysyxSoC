@@ -11,6 +11,7 @@ import freechips.rocketchip.util._
 
 import ysyx.core.NPCCore
 import ysyx.core.DebugBundle
+import ysyx.core.cache.{AXI4DCache, AXI4ICache}
 import ysyx.core.common.HasAXIParameter
 
 class CPU(idBits: Int)(implicit p: Parameters)
@@ -26,11 +27,8 @@ class CPU(idBits: Int)(implicit p: Parameters)
   val masterNode = AXI4Xbar()
   // masterNode := icacheNode
 
-  // val licache = LazyModule(new AXI4ICache)
-
-  // masterNode := licache.node := icacheNode
   masterNode := icacheNode
-  masterNode := AXI4DCache() := dcacheNode
+  masterNode := dcacheNode
   masterNode := peripNode
 
   lazy val module = new Impl
@@ -51,7 +49,7 @@ class CPU(idBits: Int)(implicit p: Parameters)
 
     icache <> core.icache
     dcache <> core.dcache
-    perip  <> core.perip
+    perip <> core.perip
 
     // Slave interface is not used by NPCCore, tie off
     slave.ar.ready := false.B
@@ -61,9 +59,6 @@ class CPU(idBits: Int)(implicit p: Parameters)
     slave.r.bits := DontCare
     slave.b.valid := false.B
     slave.b.bits := DontCare
-
-    // // fence_i
-    // licache.module.fence_i := core.fence_i
 
     // Interrupt is not used yet
     core.interrupt := interrupt
