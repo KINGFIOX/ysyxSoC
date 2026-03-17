@@ -81,7 +81,7 @@ class CommitStage extends NPCModule {
 
   // ---- Commit logic ----
   when(head_valid) {
-    when(head.except.valid) {
+    when(head.except.valid) { // happen
       csr.except.xepc_wen := true.B
       csr.except.xcause_wen := true.B
       csr.except.xtval_wen := true.B
@@ -97,7 +97,7 @@ class CommitStage extends NPCModule {
       dbg_dnpc := csr.xtvec
       dbg_is_mmio := false.B
 
-    }.elsewhen(head_is_mret) {
+    }.elsewhen(head_is_mret) { // mret
       flush := true.B
       ifu.valid := true.B
       ifu.correct_npc := csr.xepc
@@ -110,23 +110,19 @@ class CommitStage extends NPCModule {
       dbg_is_mmio := false.B
 
     }.otherwise {
-      when(rd_def) {
-        rfu_w.en := true.B
-        rfu_w.data := head.rd.value
-      }
+      rfu_w.en := rd_def
+      rfu_w.data := head.rd.value
 
       rat.en := rd_def
 
       cdb.valid := rd_def && (head_is_mem || head_is_csr)
       cdb.value := head.rd.value
 
-      when(mispredict) {
-        flush := true.B
-        ifu.valid := true.B
-        ifu.correct_npc := head.target_npc
-        ifu.wrong_pc := head.pc
-      }
-
+      flush := mispredict
+      ifu.valid := mispredict
+      ifu.correct_npc := head.target_npc
+      ifu.wrong_pc := head.pc
+      
       rob.ready := true.B
 
       dbg_valid := true.B
@@ -135,7 +131,8 @@ class CommitStage extends NPCModule {
     }
   }
 
-  // sequential sync
+  // sequential sync: delay 1 cycle
+  // for writing the register could be read
   probe.valid := RegNext(dbg_valid)
   probe.pc := RegNext(head.pc)
   probe.dnpc := RegNext(dbg_dnpc)

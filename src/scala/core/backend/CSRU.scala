@@ -5,7 +5,7 @@ import chisel3.util._
 
 import ysyx.core.common._
 
-// from the master's point-of-view
+// from the master(rob)'s point-of-view
 class CsrExceptWritePort extends Bundle with HasCoreParameter {
   val xepc = UInt(dataBits.W)
   val xepc_wen = Bool()
@@ -17,10 +17,7 @@ class CsrExceptWritePort extends Bundle with HasCoreParameter {
 
 class CsrWriteOnlyPort extends CsrRobEntry {
   val wen = Bool()
-}
-
-class CsrReadWritePort extends CsrWriteOnlyPort {
-  val rdata = Input(UInt(dataBits.W))
+  val result = Input(UInt(dataBits.W))
 }
 
 class CSRUDebugBundle
@@ -43,8 +40,7 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
   val xtvec = IO(UInt(dataBits.W)) // for `ecall`
 
   late.done := late.req
-  late.result := 0.U
-  late.result_valid := true.B
+  late.bits.result := 0.U
 
   // readable && writable register
   val mstatus = RegInit(0x1800.U(dataBits.W)) // TODO: write any, read legal
@@ -76,25 +72,25 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
   )
 
   // read
-  val csr_read = MuxLookup(late.extra.addr, 0.U)(csr_map)
-  late.result := csr_read
+  val csr_read = MuxLookup(late.bits.addr, 0.U)(csr_map)
+  late.bits.result := csr_read
 
   // calculate results
   // CSRRW: wdata = rs1
   // CSRRS: wdata = csr | rs1
   private val csrWdata = MuxCase(
-    late.extra.wdata,
+    late.bits.wdata,
     Seq(
-      (late.extra.op === CSROpType.CSR_RW) -> late.extra.wdata,
-      (late.extra.op === CSROpType.CSR_RS) -> (csr_read | late.extra.wdata)
+      (late.bits.op === CSROpType.CSR_RW) -> late.bits.wdata,
+      (late.bits.op === CSROpType.CSR_RS) -> (csr_read | late.bits.wdata)
     )
   )
-  when(late.extra.wen) {
-    when(late.extra.addr === MSTATUS.U) { mstatus := csrWdata }
-    when(late.extra.addr === MTVEC.U) { mtvec := csrWdata }
-    when(late.extra.addr === MEPC.U) { mepc := csrWdata }
-    when(late.extra.addr === MCAUSE.U) { mcause := csrWdata }
-    when(late.extra.addr === MTVAL.U) { mtval := csrWdata }
+  when(late.bits.wen) {
+    when(late.bits.addr === MSTATUS.U) { mstatus := csrWdata }
+    when(late.bits.addr === MTVEC.U) { mtvec := csrWdata }
+    when(late.bits.addr === MEPC.U) { mepc := csrWdata }
+    when(late.bits.addr === MCAUSE.U) { mcause := csrWdata }
+    when(late.bits.addr === MTVAL.U) { mtval := csrWdata }
   }
 
   // probe

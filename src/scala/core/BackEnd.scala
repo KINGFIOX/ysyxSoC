@@ -70,8 +70,8 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // CDB wires (declared early for rename / dispatch bypass)
   // ==========================================================
-  val cdb1 = Wire(new CDBBundle)
-  val cdb2 = Wire(new CDBBundle)
+  val cdb1 = Wire(new CDBBundle) // alu
+  val cdb2 = Wire(new CDBBundle) // late
 
   alu_iq_.io.cdb1 := cdb1
   alu_iq_.io.cdb2 := cdb2
@@ -91,10 +91,8 @@ class BackEnd extends NPCModule {
   renameStage_.io.rat(0) <> rat_.io.rename(0)
   renameStage_.io.rat(1) <> rat_.io.rename(1)
 
-  rfu_.io.read(0).addr := renameStage_.io.rfu_query(0).addr
-  rfu_.io.read(1).addr := renameStage_.io.rfu_query(1).addr
-  renameStage_.io.rfu_query(0).data := rfu_.io.read(0).data
-  renameStage_.io.rfu_query(1).data := rfu_.io.read(1).data
+  rfu_.io.read(0) <> renameStage_.io.rfu_query(0)
+  rfu_.io.read(1) <> renameStage_.io.rfu_query(1)
 
   renameStage_.io.rob(0) <> rob_.io.rename(0)
   renameStage_.io.rob(1) <> rob_.io.rename(1)
@@ -108,9 +106,9 @@ class BackEnd extends NPCModule {
   dispatcher_.io.flush := flush
   dispatcher_.io.rob_enq <> rob_.io.enq
   dispatcher_.io.rob_tag := rob_.io.enq_tag
-  dispatcher_.io.disp_alu <> alu_iq_.io.enq
-  dispatcher_.io.disp_bru <> bru_iq_.io.enq
-  dispatcher_.io.disp_agu <> agu_iq_.io.enq
+  dispatcher_.io.alu_iq <> alu_iq_.io.enq
+  dispatcher_.io.bru_iq <> bru_iq_.io.enq
+  dispatcher_.io.agu_iq <> agu_iq_.io.enq
 
   rat_.io.disp <> dispatcher_.io.rat
 

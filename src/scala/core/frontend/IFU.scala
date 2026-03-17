@@ -55,7 +55,7 @@ class IFU extends NPCModule {
   private val pcQ = RegInit(ysyx.SoCConfig.resetVector.U(addrBits.W))
   private val instQ = RegInit(0.U(dataBits.W))
   private val mcauseQ = RegInit(0.U(dataBits.W))
-  private val has_except_q = loadUnit.in.resp holdUnless loadUnit.in.data_ok
+  private val has_except_q = loadUnit.in.bits.resp holdUnless loadUnit.in.done
 
   object State extends ChiselEnum {
     val idle, addr_req, data_wait, output_wait = Value
@@ -63,11 +63,11 @@ class IFU extends NPCModule {
   private val stateQ = RegInit(State.idle)
 
   loadUnit.in.req := (stateQ === State.addr_req)
-  loadUnit.in.wr := false.B
-  loadUnit.in.size := 2.U
-  loadUnit.in.addr := pcQ
-  loadUnit.in.wstrb := 0.U
-  loadUnit.in.wdata := 0.U
+  loadUnit.in.bits.wr := false.B
+  loadUnit.in.bits.size := 2.U
+  loadUnit.in.bits.addr := pcQ
+  loadUnit.in.bits.wstrb := 0.U
+  loadUnit.in.bits.wdata := 0.U
 
   io.out.valid := (stateQ === State.output_wait)
   io.out.bits.inst := instQ
@@ -86,7 +86,7 @@ class IFU extends NPCModule {
     is(State.addr_req) {
       when(io.redirect.valid) {
         pcQ := io.redirect.correct_npc
-      }.elsewhen(loadUnit.in.addr_ok) {
+      }.elsewhen(loadUnit.in.ack) {
         stateQ := State.data_wait
       }
     }
@@ -95,10 +95,10 @@ class IFU extends NPCModule {
       when(io.redirect.valid) {
         stateQ := State.addr_req
         pcQ := io.redirect.correct_npc
-      }.elsewhen(loadUnit.in.data_ok) {
+      }.elsewhen(loadUnit.in.done) {
         stateQ := State.output_wait
-        instQ := loadUnit.in.rdata
-        when(loadUnit.in.resp =/= AXI4Resp.OKAY) {
+        instQ := loadUnit.in.bits.rdata
+        when(loadUnit.in.bits.resp =/= AXI4Resp.OKAY) {
           mcauseQ := 1.U // instruction access fault
         }
       }
