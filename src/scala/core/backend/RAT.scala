@@ -34,7 +34,7 @@ class RAT(val numReadPorts: Int = 2) extends NPCModule {
   })
 
   private val busy = RegInit(VecInit(Seq.fill(NRReg)(false.B))) // inflight
-  private val tags = Reg(Vec(NRReg, UInt(robEntryBits.W))) // if inflight
+  private val tags = Mem(NRReg, UInt(robEntryBits.W)) // if inflight
 
   // Priority: flush > write (dispatch) > commit (clear)
   when(io.flush) {

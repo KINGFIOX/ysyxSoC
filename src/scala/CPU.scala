@@ -26,9 +26,9 @@ class CPU(idBits: Int)(implicit p: Parameters)
   // format: on
 
   val masterNode = AXI4Xbar()
-  // masterNode := icacheNode
+  val licache = LazyModule(new AXI4ICache)
 
-  masterNode := SRAMToAXI4() := icacheNode
+  masterNode := licache.node := icacheNode
   masterNode := SRAMToAXI4() := dcacheNode
   masterNode := SRAMToAXI4() := peripNode
 
@@ -60,6 +60,8 @@ class CPU(idBits: Int)(implicit p: Parameters)
     slave.r.bits := DontCare
     slave.b.valid := false.B
     slave.b.bits := DontCare
+
+    licache.module.fence_i := core.fence_i
 
     // Interrupt is not used yet
     core.interrupt := interrupt
