@@ -13,8 +13,6 @@
 !.mill-version
 !Makefile
 !build.sc
-!meson.build
-!meson_options.txt
 !Cargo.toml
 !Cargo.lock
 !scripts/**
@@ -50,9 +48,6 @@ out/
 .metals/
 .bloop/
 .vscode/
-
-# meson 生成的 Scala 配置 (从 .in 模板生成)
-src/scala/SoCConfig.scala
 
 # =============================================================================
 # 例外 - 跟踪
