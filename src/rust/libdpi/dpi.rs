@@ -54,7 +54,6 @@ use log::info;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn sdram_write(addr: i32, data: u8) {
-    // info!("addr={:#012x}, data={:#012x}", addr, data);
     DPI_SDRAM.with_mut(|sdram| {
         sdram[addr as u32 as usize] = data;
     });

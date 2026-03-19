@@ -3,6 +3,7 @@ package ysyx.device
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.util.SynchronizerResetType.Async
+import ysyx.soc.SPIIO
 
 //               +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+   +---+
 // SCK            |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |

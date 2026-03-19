@@ -1,13 +1,263 @@
-package ysyx.device
+package ysyx.soc
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.circt.dpi.RawClockedNonVoidFunctionCall
+import chisel3.util.circt.dpi.RawClockedVoidFunctionCall
 import chisel3.experimental.Analog
 
 import freechips.rocketchip.amba.apb._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
+
+class flash_cmd extends Module {
+  val io = IO(new Bundle {
+    val valid = Input(Bool())
+    val cmd = Input(UInt(8.W))
+    val addr = Input(UInt(32.W))
+    val data = Output(UInt(32.W))
+  })
+
+  io.data := RawClockedNonVoidFunctionCall(s"flash_read", UInt(32.W))(
+    clock,
+    io.valid && (io.cmd === "h03".U(8.W)),
+    io.addr
+  )
+
+  assert(
+    // valid -> (cmd === 0x03)
+    // !valid || (cmd === 0x03)
+    !io.valid || (io.cmd === "h03".U(8.W)),
+    cf"Assert failed: Unsupportted command `${io.cmd}%x`"
+  )
+
+}
+
+// 考虑了 “窄传输” 的 Flash
+class flash extends RawModule {
+  val io = IO(Flipped(new SPIIO(1)))
+  val reset = io.ss.asBool.asAsyncReset
+  val sckRise = io.sck.asClock
+  val sckFall = (!io.sck).asClock
+  val module = withClockAndReset(sckRise, reset) { Module(new Impl) }
+  val misoOut = module.io.miso
+  class Impl extends Module with RequireAsyncReset {
+    val io = IO(new Bundle {
+      val miso = Output(Bool())
+      val mosi = Input(Bool())
+    })
+    object State extends ChiselEnum {
+      val cmd, addr, data = Value
+    }
+    val state = RegInit(State.cmd)
+    val counter = RegInit(0.U(5.W))
+    val cmd = RegInit(0.U(8.W))
+    val addr = RegInit(0.U(24.W))
+    val u0_flash_cmd = Module(new flash_cmd)
+    u0_flash_cmd.io.valid := false.B
+    u0_flash_cmd.io.addr := addr
+    u0_flash_cmd.io.cmd := cmd
+    val rdata = u0_flash_cmd.io.data
+    val data = RegInit(0.U(8.W))
+    io.miso := true.B
+    switch(state) {
+      is(State.cmd) {
+        counter := counter + 1.U
+        cmd := Cat(cmd(6, 0), io.mosi)
+        when(counter === 7.U) {
+          counter := 0.U // suppress increment
+          state := State.addr
+        }
+      }
+      is(State.addr) {
+        counter := counter + 1.U
+        val next_addr = Cat(addr(22, 0), io.mosi)
+        addr := next_addr
+        when(counter === 23.U) {
+          counter := 0.U
+          u0_flash_cmd.io.valid := true.B
+          u0_flash_cmd.io.addr := next_addr
+          state := State.data
+        }
+      }
+      is(State.data) {
+        counter := counter + 1.U
+        data := Cat(data(6, 0), false.B)
+        io.miso := data(7)
+        when(counter === 0.U) {
+          io.miso := rdata(7)
+          data := Cat(rdata(6, 0), false.B)
+        }.elsewhen(counter === 7.U) {
+          val next_addr = addr + 1.U
+          addr := next_addr
+          u0_flash_cmd.io.valid := true.B
+          u0_flash_cmd.io.addr := next_addr
+          counter := 0.U // reset
+        }
+      }
+    }
+  }
+  io.miso := Mux(io.ss.asBool, true.B, misoOut)
+  module.io.mosi := io.mosi
+}
+
+class psram_cmd extends Module {
+  val io = IO(new Bundle {
+    val valid = Input(Bool())
+    val cmd = Input(UInt(8.W))
+    val addr = Input(UInt(32.W))
+    val wdata = Input(UInt(8.W))
+    val rdata = Output(UInt(8.W))
+  })
+
+  io.rdata := RawClockedNonVoidFunctionCall(s"psram_read", UInt(8.W))(
+    clock,
+    io.valid && (io.cmd === "heb".U(8.W)),
+    io.addr
+  )
+
+  RawClockedVoidFunctionCall(s"psram_write")(
+    clock,
+    io.valid && (io.cmd === "h38".U(8.W)),
+    io.addr,
+    io.wdata
+  )
+
+  assert(
+    // valid -> (cmd === 0xeb) || (cmd === 0x38)
+    !io.valid || ((io.cmd === "heb".U(8.W) || (io.cmd === "h38".U(8.W)))),
+    cf"Assert failed: Unsupportted command `${io.cmd}%x`"
+  )
+
+}
+
+// eb: write (1, 4, 4)
+// 38: read (1, 4, 4)
+class psram extends RawModule {
+  val io = IO(Flipped(new QSPIIO))
+  val systemReset = IO(Input(AsyncReset()))
+  val ce_n = io.ce_n.asAsyncReset
+  val sckRise = io.sck.asClock
+  val sckFall = (!io.sck).asClock
+  val module = withClockAndReset(sckRise, ce_n) { Module(new Impl) }
+  val misoOut = withClockAndReset(sckFall, ce_n) { RegNext(module.io.miso) }
+  val misoEnOut = withClockAndReset(sckFall, ce_n) {
+    RegNext(module.io.misoEn, false.B)
+  }
+  module.io.mosi := TriStateInBuf(io.dio, misoOut, misoEnOut)
+  module.io.systemReset := systemReset
+  class Impl extends Module with RequireAsyncReset {
+    val io = IO(new Bundle {
+      val miso = Output(UInt(4.W))
+      val mosi = Input(UInt(4.W))
+      val misoEn = Output(Bool())
+      val systemReset = Input(AsyncReset())
+    })
+
+    // mode
+    val qpiMode = withClockAndReset(this.clock, io.systemReset) {
+      RegInit(false.B)
+    }
+
+    object State extends ChiselEnum {
+      val cmd, addr, wait_read, data = Value
+    }
+    val counter = RegInit(0.U(5.W))
+    val state = RegInit(State.cmd)
+    val cmd = RegInit(0.U(8.W))
+    val addr = RegInit(0.U(32.W));
+    val base = RegInit(0.U(24.W)); val offset = RegInit(0.U(10.W)) // wrapping
+    val wdataH = RegInit(0.U(4.W))
+    val u0_psram_cmd = Module(new psram_cmd)
+    u0_psram_cmd.io.valid := false.B
+    u0_psram_cmd.io.cmd := cmd
+    u0_psram_cmd.io.addr := Cat(base, offset)
+    u0_psram_cmd.io.wdata := Cat(wdataH, io.mosi)
+    val rdata = u0_psram_cmd.io.rdata
+
+    io.miso := 0.U
+    io.misoEn := false.B // default
+
+    switch(state) {
+      is(State.cmd) {
+        counter := counter + 1.U
+        when(qpiMode) { // qpi mode
+          val next_cmd = Cat(cmd(3, 0), io.mosi)
+          cmd := next_cmd
+          when(
+            counter === 1.U
+          ) { // only allow: qspi -> qpi; not allow: qpi -> qspi
+            counter := 0.U
+            state := State.addr
+          }
+        }.otherwise { // qspi mode
+          val next_cmd = Cat(cmd(6, 0), io.mosi(0))
+          cmd := next_cmd
+          when(counter === 7.U) {
+            counter := 0.U
+            state := State.addr // default
+            when(next_cmd === "h35".U) {
+              qpiMode := true.B
+              state := State.cmd // TODO: 一般设置完成以后, 总线事务就结束了
+            }
+          }
+        }
+      }
+      is(State.addr) {
+        counter := counter + 1.U
+        val next_addr = Cat(0.U(8.W), addr(19, 0), io.mosi)
+        addr := next_addr; base := next_addr(23, 10); offset := next_addr(9, 0)
+        when(counter === 5.U) {
+          counter := 0.U
+          assert(
+            cmd === "heb".U || cmd === "h38".U,
+            cf"Assert failed: Unsupportted command `${cmd}%x`"
+          )
+          when(cmd === "heb".U) {
+            state := State.wait_read
+          }.elsewhen(cmd === "h38".U) {
+            state := State.data
+          }
+        }
+      }
+      is(State.wait_read) {
+        counter := counter + 1.U
+        when(counter === 5.U) {
+          counter := 0.U
+          u0_psram_cmd.io.valid := true.B // pulse
+          state := State.data
+        }
+      }
+      is(State.data) {
+        assert(cmd === "heb".U || cmd === "h38".U, "impossible")
+        when(cmd === "heb".U) { // read
+          io.misoEn := true.B
+          when(counter === 0.U) {
+            counter := 1.U
+            io.miso := rdata(7, 4)
+          }.otherwise { // counter === 1
+            counter := 0.U
+            io.miso := rdata(3, 0)
+            u0_psram_cmd.io.valid := true.B
+            val next_offset = offset + 1.U
+            u0_psram_cmd.io.addr := Cat(base, next_offset)
+            offset := next_offset
+          }
+        }.elsewhen(cmd === "h38".U) { // write
+          when(counter === 0.U) {
+            counter := 1.U
+            wdataH := io.mosi
+          }.otherwise { // counter === 1
+            counter := 0.U
+            offset := offset + 1.U
+            u0_psram_cmd.io.valid := true.B
+          }
+        }
+      }
+    }
+  }
+}
 
 class QSPIIO extends Bundle {
   val sck  = Output(Bool())

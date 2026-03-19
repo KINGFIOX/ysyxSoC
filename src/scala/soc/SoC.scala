@@ -96,12 +96,10 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val intr_from_chipSlave = IO(Input(Bool()))
     cpu.module.interrupt := intr_from_chipSlave
 
-    val probe = IO(Output(new DebugBundle))
-    probe := cpu.module.probe
-
     val sdramBundle = lsdram_axi.module.sdram_bundle
 
     // expose slave I/O interface as ports
+    val probe = IO(chiselTypeOf(cpu.module.probe))
     val spi = IO(chiselTypeOf(lspi.module.spi_bundle))
     val uart = IO(chiselTypeOf(luart.module.uart))
     val psram = IO(chiselTypeOf(lpsram.module.qspi_bundle))
@@ -109,6 +107,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val gpio = IO(chiselTypeOf(lgpio.module.gpio_bundle))
     val ps2 = IO(chiselTypeOf(lkeyboard.module.ps2_bundle))
     val vga = IO(chiselTypeOf(lvga.module.vga_bundle))
+    probe <> cpu.module.probe
     uart <> luart.module.uart
     spi <> lspi.module.spi_bundle
     psram <> lpsram.module.qspi_bundle
