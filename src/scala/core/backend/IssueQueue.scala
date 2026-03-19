@@ -95,9 +95,18 @@ abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numOps: Int)
   when(do_enq) {
     val ent = ram(enq_ptr)
     for (i <- 0 until numOps) {
-      ent.src(i).value := io.enq.bits.src(i).value
-      ent.src(i).tag := io.enq.bits.src(i).tag
-      ent.src(i).ready := io.enq.bits.src(i).ready
+      val enq_src = io.enq.bits.src(i)
+      val cdb1_hit = io.cdb1.valid && !enq_src.ready && (enq_src.tag === io.cdb1.tag)
+      val cdb2_hit = io.cdb2.valid && !enq_src.ready && (enq_src.tag === io.cdb2.tag)
+      ent.src(i).tag := enq_src.tag
+      ent.src(i).ready := enq_src.ready || cdb1_hit || cdb2_hit
+      ent.src(i).value := MuxCase(
+        enq_src.value,
+        Seq(
+          cdb1_hit -> io.cdb1.value,
+          cdb2_hit -> io.cdb2.value
+        )
+      )
     }
     ent.extra := io.enq.bits.extra
     ent.rob_tag := io.enq.bits.rob_tag
