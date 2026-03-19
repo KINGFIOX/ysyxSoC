@@ -3,6 +3,7 @@ package ysyx.device
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.Analog
+import chisel3.util.circt.dpi._
 
 import freechips.rocketchip.amba.axi4._
 import org.chipsalliance.cde.config.Parameters
@@ -109,14 +110,16 @@ class SdramCore extends Module {
   private val ramReqW = ramWrW =/= 0.U || ramRdW
 
   // --- Address bit extraction ---
-  private val addrColW = Cat(0.U((p.rowW - p.colW).W), ramAddrW(p.colW, 2), 0.U(1.W))
+  private val addrColW =
+    Cat(0.U((p.rowW - p.colW).W), ramAddrW(p.colW, 2), 0.U(1.W))
   private val addrRowW = ramAddrW(p.addrW, p.colW + 3)
   private val addrBankW = ramAddrW(p.colW + 2, p.colW + 1)
 
   // States
   object State extends ChiselEnum {
     //   0      1     2       3       4        5        6       7        8         9
-    val init, delay, idle, activate, read, read_wait, write0, write1, precharge, refresh = Value
+    val init, delay, idle, activate, read, read_wait, write0, write1, precharge,
+        refresh = Value
   }
 
   // --- state machine ---
@@ -154,17 +157,20 @@ class SdramCore extends Module {
   // --- latched request address (stable across state transitions) ---
   private val reqAddrQ = RegInit(0.U(32.W))
   private val reqWrStrbQ = RegInit("b1111".U(4.W))
-  private val reqColW = Cat(0.U((p.rowW - p.colW).W), reqAddrQ(p.colW, 2), 0.U(1.W))
+  private val reqColW =
+    Cat(0.U((p.rowW - p.colW).W), reqAddrQ(p.colW, 2), 0.U(1.W))
   private val reqRowW = reqAddrQ(p.addrW, p.colW + 3)
   private val reqBankW = reqAddrQ(p.colW + 2, p.colW + 1)
 
   // --- row open ---
   private val rowOpenQ = RegInit(0.U(p.banks.W))
   private val activeRowQ = RegInit(VecInit(Seq.fill(p.banks)(0.U(p.rowW.W))))
-  private val rowHitW = rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)
+  private val rowHitW =
+    rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)
 
   // --- Periodic refresh (after init) ---
-  private val (_, refreshTick) = Counter(stateQ =/= State.init, p.refreshCycles + 1)
+  private val (_, refreshTick) =
+    Counter(stateQ =/= State.init, p.refreshCycles + 1)
   private val refreshQ = RegInit(false.B)
   when(refreshTick) {
     refreshQ := true.B
@@ -320,7 +326,8 @@ class SdramCore extends Module {
 
   // --- Read data pipeline ---
   private val sampleDataQ = ShiftRegister(dataInW, 2, 0.U(p.dataW.W), true.B)
-  private val rdDelayed = ShiftRegister(stateQ === State.read, p.casLatency + 2, false.B, true.B)
+  private val rdDelayed =
+    ShiftRegister(stateQ === State.read, p.casLatency + 2, false.B, true.B)
   io.inportReadData := Cat(sampleDataQ, RegNext(sampleDataQ))
   io.inportAck := RegNext(stateQ === State.write1 || rdDelayed)
 
@@ -411,7 +418,9 @@ class SdramAxiPmem(axiParams: AXI4BundleParameters) extends Module {
   private val rReqCntQ = Reg(UInt(axiParams.lenBits.W))
   private val rRespCntQ = Reg(UInt(axiParams.lenBits.W))
 
-  private val rDataQueue = Module(new Queue(UInt(axiParams.dataBits.W), QUEUE_DEPTH))
+  private val rDataQueue = Module(
+    new Queue(UInt(axiParams.dataBits.W), QUEUE_DEPTH)
+  )
 
   // ==================== Write FSM ====================
   object WState extends ChiselEnum {
@@ -425,12 +434,16 @@ class SdramAxiPmem(axiParams: AXI4BundleParameters) extends Module {
   private val wBurstLenQ = Reg(UInt(axiParams.lenBits.W))
   private val wReqCntQ = Reg(UInt(axiParams.lenBits.W))
 
-  private val wDataQueue = Module(new Queue(new WDataEntry(axiParams.dataBits), QUEUE_DEPTH))
+  private val wDataQueue = Module(
+    new Queue(new WDataEntry(axiParams.dataBits), QUEUE_DEPTH)
+  )
 
   // ==================== Ack Pending & Flow Control ====================
   private val rAckPendingQ = RegInit(0.U(4.W))
   private val wAckPendingQ = RegInit(0.U(4.W))
-  private val rOutstandingQ = RegInit(0.U(4.W)) // core: accepted but not acknowledged
+  private val rOutstandingQ = RegInit(
+    0.U(4.W)
+  ) // core: accepted but not acknowledged
 
   // ==================== Arbiter ====================
   private val rAllReqsSentQ = RegInit(true.B)
@@ -684,7 +697,6 @@ class SdramMemImpl extends Module with RequireAsyncReset {
 
   // --- modules ---
   private val sdram_cmd = Module(new sdram_cmd)
-  sdram_cmd.io.clock := clock
   sdram_cmd.io.valid := false.B // default
   sdram_cmd.io.wen := false.B
   sdram_cmd.io.addr := 0.U
@@ -812,14 +824,34 @@ class SdramMemImpl extends Module with RequireAsyncReset {
   }
 }
 
-class sdram_cmd_io extends Bundle {
-  val clock = Input(Clock())
-  val valid = Input(Bool())
-  val wen = Input(Bool())
-  val dqm_n = Input(UInt(2.W))
-  val addr = Input(UInt(32.W))
-  val wdata = Input(UInt(16.W))
-  val rdata = Output(UInt(16.W))
-}
+class sdram_cmd extends Module {
+  val io = IO(new Bundle {
+    val valid = Input(Bool())
+    val wen = Input(Bool())
+    val dqm_n = Input(UInt(2.W))
+    val addr = Input(UInt(32.W))
+    val wdata = Input(UInt(16.W))
+    val rdata = Output(UInt(16.W))
+  })
 
-class sdram_cmd extends FixedIOExtModule(new sdram_cmd_io)
+  io.rdata := RawClockedNonVoidFunctionCall(s"sdram_read", UInt(16.W))(
+    clock,
+    io.valid && !io.wen,
+    io.addr
+  )
+
+  RawClockedVoidFunctionCall(s"sdram_write")(
+    clock,
+    io.valid && io.wen && !io.dqm_n(0),
+    io.addr,
+    io.wdata(7, 0)
+  )
+
+  RawClockedVoidFunctionCall(s"sdram_write")(
+    clock,
+    io.valid && io.wen && !io.dqm_n(1),
+    io.addr + 1.U,
+    io.wdata(15, 8)
+  )
+
+}

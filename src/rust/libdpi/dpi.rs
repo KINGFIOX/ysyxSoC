@@ -40,13 +40,13 @@ pub extern "C" fn psram_write(addr: i32, data: i8) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn sdram_read_dpic(addr: i32) -> u16 {
+pub extern "C" fn sdram_read(addr: i32, data: *mut i16) {
     DPI_SDRAM.with(|sdram| {
         let offset = addr as u32 as usize;
         let lo = sdram[offset] as u16;
         let hi = sdram[offset + 1] as u16;
-        lo | (hi << 8)
-    })
+        unsafe { *data = (lo | (hi << 8)) as i16 };
+    });
 }
 
 #[allow(unused)]
