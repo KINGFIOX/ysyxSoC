@@ -2,15 +2,30 @@ package ysyx.device
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.circt.dpi.RawClockedNonVoidFunctionCall
 
-class flash_cmd
-    extends FixedIOExtModule(new Bundle {
-      val clock = Input(Clock())
-      val valid = Input(Bool())
-      val cmd = Input(UInt(8.W))
-      val addr = Input(UInt(32.W))
-      val data = Output(UInt(32.W))
-    })
+class flash_cmd extends Module {
+  val io = IO(new Bundle {
+    val valid = Input(Bool())
+    val cmd = Input(UInt(8.W))
+    val addr = Input(UInt(32.W))
+    val data = Output(UInt(32.W))
+  })
+
+  io.data := RawClockedNonVoidFunctionCall(s"flash_read", UInt(32.W))(
+    clock,
+    io.valid && (io.cmd === "h03".U(8.W)),
+    io.addr
+  )
+
+  assert(
+    // valid -> (cmd === 0x03)
+    // !valid || (cmd === 0x03)
+    !io.valid || (io.cmd === "h03".U(8.W)),
+    cf"Assert failed: Unsupportted command `${io.cmd}%x`"
+  )
+
+}
 
 // 考虑了 “窄传输” 的 Flash
 class flash extends RawModule {
@@ -33,7 +48,6 @@ class flash extends RawModule {
     val cmd = RegInit(0.U(8.W))
     val addr = RegInit(0.U(24.W))
     val u0_flash_cmd = Module(new flash_cmd)
-    u0_flash_cmd.io.clock := this.clock
     u0_flash_cmd.io.valid := false.B
     u0_flash_cmd.io.addr := addr
     u0_flash_cmd.io.cmd := cmd

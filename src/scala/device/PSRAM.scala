@@ -2,18 +2,38 @@ package ysyx.device
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.circt.dpi.RawClockedNonVoidFunctionCall
+import chisel3.util.circt.dpi.RawClockedVoidFunctionCall
 
-class psram_cmd
-    extends FixedIOExtModule(
-      new Bundle {
-        val clock = Input(Clock())
-        val valid = Input(Bool())
-        val cmd = Input(UInt(8.W))
-        val addr = Input(UInt(32.W))
-        val wdata = Input(UInt(8.W))
-        val rdata = Output(UInt(8.W))
-      }
-    )
+class psram_cmd extends Module {
+  val io = IO(new Bundle {
+    val valid = Input(Bool())
+    val cmd = Input(UInt(8.W))
+    val addr = Input(UInt(32.W))
+    val wdata = Input(UInt(8.W))
+    val rdata = Output(UInt(8.W))
+  })
+
+  io.rdata := RawClockedNonVoidFunctionCall(s"psram_read", UInt(8.W))(
+    clock,
+    io.valid && (io.cmd === "heb".U(8.W)),
+    io.addr
+  )
+
+  RawClockedVoidFunctionCall(s"psram_write")(
+    clock,
+    io.valid && (io.cmd === "h38".U(8.W)),
+    io.addr,
+    io.wdata
+  )
+
+  assert(
+    // valid -> (cmd === 0xeb) || (cmd === 0x38)
+    !io.valid || ((io.cmd === "heb".U(8.W) || (io.cmd === "h38".U(8.W)))),
+    cf"Assert failed: Unsupportted command `${io.cmd}%x`"
+  )
+
+}
 
 // eb: write (1, 4, 4)
 // 38: read (1, 4, 4)
@@ -53,7 +73,6 @@ class psram extends RawModule {
     val base = RegInit(0.U(24.W)); val offset = RegInit(0.U(10.W)) // wrapping
     val wdataH = RegInit(0.U(4.W))
     val u0_psram_cmd = Module(new psram_cmd)
-    u0_psram_cmd.io.clock := this.clock
     u0_psram_cmd.io.valid := false.B
     u0_psram_cmd.io.cmd := cmd
     u0_psram_cmd.io.addr := Cat(base, offset)
