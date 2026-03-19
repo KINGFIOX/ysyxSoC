@@ -1,18 +1,24 @@
-package ysyx
+package ysyx.soc
 
 import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.diplomacy._
-import org.chipsalliance.cde.config.Parameters
+import org.chipsalliance.cde.config.{Parameters, Config}
+import freechips.rocketchip.system._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.util._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.amba.apb._
 import freechips.rocketchip.system.SimAXIMem
 
-import ysyx.core.DebugBundle
+import ysyx.device._
+import ysyx.amba._
+import ysyx.core._
+import ysyx.cpu.CPU
+import ysyx.{SoCConfig, Config}
 
+// format: off
 object AXI4SlaveNodeGenerator {
   def apply(params: Option[MasterPortParams], address: Seq[AddressSet])(implicit valName: ValName) =
     AXI4SlaveNode(params.map(p => AXI4SlavePortParameters(
@@ -24,7 +30,9 @@ object AXI4SlaveNodeGenerator {
         beatBytes = p.beatBytes
       )).toSeq)
 }
+// format: on
 
+// format: off
 class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val xbar = AXI4Xbar()
   val xbar2 = AXI4Xbar()
@@ -62,7 +70,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val lsdram_axi = LazyModule(new AXI4SDRAM(sdramAddressSet))
 
   xbar2 := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := xbar
-  lsdram_axi.node := ysyx.AXI4Delayer() := xbar
+  lsdram_axi.node := ysyx.amba.AXI4Delayer() := xbar
   if (Config.hasChipLink) chiplinkNode.get := xbar
   xbar := cpu.masterNode
 
@@ -110,10 +118,11 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     vga <> lvga.module.vga_bundle
   }
 }
+// format: on
 
 class ysyxSoCFPGA(implicit p: Parameters) extends ChipLinkSlave
 
-
+// format: off
 class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
   val asic = LazyModule(new ysyxSoCASIC)
   ElaborationArtefacts.add("graphml", graphML)
@@ -173,10 +182,32 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     probe := masic.probe
   }
 }
+// format: on
 
-class ExternalPins extends Bundle {
-  val gpio = new GPIOIO
-  val ps2 = new PS2IO
-  val vga = new VGAIO
-  val uart = new UARTIO
+class NPCSoC
+    extends FixedIORawModule(new Bundle {
+      val clock = Input(Clock())
+      val reset = Input(Bool())
+      val externalPins = new ExternalPins
+      val debug = Output(new DebugBundle)
+    })
+    with ImplicitClock
+    with ImplicitReset {
+  override protected def implicitClock: Clock = io.clock
+  override protected def implicitReset: Reset = io.reset
+
+  implicit val config: Parameters = new Config(
+    new Edge32BitConfig ++ new DefaultRV32Config
+  )
+
+  val dut = LazyModule(new ysyxSoCFull)
+  val mdut = Module(dut.module)
+  mdut.externalPins <> io.externalPins
+
+  io.debug := mdut.probe
+}
+
+object ElaborateNPCSoC extends App {
+  val firtoolOptions = Array("--disable-annotation-unknown")
+  _root_.circt.stage.ChiselStage.emitSystemVerilogFile(new NPCSoC, args, firtoolOptions)
 }

@@ -1,4 +1,4 @@
-package ysyx
+package ysyx.device
 
 import chisel3._
 import chisel3.util._
@@ -7,6 +7,8 @@ import freechips.rocketchip.amba.apb._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
+
+import ysyx.amba._
 
 // ============================================================================
 // SPI Physical Interface

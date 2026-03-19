@@ -26,7 +26,7 @@ V_SIM      := $(RTL_DIR)/NPCSoC.sv
 
 $(V_SIM): $(SCALA_FILES)
 	@mkdir -p $(RTL_DIR)
-	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(RTL_DIR)
+	$(MILL) -i ysyxsoc.runMain ysyx.soc.ElaborateNPCSoC --target-dir $(RTL_DIR)
 
 verilog: $(V_SIM)
 

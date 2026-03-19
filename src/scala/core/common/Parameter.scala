@@ -2,9 +2,12 @@ package ysyx.core.common
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.amba.axi4.AXI4BundleParameters
-import ysyx.{ChipLinkParam, SoCConfig}
+
 import ysyx.core.sram.SRAMBundleParameters
+import ysyx.device._
+import ysyx.SoCConfig
 
 /** @brief
   *   有几个通用寄存器
@@ -84,21 +87,3 @@ abstract class NPCBundle
     with HasCSRParameter
     with HasAXIParameter
     with HasSRAMParameter
-
-object PipelineConnect {
-  def apply[T <: Data](
-      prevOut: DecoupledIO[T],
-      thisIn: DecoupledIO[T],
-      flush: Bool
-  ) {
-    val valid = RegInit(false.B)
-    when(flush) {
-      valid := false.B
-    }.elsewhen(thisIn.ready) {
-      valid := prevOut.valid
-    }
-    prevOut.ready := thisIn.ready
-    thisIn.bits := RegEnable(prevOut.bits, prevOut.valid && thisIn.ready)
-    thisIn.valid := valid
-  }
-}

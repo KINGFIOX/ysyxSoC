@@ -6,67 +6,21 @@ import freechips.rocketchip.system._
 import freechips.rocketchip.diplomacy.LazyModule
 
 import ysyx.core.DebugBundle
+import ysyx.soc.ysyxSoCFull
+import ysyx.device.ExternalPins
 
 object Config {
   def hasChipLink: Boolean = false
 }
 
-// module ysyxSoCTop(
-//   input clock,
-//         reset
-// );
-//   ysyxSoCFull dut (
-//     .clock                (clock),
-//     .reset                (reset),
-//     .externalPins_uart_rx (1'h0),
-//     .externalPins_uart_tx (/* unused */)
-//   );
-// endmodule
 class ysyxSoCTop extends Module {
-  implicit val config: Parameters = new Config(new Edge32BitConfig ++ new DefaultRV32Config)
+  implicit val config: Parameters = new Config(
+    new Edge32BitConfig ++ new DefaultRV32Config
+  )
 
-  val io = IO(new Bundle { })
+  val io = IO(new Bundle {})
   val dut = LazyModule(new ysyxSoCFull)
   val mdut = Module(dut.module)
   mdut.dontTouchPorts() // mark all ports as don't touch
   mdut.externalPins := DontCare
-}
-
-class NPCSoCInterface extends Bundle {
-  val clock = Input(Clock())
-  val reset = Input(Bool())
-  val externalPins = new ExternalPins
-
-  val debug = Output(new DebugBundle)
-}
-
-/** NPCSoC - Top module for Verilator simulation
-  *
-  * This module wraps ysyxSoCFull and exposes step/debug interfaces
-  * for difftest and tracing.
-  */
-class NPCSoC
-    extends FixedIORawModule(new NPCSoCInterface)
-    with ImplicitClock
-    with ImplicitReset {
-  override protected def implicitClock: Clock = io.clock
-  override protected def implicitReset: Reset = io.reset
-
-  implicit val config: Parameters = new Config(new Edge32BitConfig ++ new DefaultRV32Config)
-
-  val dut = LazyModule(new ysyxSoCFull)
-  val mdut = Module(dut.module)
-  mdut.externalPins <> io.externalPins
-
-  io.debug := mdut.probe
-}
-
-object Elaborate extends App {
-  val firtoolOptions = Array("--disable-annotation-unknown")
-  circt.stage.ChiselStage.emitSystemVerilogFile(new ysyxSoCTop, args, firtoolOptions)
-}
-
-object ElaborateNPCSoC extends App {
-  val firtoolOptions = Array("--disable-annotation-unknown")
-  circt.stage.ChiselStage.emitSystemVerilogFile(new NPCSoC, args, firtoolOptions)
 }

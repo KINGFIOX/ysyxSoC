@@ -1,7 +1,7 @@
 // APB N-to-1 Arbiter
 // Multiple masters to single slave with priority-based arbitration
 
-package ysyx
+package ysyx.amba
 
 import chisel3._
 import chisel3.util._

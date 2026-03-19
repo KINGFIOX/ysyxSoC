@@ -22,6 +22,7 @@ trait HasThisChisel extends SbtModule {
   override def scalaVersion = defaultScalaVersion
   override def scalacOptions = super.scalacOptions() ++
     Agg(
+      "-deprecation",  // 显示 deprecation 的详细信息（排查后可移除）
       "-language:reflectiveCalls",
       "-Ymacro-annotations",
       "-Ytasty-reader",

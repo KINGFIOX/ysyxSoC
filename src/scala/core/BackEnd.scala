@@ -74,12 +74,8 @@ class BackEnd extends NPCModule {
   val cdb1 = Wire(new CDBBundle) // alu
   val cdb2 = Wire(new CDBBundle) // late
 
-  alu_iq_.io.cdb1 := cdb1
-  alu_iq_.io.cdb2 := cdb2
-  bru_iq_.io.cdb1 := cdb1
-  bru_iq_.io.cdb2 := cdb2
-  agu_iq_.io.cdb1 := cdb1
-  agu_iq_.io.cdb2 := cdb2
+  alu_iq_.io.cdb1 := cdb1; bru_iq_.io.cdb1 := cdb1; agu_iq_.io.cdb1 := cdb1
+  alu_iq_.io.cdb2 := cdb2; bru_iq_.io.cdb2 := cdb2; agu_iq_.io.cdb2 := cdb2
 
   // ==========================================================
   // Stage pipeline: IFU -> Decode -> Rename -> Dispatch
@@ -121,7 +117,7 @@ class BackEnd extends NPCModule {
   alu_.io.out.ready := true.B // backpress
   alu_.io.in.valid := alu_iq_.io.issue.valid
   alu_iq_.io.issue.ready := alu_.io.in.ready
-  alu_.io.in.bits.op1 := alu_iq_.io.issue.bits.src_v(0)
+  alu_.io.in.bits.op1 := alu_iq_.io.issue.bits.src_v(0) //
   alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
   alu_.io.in.bits.alu_op := alu_iq_.io.issue.bits.extra.alu_op
   alu_.io.in.bits.rob_tag := alu_iq_.io.issue.bits.rob_tag
@@ -138,9 +134,11 @@ class BackEnd extends NPCModule {
   val alu_is_jalr = alu_rob_entry.inst_type === InstType.JALR
   val alu_is_csr = alu_rob_entry.inst_type === InstType.CSR
 
+  // format: off
   val alu_rd_val = Mux(alu_rob_entry.rd.valid, alu_rob_entry.rd.value /*loopback*/, alu_result)
   val alu_rd_valid = !alu_is_csr // alu is late execution
   val alu_target_npc = Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.target_npc)
+  // format: on
 
   rob_.io.alu.valid := alu_wb_valid
   rob_.io.alu.bits.tag := alu_wb_tag
@@ -166,7 +164,8 @@ class BackEnd extends NPCModule {
   rob_.io.exec(1).tag := bru_wb_tag
   val bru_rob_entry = rob_.io.exec(1).entry
 
-  val bru_target_npc = Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
+  val bru_target_npc =
+    Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
 
   rob_.io.bru.valid := bru_wb_valid
   rob_.io.bru.bits.tag := bru_wb_tag
