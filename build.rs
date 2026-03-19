@@ -43,10 +43,9 @@ fn main() -> miette::Result<()> {
         .include(spike_inc.join("softfloat"))
         .compile("npc-spike-bridge");
 
-    // Verilator libraries
+    // Verilator library (model + runtime are combined by verilate() cmake function)
     println!("cargo:rustc-link-arg={}", verilator_mdir.join("VNPCSoC__ALL.a").display());
     println!("cargo:rustc-link-search=native={}", verilator_mdir.display());
-    println!("cargo:rustc-link-lib=static=verilated");
     println!("cargo:rustc-link-lib=z"); // FST tracing depending zlib
 
     // Spike libraries

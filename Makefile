@@ -16,8 +16,6 @@ NPC_HOME     ?= $(abspath .)
 BUILD_DIR    := $(NPC_HOME)/build
 MILL         := mill
 
-SOC_CONFIG_SCALA := $(NPC_HOME)/src/scala/SoCConfig.scala
-
 # =============================== Step 1: make verilog ===============================
 # Chisel → SystemVerilog (mill)
 
@@ -26,52 +24,33 @@ SCALA_FILES := $(shell find src/scala -name "*.scala" ! -name "SoCConfig.scala" 
 RTL_DIR    := $(BUILD_DIR)/rtl
 V_SIM      := $(RTL_DIR)/NPCSoC.sv
 
-$(V_SIM): $(SCALA_FILES) $(SOC_CONFIG_SCALA)
+$(V_SIM): $(SCALA_FILES)
 	@mkdir -p $(RTL_DIR)
 	$(MILL) -i ysyxsoc.runMain ysyx.ElaborateNPCSoC --target-dir $(RTL_DIR)
 
 verilog: $(V_SIM)
 
 # =============================== Step 2: make verilate ===============================
-# SystemVerilog → Verilator C++ 静态库
+# SystemVerilog → Verilator C++ 静态库 (CMake + Ninja)
 
-VERILATOR      ?= verilator
-VERILATOR_TOP  := NPCSoC
-VERILATOR_MDIR := $(BUILD_DIR)/obj-verilator
-VERILATOR_MK   := $(VERILATOR_MDIR)/V$(VERILATOR_TOP).mk
-VERILATOR_LIB  := $(VERILATOR_MDIR)/V$(VERILATOR_TOP)__ALL.a
+VERILATOR_TOP       := NPCSoC
+VERILATOR_MDIR      := $(BUILD_DIR)/obj-verilator
+VERILATOR_LIB       := $(VERILATOR_MDIR)/V$(VERILATOR_TOP)__ALL.a
+VERILATOR_CMAKE_BUILD := $(VERILATOR_MDIR)/cmake-build
 
-VERILATOR_SRCS := $(V_SIM)
-VERILATOR_SRCS += $(shell find $(RTL_DIR) -name "*.sv" 2>/dev/null)
+VERILATOR_RTL_SRCS   := $(shell find $(RTL_DIR) -name "*.sv" 2>/dev/null)
 VERILATOR_PERIP_SRCS := $(shell find src/verilog -name "*.v" 2>/dev/null)
-VERILATOR_SRCS += $(VERILATOR_PERIP_SRCS)
 
-VERILATOR_INCS := -I$(NPC_HOME)/src/verilog/spi/rtl
-VERILATOR_INCS += -I$(NPC_HOME)/src/verilog/uart16550/rtl
-VERILATOR_INCS += -I$(RTL_DIR)/verification
-VERILATOR_INCS += -I$(RTL_DIR)/verification/assert
-VERILATOR_INCS += -I$(RTL_DIR)/verification/assume
-VERILATOR_INCS += -I$(RTL_DIR)/verification/cover
-
-VERILATOR_DEFINES := $(if $(findstring true,$(DIFFTEST)),+define+CONFIG_DIFFTEST,)
-VERILATOR_DEFINES += $(if $(findstring true,$(VERILATOR_TRACE)),+define+CONFIG_VERILATOR_TRACE,)
-
-$(VERILATOR_MK): $(V_SIM) $(VERILATOR_PERIP_SRCS)
-	@echo "=== Verilating $(VERILATOR_TOP) ==="
+$(VERILATOR_LIB): $(VERILATOR_RTL_SRCS) $(VERILATOR_PERIP_SRCS)
+	@echo "=== Verilating + Building (CMake+Ninja) ==="
 	@mkdir -p $(VERILATOR_MDIR)
-	$(VERILATOR) --cc $(VERILATOR_SRCS) \
-		--Mdir $(VERILATOR_MDIR) \
-		--top-module $(VERILATOR_TOP) \
-		--timescale "1ns/1ns" \
-		--trace-fst --no-timing --autoflush --assert \
-		-O2 -Wall -Wno-fatal \
-		$(VERILATOR_INCS) \
-		$(VERILATOR_DEFINES) \
-		-CFLAGS "-std=c++17 -O2"
-
-$(VERILATOR_LIB): $(VERILATOR_MK)
-	@echo "=== Building Verilator library ==="
-	$(MAKE) -C $(VERILATOR_MDIR) -f V$(VERILATOR_TOP).mk
+	@cmake -G Ninja \
+		-S $(NPC_HOME)/scripts/verilator-build \
+		-B $(VERILATOR_CMAKE_BUILD) \
+		-DNPC_HOME=$(abspath $(NPC_HOME)) \
+		-DRTL_DIR=$(abspath $(RTL_DIR)) \
+		-DOUTPUT_DIR=$(abspath $(VERILATOR_MDIR))
+	@cmake --build $(VERILATOR_CMAKE_BUILD)
 
 verilate: $(VERILATOR_LIB)
 
