@@ -63,11 +63,15 @@ abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numOps: Int)
   ram.foreach(ent =>
     when(ent.occupied && !io.flush) {
       for (i <- 0 until numOps) {
-        when(io.cdb1.valid && !ent.src(i).ready && ent.src(i).tag === io.cdb1.tag) {
+        when(
+          io.cdb1.valid && !ent.src(i).ready && ent.src(i).tag === io.cdb1.tag
+        ) {
           ent.src(i).value := io.cdb1.value
           ent.src(i).ready := true.B
           assert(!ent.src(i).ready, "impossible: src already ready on CDB hit")
-        }.elsewhen(io.cdb2.valid && !ent.src(i).ready && ent.src(i).tag === io.cdb2.tag) {
+        }.elsewhen(
+          io.cdb2.valid && !ent.src(i).ready && ent.src(i).tag === io.cdb2.tag
+        ) {
           ent.src(i).value := io.cdb2.value
           ent.src(i).ready := true.B
           assert(!ent.src(i).ready, "impossible: src already ready on CDB hit")
@@ -96,8 +100,10 @@ abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numOps: Int)
     val ent = ram(enq_ptr)
     for (i <- 0 until numOps) {
       val enq_src = io.enq.bits.src(i)
-      val cdb1_hit = io.cdb1.valid && !enq_src.ready && (enq_src.tag === io.cdb1.tag)
-      val cdb2_hit = io.cdb2.valid && !enq_src.ready && (enq_src.tag === io.cdb2.tag)
+      val cdb1_hit =
+        io.cdb1.valid && !enq_src.ready && (enq_src.tag === io.cdb1.tag)
+      val cdb2_hit =
+        io.cdb2.valid && !enq_src.ready && (enq_src.tag === io.cdb2.tag)
       ent.src(i).tag := enq_src.tag
       ent.src(i).ready := enq_src.ready || cdb1_hit || cdb2_hit
       ent.src(i).value := MuxCase(

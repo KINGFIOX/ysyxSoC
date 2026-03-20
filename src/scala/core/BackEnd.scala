@@ -37,7 +37,7 @@ class BackEnd extends NPCModule {
   val commitStage_ = Module(new CommitStage)
 
   val rfu_ = Module(new RFU)
-  val rob_ = Module(new Rob)
+  val rob_ = Module(new Rob(numFwdPorts = 2, numLookupPorts = 1))
   val rat_ = Module(new RAT)
   val alu_ = Module(new ALU)
   val bru_ = Module(new BRU)
@@ -69,7 +69,7 @@ class BackEnd extends NPCModule {
   agu_iq_.io.flush := flush
 
   // ==========================================================
-  // CDB wires (declared early for rename / dispatch bypass)
+  // CDB(common data bus) wires (declared early for rename / dispatch bypass)
   // ==========================================================
   val cdb1 = Wire(new CDBBundle) // alu
   val cdb2 = Wire(new CDBBundle) // late
@@ -131,55 +131,40 @@ class BackEnd extends NPCModule {
   rob_.io.exec(0).tag := alu_wb_tag
   val alu_rob_entry = rob_.io.exec(0).entry // write alu target entry
 
-  val alu_is_jalr = alu_rob_entry.inst_type === InstType.JALR
-  val alu_is_csr = alu_rob_entry.inst_type === InstType.CSR
-
   // format: off
-  val alu_rd_val = Mux(alu_rob_entry.rd.valid, alu_rob_entry.rd.value /*loopback*/, alu_result)
-  val alu_rd_valid = !alu_is_csr // alu is late execution
-  val alu_target_npc = Mux(alu_is_jalr, alu_result & ~1.U(addrBits.W), alu_rob_entry.target_npc)
+  // for `jalr`: rd is defined at dispatch; however, it operands still be sent to alu
+  val alu_rd_val = Mux( alu_rob_entry.inst_type === InstType.JALR , alu_rob_entry.rd.value, alu_result )
   // format: on
 
   rob_.io.alu.valid := alu_wb_valid
   rob_.io.alu.bits.tag := alu_wb_tag
-  rob_.io.alu.bits.rd_value := alu_rd_val
-  rob_.io.alu.bits.rd_valid := alu_rd_valid
-  rob_.io.alu.bits.target_npc := alu_target_npc
-  rob_.io.alu.bits.csr_wdata := alu_result
+  rob_.io.alu.bits.alu_result := alu_result
 
   // --- BRU path ---
+  bru_.io.out.ready := true.B // backpress
+  bru_iq_.io.issue.ready := bru_.io.in.ready
   bru_.io.in.valid := bru_iq_.io.issue.valid
   bru_.io.in.bits.rs1_v := bru_iq_.io.issue.bits.src_v(0)
   bru_.io.in.bits.rs2_v := bru_iq_.io.issue.bits.src_v(1)
   bru_.io.in.bits.op := bru_iq_.io.issue.bits.extra.bru_op
   bru_.io.in.bits.rob_tag := bru_iq_.io.issue.bits.rob_tag
-  bru_iq_.io.issue.ready := bru_.io.in.ready
-
-  bru_.io.out.ready := true.B
 
   val bru_wb_valid = bru_.io.out.fire
   val bru_wb_tag = bru_.io.out.bits.rob_tag
   val br_flag = bru_.io.out.bits.br_flag
 
-  rob_.io.exec(1).tag := bru_wb_tag
-  val bru_rob_entry = rob_.io.exec(1).entry
-
-  val bru_target_npc =
-    Mux(br_flag, bru_rob_entry.target_npc, bru_rob_entry.pc + 4.U)
-
   rob_.io.bru.valid := bru_wb_valid
   rob_.io.bru.bits.tag := bru_wb_tag
-  rob_.io.bru.bits.target_npc := bru_target_npc
+  rob_.io.bru.bits.br_flag := br_flag
 
   // --- AGU path ---
-  agu_.io.in.valid := agu_iq_.io.issue.valid
+  agu_.io.in.valid := agu_iq_.io.issue.valid // backpress
+  agu_iq_.io.issue.ready := agu_.io.in.ready
+  agu_.io.out.ready := true.B
   agu_.io.in.bits.base := agu_iq_.io.issue.bits.src_v(0)
-  agu_.io.in.bits.offset := agu_iq_.io.issue.bits.extra.imm
+  agu_.io.in.bits.offset := agu_iq_.io.issue.bits.extra.offset
   agu_.io.in.bits.rob_tag := agu_iq_.io.issue.bits.rob_tag
   agu_.io.in.bits.wdata := agu_iq_.io.issue.bits.src_v(1)
-  agu_iq_.io.issue.ready := agu_.io.in.ready
-
-  agu_.io.out.ready := true.B
 
   rob_.io.agu.valid := agu_.io.out.fire
   rob_.io.agu.bits.tag := agu_.io.out.bits.rob_tag
@@ -188,7 +173,7 @@ class BackEnd extends NPCModule {
   rob_.io.agu.bits.is_mmio := agu_.io.out.bits.is_mmio
 
   // --- CDB1 — ALU writeback broadcast ---
-  cdb1.valid := alu_wb_valid && alu_rd_valid && alu_wb_rd_def && !flush
+  cdb1.valid := alu_wb_valid && alu_wb_rd_def && !flush
   cdb1.tag := alu_wb_tag
   cdb1.value := alu_rd_val
 

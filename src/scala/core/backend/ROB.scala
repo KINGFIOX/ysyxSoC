@@ -24,6 +24,28 @@ class RdRobEntry extends NPCBundle {
   val valid = Bool()
 }
 
+class MretRobEntry extends NPCBundle {
+  val mepc = UInt(dataBits.W)
+}
+
+class BruRobEntry extends NPCBundle {
+  val snpc = UInt(dataBits.W) // calculated at dispatch
+  val dnpc = UInt(dataBits.W)
+  val br_flag = Bool()
+}
+
+class JalRobEntry extends NPCBundle {
+  val dnpc = UInt(dataBits.W) // calculated at dispatch
+  val is_call = Bool()
+}
+
+// dnpc wait in alu
+class JalrRobEntry extends NPCBundle {
+  val dnpc = UInt(dataBits.W)
+  val dnpc_rdy = Bool()
+  val is_ret = Bool()
+}
+
 class ExceptRobEntry extends NPCBundle {
   val valid = Bool()
   val mcause = UInt(dataBits.W)
@@ -41,10 +63,11 @@ class RobEntry extends NPCBundle {
   val mem = new MemRobEntry
   val csr = new CsrRobEntry
   val rd = new RdRobEntry
+  val mret = new MretRobEntry
+  val bru = new BruRobEntry
+  val jal = new JalRobEntry
+  val jalr = new JalrRobEntry
   val except = new ExceptRobEntry
-  val is_call = Bool()
-  val is_ret = Bool()
-  val target_npc = UInt(addrBits.W)
   val predict_npc = UInt(addrBits.W)
   val state = RobState()
 }
@@ -56,20 +79,17 @@ class RobEnqData extends NPCBundle {
   val mem = new MemInfoBundle
   val csr = new CsrRobEntry
   val rd = new RdRobEntry
+  val mret = new MretRobEntry
+  val bru = new BruRobEntry
+  val jal = new JalRobEntry
+  val jalr = new JalrRobEntry
   val except = new ExceptRobEntry
-  val is_call = Bool()
-  val is_ret = Bool()
-  val target_npc = UInt(addrBits.W)
   val predict_npc = UInt(addrBits.W)
-  val state = RobState()
 }
 
 class WBALUBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
-  val rd_value = UInt(dataBits.W)
-  val rd_valid = Bool()
-  val target_npc = UInt(addrBits.W)
-  val csr_wdata = UInt(dataBits.W)
+  val alu_result = UInt(dataBits.W)
 }
 
 class WBAGUBundle extends NPCBundle {
@@ -81,7 +101,7 @@ class WBAGUBundle extends NPCBundle {
 
 class WBBRUBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
-  val target_npc = UInt(addrBits.W)
+  val br_flag = Bool()
 }
 
 class LookupBundle extends NPCBundle {
@@ -102,8 +122,7 @@ class CommitBundle extends NPCBundle {
   val entry = new RobEntry
 }
 
-class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
-    extends NPCModule {
+class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
 
   private val entries: Int = (1 << robEntryBits)
 
@@ -116,10 +135,12 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     val lsu = ReqDone(new MemLsuInput)
     val csr = ReqDone(new CsrWriteOnlyPort)
     val exec = Vec(numLookupPorts, Flipped(new LookupBundle)) // lookup
-    val commit = Decoupled(new CommitBundle)
+    val commit = ReqDone(new CommitBundle)
     val rename = Vec(numFwdPorts, Flipped(new RobFwdBundle))
     val flush = Input(Bool())
   })
+
+  val flush = io.flush
 
   // ---- storage ----
   val ram = Reg(Vec(entries, new RobEntry))
@@ -137,20 +158,33 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   // ============================================================
   // Writeback
   // ============================================================
-  when(io.alu.valid && !io.flush) {
+  when(io.alu.valid && !flush) {
     val ent = ram(idx(io.alu.bits.tag))
-    ent.rd.value := io.alu.bits.rd_value
-    ent.rd.valid := io.alu.bits.rd_valid
-    ent.target_npc := io.alu.bits.target_npc
-    ent.csr.wdata := io.alu.bits.csr_wdata
-    ent.state := Mux(ent.inst_type === InstType.CSR, RobState.late, RobState.complete)
+    val inst_type = ent.inst_type
+    val alu_result = io.alu.bits.alu_result
+    // format: off
+    when( Seq(InstType.R_ALU, InstType.I_ALU).map(inst_type === _).reduce(_ || _)) {
+      ent.rd.valid := true.B
+      ent.rd.value := alu_result
+      ent.state := RobState.complete
+    }
+    // format: on
+    when(Seq(InstType.JALR).map(inst_type === _).reduce(_ || _)) {
+      ent.jalr.dnpc := alu_result
+      ent.jalr.dnpc_rdy := true.B
+      ent.state := RobState.complete
+    }
+    when(Seq(InstType.CSR).map(inst_type === _).reduce(_ || _)) {
+      ent.csr.wdata := alu_result
+      ent.state := RobState.late
+    }
   }
-  when(io.bru.valid && !io.flush) {
+  when(io.bru.valid && !flush) {
     val ent = ram(idx(io.bru.bits.tag))
-    ent.target_npc := io.bru.bits.target_npc
+    ent.bru.br_flag := io.bru.bits.br_flag
     ent.state := RobState.complete
   }
-  when(io.agu.valid && !io.flush) {
+  when(io.agu.valid && !flush) {
     val ent = ram(idx(io.agu.bits.tag))
     ent.mem.addr := io.agu.bits.addr
     ent.mem.wdata := io.agu.bits.wdata
@@ -161,7 +195,7 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   }
 
   // ============================================================
-  // Lookup ports
+  // Lookup ports, for exec write back
   // ============================================================
   for (i <- 0 until numLookupPorts) {
     val lookup = io.exec(i)
@@ -172,7 +206,7 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   // Enqueue
   // ============================================================
   val enq_fire = io.enq.fire
-  io.enq.ready := !full_w && !io.flush
+  io.enq.ready := !full_w && !flush
   io.enq_tag := tail_q.pad(robEntryBits)
 
   when(enq_fire) {
@@ -193,11 +227,18 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
     ent.csr := enq.csr
     ent.rd := enq.rd
     ent.except := enq.except
-    ent.is_call := enq.is_call
-    ent.is_ret := enq.is_ret
-    ent.target_npc := enq.target_npc
+    ent.mret := enq.mret
+    ent.bru := enq.bru
+    ent.jal := enq.jal
+    ent.jalr := enq.jalr
+    ent.jalr.dnpc_rdy := false.B
     ent.predict_npc := enq.predict_npc
-    ent.state := enq.state
+    // format: off
+    val go_to_fu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR,
+      InstType.CSR, InstType.BRANCH, InstType.LOAD, InstType.STORE)
+      .map(enq.inst_type === _).reduce(_ || _) && !enq.except.valid
+    // format: on
+    ent.state := Mux(go_to_fu, RobState.inflight, RobState.complete)
   }
 
   // ============================================================
@@ -220,18 +261,18 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   io.csr.bits.op := head_entry.csr.op
   io.csr.bits.wdata := head_entry.csr.wdata
 
-  io.lsu.req := head_is_late && head_is_mem && !io.flush
-  io.csr.req := head_is_late && head_is_csr && !io.flush
-  io.csr.bits.wen := head_is_late && head_is_csr && !io.flush
+  io.lsu.req := head_is_late && head_is_mem && !flush
+  io.csr.req := head_is_late && head_is_csr && !flush
+  io.csr.bits.wen := head_is_late && head_is_csr && !flush
 
-  when(head_is_late && head_is_mem && io.lsu.done && !io.flush) {
+  when(head_is_late && head_is_mem && io.lsu.done && !flush) {
     when(io.lsu.bits.result_valid) {
       head_entry.rd.value := io.lsu.bits.result
       head_entry.rd.valid := true.B
     }
     head_entry.state := RobState.complete
   }
-  when(head_is_late && head_is_csr && io.csr.done && !io.flush) {
+  when(head_is_late && head_is_csr && io.csr.done && !flush) {
     head_entry.rd.value := io.csr.bits.result
     head_entry.rd.valid := true.B
     head_entry.state := RobState.complete
@@ -240,7 +281,7 @@ class Rob(val numFwdPorts: Int = 2, val numLookupPorts: Int = 2)
   // ============================================================
   // Commit
   // ============================================================
-  io.commit.valid := !empty_w && head_entry.state === RobState.complete
+  io.commit.req := !empty_w && head_entry.state === RobState.complete
   io.commit.bits.tag := head_q.pad(robEntryBits)
   io.commit.bits.entry := head_entry
 

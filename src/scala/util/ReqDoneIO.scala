@@ -10,6 +10,12 @@ class ReqDoneIO[T <: Data](gen: => T) extends Bundle {
     s"${simpleClassName(this.getClass)}_${bits.typeName}"
 }
 
+object ReqDoneIO {
+  implicit class AddMethodsToReqDone[T <: Data](target: ReqDoneIO[T]) {
+    def fire: Bool = target.req && target.done
+  }
+}
+
 object ReqDone {
   def apply[T <: Data](gen: T): ReqDoneIO[T] = new ReqDoneIO(gen)
 }

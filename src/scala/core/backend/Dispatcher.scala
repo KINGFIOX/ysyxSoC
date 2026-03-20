@@ -51,7 +51,9 @@ class Dispatcher extends NPCModule {
   // format: on
 
   val rd_def = inst_writes_rd && (dec.rd_idx =/= 0.U)
+  // format: off
   val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
+  // format: on
   val is_csr = inst_type === InstType.CSR
 
   // ============================================================
@@ -89,29 +91,29 @@ class Dispatcher extends NPCModule {
   enq.except.valid := has_except
   enq.except.mcause := dec.mcause
   enq.except.mtval := dec.mtval
-  enq.is_call := dec.is_call
-  enq.is_ret := dec.is_ret
-  enq.target_npc := MuxCase(
-    dec.pc + 4.U,
-    Seq(
-      (inst_type === InstType.JAL) -> in.disp_target_npc,
-      (inst_type === InstType.BRANCH) -> in.disp_target_npc
-    )
-  )
+  enq.mret.mepc := 0.U
+  enq.bru.snpc := dec.pc + 4.U
+  enq.bru.dnpc := in.disp_target_npc
+  enq.bru.br_flag := false.B
+  enq.jal.dnpc := in.disp_target_npc
+  enq.jal.is_call := dec.is_call
+  enq.jalr.dnpc := 0.U
+  enq.jalr.dnpc_rdy := false.B
+  enq.jalr.is_ret := dec.is_ret
   enq.predict_npc := dec.predict_npc
-  enq.state := Mux(!go_to_fu, RobState.complete, RobState.inflight)
 
   // ============================================================
   // ALU Issue Queue
   // ============================================================
   // for the reason that rob is unable to wait for rs1, rs2
   // so the instruction waitting for sources should be dispatched to the ALU's issuse queue
+  // so InstType.csr is sent to ALU
   io.alu_iq.bits.src(0) := in.src(0)
   val alu_imm_src = Wire(new IQSrcBundle)
   alu_imm_src.value := Mux(is_csr, 0.U, dec.imm)
   alu_imm_src.tag := 0.U
   alu_imm_src.ready := true.B
-  io.alu_iq.bits.src(1) := Mux(use_imm || is_csr, alu_imm_src, in.src(1))
+  io.alu_iq.bits.src(1) := Mux(use_imm || is_csr, alu_imm_src, in.src(1)) //
   io.alu_iq.bits.extra.alu_op := Mux(is_csr, ALUOpType.alu_ADD, ctrl.alu_op)
   io.alu_iq.bits.extra.rd_def := rd_def
   io.alu_iq.bits.rob_tag := io.rob_tag
@@ -128,8 +130,12 @@ class Dispatcher extends NPCModule {
   // AGU Issue Queue
   // ============================================================
   io.agu_iq.bits.src(0) := in.src(0)
-  io.agu_iq.bits.src(1) := in.src(1)
-  io.agu_iq.bits.extra.imm := dec.imm
+  val agu_wdata = WireDefault(in.src(1))
+  when(inst_type === InstType.LOAD) {
+    agu_wdata.ready := true.B
+  }
+  io.agu_iq.bits.src(1) := agu_wdata
+  io.agu_iq.bits.extra.offset := dec.imm
   io.agu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================

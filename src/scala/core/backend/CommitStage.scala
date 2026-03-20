@@ -24,7 +24,7 @@ class CommitStage extends NPCModule {
     val xtvec = Input(UInt(dataBits.W))
   })
   val probe = IO(new DebugCommitBundle)
-  val rob = IO(Flipped(Decoupled(new CommitBundle)))
+  val rob = IO(Flipped(ReqDone(new CommitBundle)))
   val flush = IO(Bool())
   val ifu = IO(new RedirectBundle)
   val cdb = IO(new CDBBundle)
@@ -33,7 +33,7 @@ class CommitStage extends NPCModule {
   // ---- Head entry aliases ----
   val head = rob.bits.entry
   val head_tag = rob.bits.tag
-  val head_valid = rob.valid
+  val head_valid = rob.req
 
   val rd_def = head.rd.idx =/= 0.U
   val head_is_mem = head.mem.r_en || head.mem.w_en
@@ -44,7 +44,17 @@ class CommitStage extends NPCModule {
   val is_control_normal = Seq(InstType.JAL, InstType.JALR, InstType.BRANCH)
     .map(head.inst_type === _)
     .reduce(_ || _)
-  val mispredict = is_control_normal && (head.target_npc =/= head.predict_npc)
+  // format: off
+  val actual_npc = MuxCase(
+    head.pc + 4.U,
+    Seq(
+      (head.inst_type === InstType.JAL) -> head.jal.dnpc,
+      (head.inst_type === InstType.JALR) -> head.jalr.dnpc,
+      (head.inst_type === InstType.BRANCH) -> Mux( head.bru.br_flag, head.bru.dnpc, head.bru.snpc)
+    )
+  )
+  // format: on
+  val mispredict = is_control_normal && (actual_npc =/= head.predict_npc)
 
   // ---- Defaults ----
   flush := false.B
@@ -56,7 +66,7 @@ class CommitStage extends NPCModule {
   cdb.tag := head_tag
   cdb.value := 0.U
 
-  rob.ready := false.B
+  rob.done := false.B
 
   rfu_w.en := false.B
   rfu_w.addr := head.rd.idx
@@ -91,7 +101,7 @@ class CommitStage extends NPCModule {
       ifu.correct_npc := csr.xtvec
       ifu.wrong_pc := head.pc
 
-      rob.ready := true.B
+      rob.done := true.B
 
       dbg_valid := true.B
       dbg_dnpc := csr.xtvec
@@ -103,7 +113,7 @@ class CommitStage extends NPCModule {
       ifu.correct_npc := csr.xepc
       ifu.wrong_pc := head.pc
 
-      rob.ready := true.B
+      rob.done := true.B
 
       dbg_valid := true.B
       dbg_dnpc := csr.xepc
@@ -120,13 +130,13 @@ class CommitStage extends NPCModule {
 
       flush := mispredict
       ifu.valid := mispredict
-      ifu.correct_npc := head.target_npc
+      ifu.correct_npc := actual_npc
       ifu.wrong_pc := head.pc
-      
-      rob.ready := true.B
+
+      rob.done := true.B
 
       dbg_valid := true.B
-      dbg_dnpc := Mux(mispredict, head.target_npc, head.pc + 4.U)
+      dbg_dnpc := Mux(mispredict, actual_npc, head.pc + 4.U)
       dbg_is_mmio := head_is_mem && head.mem.is_mmio
     }
   }

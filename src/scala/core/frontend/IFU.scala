@@ -25,13 +25,6 @@ class RedirectBundle extends NPCBundle {
   val wrong_pc = UInt(addrBits.W) // the pc of mispredicted instruction
 }
 
-object AXI4Resp {
-  val OKAY = 0.U(2.W)
-  val EXOKAY = 1.U(2.W)
-  val SLVERR = 2.U(2.W)
-  val DECERR = 3.U(2.W)
-}
-
 class IFU extends NPCModule {
 
   val io = IO(new Bundle {
