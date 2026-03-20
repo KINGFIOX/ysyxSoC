@@ -29,121 +29,76 @@ class CommitStage extends NPCModule {
   val fence_i = IO(Bool())
 
   // ---- Head entry aliases ----
-  val head = rob.bits.entry
+  val head_entry = rob.bits.entry
   val head_tag = rob.bits.tag
   val head_valid = rob.req
 
-  val rob_rd_wen = head.rd.state === RdRobState.done
+  val rob_rd_wen = head_entry.rd.state === RdRobState.done
   assert(
     // done -> !x0
-    !(head.rd.state === RdRobState.done) || (head.rd.idx =/= 0.U),
+    !(head_entry.rd.state === RdRobState.done) || (head_entry.rd.idx =/= 0.U),
     "(commit) impossible"
   )
-  val head_is_mem = head.mem.r_en || head.mem.w_en
-  val head_is_csr = head.inst_type === InstType.CSR
-  val head_is_mret = head.inst_type === InstType.MRET
-
+  val head_is_mem = head_entry.mem.r_en || head_entry.mem.w_en
+  val head_is_csr = head_entry.inst_type === InstType.CSR
+  val head_is_mret = head_entry.inst_type === InstType.MRET
   // is control flow instruction, but not `mret` or `ecall`
-  val is_control_normal = Seq(InstType.JAL, InstType.JALR, InstType.BRANCH)
-    .map(head.inst_type === _)
-    .reduce(_ || _)
-  // format: off
-  val actual_npc = MuxCase(
-    head.predict_npc,
-    Seq(
-      (head.inst_type === InstType.JAL) -> head.jal.dnpc,
-      (head.inst_type === InstType.JALR) -> head.jalr.dnpc,
-      (head.inst_type === InstType.BRANCH) -> Mux(head.bru.br_flag, head.bru.dnpc, head.bru.snpc)
-    )
-  )
-  // format: on
-  val mispredict = is_control_normal && (actual_npc =/= head.predict_npc)
 
   // ---- Defaults ----
-  flush := false.B
-  redirect.valid := false.B
-  redirect.bits.dnpc := 0.U
-  redirect.bits.wrong_pc := 0.U
-  redirect.bits.inst_type := head.inst_type
-  redirect.bits.is_call := head.jal.is_call
-  redirect.bits.is_ret := head.jalr.is_ret
-
   cdb.valid := false.B
   cdb.bits.tag := head_tag
-  cdb.bits.value := 0.U
+  cdb.bits.value := head_entry.rd.value
 
-  rob.done := false.B
+  rob.done := head_valid
 
   // regfile unit
   rfu_w.valid := false.B
-  rfu_w.bits.addr := head.rd.idx
-  rfu_w.bits.data := head.rd.value
+  rfu_w.bits.addr := head_entry.rd.idx
+  rfu_w.bits.data := head_entry.rd.value
 
   // register alias table
   rat.valid := false.B
-  rat.bits.addr := head.rd.idx
+  rat.bits.addr := head_entry.rd.idx
   rat.bits.tag := head_tag
 
   csr.except.valid := false.B
-  csr.except.bits.xepc := head.pc
-  csr.except.bits.xcause := head.except.mcause
-  csr.except.bits.xtval := head.except.mtval
+  csr.except.bits.xepc := head_entry.pc
+  csr.except.bits.xcause := head_entry.except.mcause
+  csr.except.bits.xtval := head_entry.except.mtval
 
   fence_i := false.B
 
-  val dbg_dnpc = WireDefault(head.pc)
   val dbg_is_mmio = WireDefault(false.B)
 
   redirect.valid := rob.fire
-  redirect.bits.mispredict := false.B
+  redirect.bits.wrong_pc := head_entry.pc
+  redirect.bits.inst_type := head_entry.inst_type
+  redirect.bits.is_call := head_entry.jal.is_call
+  redirect.bits.is_ret := head_entry.jalr.is_ret
+  redirect.bits.dnpc := MuxCase(
+    head_entry.predict_npc,
+    Seq(
+      (head_entry.inst_type === InstType.JAL) -> head_entry.jal.dnpc,
+      (head_entry.inst_type === InstType.JALR) -> head_entry.jalr.dnpc,
+      (head_entry.inst_type === InstType.BRANCH) -> Mux( head_entry.bru.br_flag, head_entry.bru.dnpc, head_entry.bru.snpc),
+      (head_entry.inst_type === InstType.MRET) -> csr.xepc,
+      (head_entry.except.valid) -> csr.xtvec
+    )
+  )
+  redirect.bits.mispredict := redirect.bits.dnpc =/= head_entry.predict_npc
+  flush := rob.fire && redirect.bits.mispredict
 
   // ---- Commit logic ----
   when(head_valid) {
-    when(head.except.valid) { // except happen
+    when(head_entry.except.valid) { // except happen
       csr.except.valid := true.B
-
-      flush := true.B
-
-      redirect.bits.mispredict := true.B
-      redirect.bits.dnpc := csr.xtvec
-      redirect.bits.wrong_pc := head.pc
-
-      rob.done := true.B
-
-      dbg_dnpc := csr.xtvec
-      dbg_is_mmio := false.B
-
     }.elsewhen(head_is_mret) { // mret
-      flush := true.B
-
-      redirect.bits.mispredict  := true.B
-      redirect.bits.dnpc := csr.xepc
-      redirect.bits.wrong_pc := head.pc
-
-      rob.done := true.B
-
-      dbg_dnpc := csr.xepc
-      dbg_is_mmio := false.B
-
     }.otherwise {
       rfu_w.valid := rob_rd_wen
-      rfu_w.bits.data := head.rd.value
-
       rat.valid := rob_rd_wen
+      cdb.valid := rob_rd_wen && (head_is_mem || head_is_csr) // cdb
+      dbg_is_mmio := head_is_mem && head_entry.mem.is_mmio // debug commit mmio
 
-      cdb.valid := rob_rd_wen && (head_is_mem || head_is_csr)
-      cdb.bits.value := head.rd.value
-
-      flush := mispredict
-
-      redirect.bits.mispredict := mispredict
-      redirect.bits.dnpc := actual_npc
-      redirect.bits.wrong_pc := head.pc
-
-      rob.done := true.B
-
-      dbg_dnpc := Mux(mispredict, actual_npc, head.pc + 4.U)
-      dbg_is_mmio := head_is_mem && head.mem.is_mmio
     }
   }
 
@@ -151,8 +106,8 @@ class CommitStage extends NPCModule {
   // for writing the register could be read
   val probe = IO(Valid(new DebugCommitBundle))
   probe.valid := RegNext(rob.fire)
-  probe.bits.pc := RegNext(head.pc)
-  probe.bits.dnpc := RegNext(dbg_dnpc)
-  probe.bits.inst := RegNext(head.inst)
+  probe.bits.pc := RegNext(head_entry.pc)
+  probe.bits.dnpc := RegNext(redirect.bits.dnpc)
+  probe.bits.inst := RegNext(head_entry.inst)
   probe.bits.is_mmio := RegNext(dbg_is_mmio)
 }

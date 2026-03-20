@@ -23,6 +23,7 @@ class FrontEnd extends NPCModule {
 
   ifu_.icache <> icache
   io.out <> ifu_.io.out
-  ifu_.io.redirect.mispredict := io.redirect.bits.mispredict
+  // Only redirect on commit; bits are combinational from ROB head when valid is false.
+  ifu_.io.redirect.mispredict := io.redirect.valid && io.redirect.bits.mispredict
   ifu_.io.redirect.dnpc := io.redirect.bits.dnpc
 }
