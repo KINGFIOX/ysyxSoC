@@ -18,10 +18,14 @@ class CsrRobEntry extends NPCBundle {
   val op = CSROpType()
 }
 
+object RdRobState extends ChiselEnum {
+  val nouse, pending, done = Value
+}
+
 class RdRobEntry extends NPCBundle {
   val idx = UInt(NRRegbits.W)
   val value = UInt(dataBits.W)
-  val valid = Bool()
+  val state = RdRobState()
 }
 
 class MretRobEntry extends NPCBundle {
@@ -136,7 +140,7 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
     val csr = ReqDone(new CsrWriteOnlyPort)
     val exec = Vec(numLookupPorts, Flipped(new LookupBundle)) // lookup
     val commit = ReqDone(new CommitBundle)
-    val rename = Vec(numFwdPorts, Flipped(new RobFwdBundle))
+    val rename = Vec(numFwdPorts, Flipped(new RobFwdBundle)) // lookup
     val flush = Input(Bool())
   })
 
@@ -162,19 +166,17 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
     val ent = ram(idx(io.alu.bits.tag))
     val inst_type = ent.inst_type
     val alu_result = io.alu.bits.alu_result
-    // format: off
-    when( Seq(InstType.R_ALU, InstType.I_ALU).map(inst_type === _).reduce(_ || _)) {
-      ent.rd.valid := true.B
+    when(
+      Seq(InstType.R_ALU, InstType.I_ALU).map(inst_type === _).reduce(_ || _)
+    ) {
+      ent.rd.state := RdRobState.done
       ent.rd.value := alu_result
       ent.state := RobState.complete
-    }
-    // format: on
-    when(Seq(InstType.JALR).map(inst_type === _).reduce(_ || _)) {
+    }.elsewhen(Seq(InstType.JALR).map(inst_type === _).reduce(_ || _)) {
       ent.jalr.dnpc := alu_result
       ent.jalr.dnpc_rdy := true.B
       ent.state := RobState.complete
-    }
-    when(Seq(InstType.CSR).map(inst_type === _).reduce(_ || _)) {
+    }.elsewhen(Seq(InstType.CSR).map(inst_type === _).reduce(_ || _)) {
       ent.csr.wdata := alu_result
       ent.state := RobState.late
     }
@@ -268,13 +270,13 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
   when(head_is_late && head_is_mem && io.lsu.done && !flush) {
     when(io.lsu.bits.result_valid) {
       head_entry.rd.value := io.lsu.bits.result
-      head_entry.rd.valid := true.B
+      head_entry.rd.state := RdRobState.done
     }
     head_entry.state := RobState.complete
   }
   when(head_is_late && head_is_csr && io.csr.done && !flush) {
     head_entry.rd.value := io.csr.bits.result
-    head_entry.rd.valid := true.B
+    head_entry.rd.state := RdRobState.done
     head_entry.state := RobState.complete
   }
 
@@ -295,7 +297,7 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
   // ============================================================
   for (i <- 0 until numFwdPorts) {
     val fwd = io.rename(i)
-    fwd.valid := ram(idx(fwd.tag)).rd.valid
+    fwd.valid := ram(idx(fwd.tag)).rd.state === RdRobState.done
     fwd.value := ram(idx(fwd.tag)).rd.value
   }
 

@@ -7,9 +7,7 @@ import ysyx.core.common._
 
 class DispFwdBundle extends NPCBundle {
   val rd_idx = UInt(NRRegbits.W)
-  val rd_def_tag = Bool()
-  val tag = UInt(robEntryBits.W)
-  val rd_def_val = Bool()
+  val rd_val_wen = Bool()
   val value = UInt(dataBits.W)
 }
 
@@ -37,20 +35,14 @@ class Dispatcher extends NPCModule {
   val has_except = dec.has_except
 
   // format: off
-  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.CSR)
-    .map(inst_type === _).reduce(_ || _) && !has_except
+  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.CSR) .map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
-  val go_to_agu = Seq(InstType.LOAD, InstType.STORE)
-    .map(inst_type === _).reduce(_ || _) && !has_except
+  val go_to_agu = Seq(InstType.LOAD, InstType.STORE) .map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_fu = go_to_alu || go_to_bru || go_to_agu
-
-  val inst_writes_rd = Seq(
-    InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD,
-    InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR
-  ).map(inst_type === _).reduce(_ || _)
+  val inst_writes_rd = Seq( InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD, InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR).map(inst_type === _).reduce(_ || _)
   // format: on
 
-  val rd_def = inst_writes_rd && (dec.rd_idx =/= 0.U)
+  val rd_def_en = inst_writes_rd && (dec.rd_idx =/= 0.U)
   // format: off
   val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
   // format: on
@@ -85,9 +77,12 @@ class Dispatcher extends NPCModule {
   enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
   enq.csr.op := ctrl.csr_op
   enq.csr.wdata := 0.U
-  enq.rd.idx := Mux(rd_def, dec.rd_idx, 0.U)
+  enq.rd.idx := Mux(rd_def_en, dec.rd_idx, 0.U)
   enq.rd.value := in.disp_rd_val
-  enq.rd.valid := in.disp_rd_val_valid
+  enq.rd.state := MuxCase(RdRobState.nouse, Seq(
+    (rd_def_en && in.disp_rd_val_valid)  -> RdRobState.done,
+    (rd_def_en && !in.disp_rd_val_valid) -> RdRobState.pending
+  ))
   enq.except.valid := has_except
   enq.except.mcause := dec.mcause
   enq.except.mtval := dec.mtval
@@ -115,7 +110,7 @@ class Dispatcher extends NPCModule {
   alu_imm_src.ready := true.B
   io.alu_iq.bits.src(1) := Mux(use_imm || is_csr, alu_imm_src, in.src(1)) //
   io.alu_iq.bits.extra.alu_op := Mux(is_csr, ALUOpType.alu_ADD, ctrl.alu_op)
-  io.alu_iq.bits.extra.rd_def := rd_def
+  io.alu_iq.bits.extra.rd_wen := rd_def_en
   io.alu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
@@ -141,16 +136,14 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // RAT Write
   // ============================================================
-  io.rat.en := io.in.fire && rd_def
+  io.rat.en := io.in.fire && rd_def_en
   io.rat.addr := dec.rd_idx
   io.rat.tag := io.rob_tag
 
   // ============================================================
   // Rename Forward
   // ============================================================
-  io.rename_fwd.rd_def_tag := io.in.valid && rd_def
-  io.rename_fwd.rd_idx := Mux(rd_def, dec.rd_idx, 0.U)
-  io.rename_fwd.tag := io.rob_tag
-  io.rename_fwd.rd_def_val := io.in.valid && in.disp_rd_val_valid
+  io.rename_fwd.rd_idx := Mux(rd_def_en, dec.rd_idx, 0.U)
+  io.rename_fwd.rd_val_wen := io.in.valid && in.disp_rd_val_valid
   io.rename_fwd.value := in.disp_rd_val
 }

@@ -121,11 +121,11 @@ class BackEnd extends NPCModule {
   alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
   alu_.io.in.bits.alu_op := alu_iq_.io.issue.bits.extra.alu_op
   alu_.io.in.bits.rob_tag := alu_iq_.io.issue.bits.rob_tag
-  alu_.io.in.bits.rd_def := alu_iq_.io.issue.bits.extra.rd_def
+  alu_.io.in.bits.rd_wen := alu_iq_.io.issue.bits.extra.rd_wen
 
   val alu_wb_valid = alu_.io.out.fire
   val alu_wb_tag = alu_.io.out.bits.rob_tag
-  val alu_wb_rd_def = alu_.io.out.bits.rd_def
+  val alu_wb_rd_wen = alu_.io.out.bits.rd_wen
   val alu_result = alu_.io.out.bits.result
 
   rob_.io.exec(0).tag := alu_wb_tag
@@ -173,7 +173,7 @@ class BackEnd extends NPCModule {
   rob_.io.agu.bits.is_mmio := agu_.io.out.bits.is_mmio
 
   // --- CDB1 — ALU writeback broadcast ---
-  cdb1.valid := alu_wb_valid && alu_wb_rd_def && !flush
+  cdb1.valid := alu_wb_valid && alu_wb_rd_wen && !flush
   cdb1.tag := alu_wb_tag
   cdb1.value := alu_rd_val
 

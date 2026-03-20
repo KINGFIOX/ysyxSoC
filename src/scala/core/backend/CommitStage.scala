@@ -23,7 +23,6 @@ class CommitStage extends NPCModule {
     val xepc = Input(UInt(dataBits.W))
     val xtvec = Input(UInt(dataBits.W))
   })
-  val probe = IO(new DebugCommitBundle)
   val rob = IO(Flipped(ReqDone(new CommitBundle)))
   val flush = IO(Bool())
   val ifu = IO(new RedirectBundle)
@@ -35,7 +34,7 @@ class CommitStage extends NPCModule {
   val head_tag = rob.bits.tag
   val head_valid = rob.req
 
-  val rd_def = head.rd.idx =/= 0.U
+  val rob_rd_wen = (head.rd.idx =/= 0.U) && (head.rd.state === RdRobState.done)
   val head_is_mem = head.mem.r_en || head.mem.w_en
   val head_is_csr = head.inst_type === InstType.CSR
   val head_is_mret = head.inst_type === InstType.MRET
@@ -68,10 +67,12 @@ class CommitStage extends NPCModule {
 
   rob.done := false.B
 
+  // regfile unit
   rfu_w.en := false.B
   rfu_w.addr := head.rd.idx
   rfu_w.data := head.rd.value
 
+  // register alias table
   rat.en := false.B
   rat.addr := head.rd.idx
   rat.tag := head_tag
@@ -91,7 +92,7 @@ class CommitStage extends NPCModule {
 
   // ---- Commit logic ----
   when(head_valid) {
-    when(head.except.valid) { // happen
+    when(head.except.valid) { // except happen
       csr.except.xepc_wen := true.B
       csr.except.xcause_wen := true.B
       csr.except.xtval_wen := true.B
@@ -120,12 +121,12 @@ class CommitStage extends NPCModule {
       dbg_is_mmio := false.B
 
     }.otherwise {
-      rfu_w.en := rd_def
+      rfu_w.en := rob_rd_wen
       rfu_w.data := head.rd.value
 
-      rat.en := rd_def
+      rat.en := rob_rd_wen
 
-      cdb.valid := rd_def && (head_is_mem || head_is_csr)
+      cdb.valid := rob_rd_wen && (head_is_mem || head_is_csr)
       cdb.value := head.rd.value
 
       flush := mispredict
@@ -143,6 +144,7 @@ class CommitStage extends NPCModule {
 
   // sequential sync: delay 1 cycle
   // for writing the register could be read
+  val probe = IO(new DebugCommitBundle)
   probe.valid := RegNext(dbg_valid)
   probe.pc := RegNext(head.pc)
   probe.dnpc := RegNext(dbg_dnpc)

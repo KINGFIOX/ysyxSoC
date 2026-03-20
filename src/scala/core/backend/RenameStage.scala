@@ -25,6 +25,7 @@ class RenameStage extends NPCModule {
     val cdb = Vec(2, Flipped(new CDBBundle))
   })
 
+  // backpress
   io.in.ready := io.out.ready
   io.out.valid := io.in.valid
 
@@ -44,9 +45,8 @@ class RenameStage extends NPCModule {
   // Dispatch-resolved value (jalr, jal, lui, auipc)
   // ============================================================
   // format: off
-  out.disp_rd_val_valid := Seq(
-    InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC
-  ).map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
+  out.disp_rd_val_valid := Seq( InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC
+    ).map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
   // format: on
   out.disp_rd_val := MuxLookup(inst_type, 0.U)(
     Seq(
@@ -72,15 +72,12 @@ class RenameStage extends NPCModule {
   for (i <- 0 until 2) {
     // Dispatcher tag forward: override RAT when the in-flight dispatch
     // is defining the same architectural register.
-    val disp_tag_hit = disp_fwd.rd_def_tag &&
-      (disp_fwd.rd_idx === rs_idx(i)) &&
-      (rs_idx(i) =/= 0.U)
-    val disp_val_hit = disp_fwd.rd_def_val &&
+    val disp_val_hit = disp_fwd.rd_val_wen &&
       (disp_fwd.rd_idx === rs_idx(i)) &&
       (rs_idx(i) =/= 0.U)
 
-    val tag = Mux(disp_tag_hit, disp_fwd.tag, io.rat(i).tag)
-    val busy = io.rat(i).busy || disp_tag_hit
+    val tag = io.rat(i).tag
+    val busy = io.rat(i).busy // x0, always free
 
     io.rob(i).tag := tag
 
