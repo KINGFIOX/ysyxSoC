@@ -49,7 +49,7 @@ class CommitStage extends NPCModule {
     .reduce(_ || _)
   // format: off
   val actual_npc = MuxCase(
-    head.pc + 4.U,
+    head.predict_npc,
     Seq(
       (head.inst_type === InstType.JAL) -> head.jal.dnpc,
       (head.inst_type === InstType.JALR) -> head.jalr.dnpc,
@@ -62,7 +62,7 @@ class CommitStage extends NPCModule {
   // ---- Defaults ----
   flush := false.B
   redirect.valid := false.B
-  redirect.bits.correct_npc := 0.U
+  redirect.bits.dnpc := 0.U
   redirect.bits.wrong_pc := 0.U
   redirect.bits.inst_type := head.inst_type
   redirect.bits.is_call := head.jal.is_call
@@ -91,9 +91,11 @@ class CommitStage extends NPCModule {
 
   fence_i := false.B
 
-  val dbg_valid = WireDefault(false.B)
   val dbg_dnpc = WireDefault(head.pc)
   val dbg_is_mmio = WireDefault(false.B)
+
+  redirect.valid := rob.fire
+  redirect.bits.mispredict := false.B
 
   // ---- Commit logic ----
   when(head_valid) {
@@ -101,25 +103,25 @@ class CommitStage extends NPCModule {
       csr.except.valid := true.B
 
       flush := true.B
-      redirect.valid := true.B
-      redirect.bits.correct_npc := csr.xtvec
+
+      redirect.bits.mispredict := true.B
+      redirect.bits.dnpc := csr.xtvec
       redirect.bits.wrong_pc := head.pc
 
       rob.done := true.B
 
-      dbg_valid := true.B
       dbg_dnpc := csr.xtvec
       dbg_is_mmio := false.B
 
     }.elsewhen(head_is_mret) { // mret
       flush := true.B
-      redirect.valid := true.B
-      redirect.bits.correct_npc := csr.xepc
+
+      redirect.bits.mispredict  := true.B
+      redirect.bits.dnpc := csr.xepc
       redirect.bits.wrong_pc := head.pc
 
       rob.done := true.B
 
-      dbg_valid := true.B
       dbg_dnpc := csr.xepc
       dbg_is_mmio := false.B
 
@@ -133,13 +135,13 @@ class CommitStage extends NPCModule {
       cdb.bits.value := head.rd.value
 
       flush := mispredict
-      redirect.valid := mispredict
-      redirect.bits.correct_npc := actual_npc
+
+      redirect.bits.mispredict := mispredict
+      redirect.bits.dnpc := actual_npc
       redirect.bits.wrong_pc := head.pc
 
       rob.done := true.B
 
-      dbg_valid := true.B
       dbg_dnpc := Mux(mispredict, actual_npc, head.pc + 4.U)
       dbg_is_mmio := head_is_mem && head.mem.is_mmio
     }
@@ -148,7 +150,7 @@ class CommitStage extends NPCModule {
   // sequential sync: delay 1 cycle
   // for writing the register could be read
   val probe = IO(Valid(new DebugCommitBundle))
-  probe.valid := RegNext(dbg_valid)
+  probe.valid := RegNext(rob.fire)
   probe.bits.pc := RegNext(head.pc)
   probe.bits.dnpc := RegNext(dbg_dnpc)
   probe.bits.inst := RegNext(head.inst)

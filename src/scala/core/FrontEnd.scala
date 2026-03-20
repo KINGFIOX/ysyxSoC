@@ -19,8 +19,10 @@ class FrontEnd extends NPCModule {
 
   val ifu_ = Module(new IFU)
 
+  ifu_.io.predict.bits.dnpc := ifu_.io.predict.bits.pc + 4.U
+
   ifu_.icache <> icache
   io.out <> ifu_.io.out
-  ifu_.io.redirect.valid := io.redirect.valid
-  ifu_.io.redirect.bits.correct_npc := io.redirect.bits.correct_npc
+  ifu_.io.redirect.mispredict := io.redirect.bits.mispredict
+  ifu_.io.redirect.dnpc := io.redirect.bits.dnpc
 }

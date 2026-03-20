@@ -20,8 +20,7 @@ class IFUOutput extends NPCBundle {
   val has_except = Bool()
 }
 
-class RedirectBundle extends NPCBundle {
-  val correct_npc = UInt(addrBits.W)
+class RedirectBundle extends RedirectBase {
   val wrong_pc = UInt(addrBits.W) // the pc of mispredicted instruction
   val inst_type = InstType()
   val is_call = Bool()
@@ -29,14 +28,21 @@ class RedirectBundle extends NPCBundle {
 }
 
 class RedirectBase extends NPCBundle {
-  val correct_npc = UInt(addrBits.W)
+  val dnpc = UInt(addrBits.W)
+  val mispredict = Bool()
+}
+
+class PredictBundle extends NPCBundle {
+  val dnpc = UInt(addrBits.W)
+  val pc = Input(UInt(addrBits.W))
 }
 
 class IFU extends NPCModule {
 
   val io = IO(new Bundle {
     val out = Irrevocable(new IFUOutput)
-    val redirect = Flipped(Valid(new RedirectBase))
+    val redirect = Flipped(new RedirectBase)
+    val predict = Flipped(Ack(new PredictBundle))
   })
 
   val icache = IO(SRAMBundle(sramParams))
@@ -63,7 +69,10 @@ class IFU extends NPCModule {
   io.out.bits.mcause := 0.U
   io.out.bits.mtval := 0.U
   io.out.bits.has_except := false.B
-  io.out.bits.predict_npc := pc_q + 4.U
+  io.out.bits.predict_npc := io.predict.bits.dnpc
+  io.predict.bits.pc := pc_q
+  io.predict.ack := false.B
+  io.predict.ack := io.out.fire
 
   val redirect = io.redirect
 
@@ -88,15 +97,15 @@ class IFU extends NPCModule {
     is(State.output_wait) {
       when(io.out.fire) {
         state_q := State.addr_req
-        pc_q := pc_q + 4.U
+        pc_q := io.predict.bits.dnpc
       }
     }
 
   }
 
-  when(redirect.valid) {
+  when(redirect.mispredict) {
     state_q := State.addr_req
-    pc_q := redirect.bits.correct_npc
+    pc_q := redirect.dnpc
   }
 
 }
