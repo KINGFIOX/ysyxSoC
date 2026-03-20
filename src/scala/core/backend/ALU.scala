@@ -52,7 +52,7 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
 
 class ALUExtra extends NPCBundle {
   val alu_op = ALUOpType()
-  val rd_wen = Bool()
+  val rd_defen = Bool()
 }
 
 class ALUIssueQueue extends IssueQueue(new ALUExtra, entries = 8, numOps = 2)

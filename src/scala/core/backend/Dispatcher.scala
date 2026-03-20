@@ -7,7 +7,7 @@ import ysyx.core.common._
 
 class DispFwdBundle extends NPCBundle {
   val rd_idx = UInt(NRRegbits.W)
-  val rd_val_wen = Bool()
+  val rd_defen = Bool()
   val value = UInt(dataBits.W)
 }
 
@@ -38,11 +38,14 @@ class Dispatcher extends NPCModule {
   val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.CSR) .map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
   val go_to_agu = Seq(InstType.LOAD, InstType.STORE) .map(inst_type === _).reduce(_ || _) && !has_except
-  val go_to_fu = go_to_alu || go_to_bru || go_to_agu
-  val inst_writes_rd = Seq( InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD, InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR).map(inst_type === _).reduce(_ || _)
   // format: on
 
-  val rd_def_en = inst_writes_rd && (dec.rd_idx =/= 0.U)
+  // format: off
+  val rd_wen = Seq( InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD, InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR).map(inst_type === _).reduce(_ || _)
+  // for forwarding, write RobEntry, which is the source, it should filter the x0
+  val rd_defen = rd_wen && (dec.rd_idx =/= 0.U)
+  // format: on
+
   // format: off
   val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
   // format: on
@@ -77,12 +80,15 @@ class Dispatcher extends NPCModule {
   enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
   enq.csr.op := ctrl.csr_op
   enq.csr.wdata := 0.U
-  enq.rd.idx := Mux(rd_def_en, dec.rd_idx, 0.U)
+  enq.rd.idx := Mux(rd_defen, dec.rd_idx, 0.U)
   enq.rd.value := in.disp_rd_val
-  enq.rd.state := MuxCase(RdRobState.nouse, Seq(
-    (rd_def_en && in.disp_rd_val_valid)  -> RdRobState.done,
-    (rd_def_en && !in.disp_rd_val_valid) -> RdRobState.pending
-  ))
+  enq.rd.state := MuxCase(
+    RdRobState.nouse,
+    Seq(
+      (rd_defen && in.disp_rd_val_valid) -> RdRobState.done,
+      (rd_defen && !in.disp_rd_val_valid) -> RdRobState.pending
+    )
+  )
   enq.except.valid := has_except
   enq.except.mcause := dec.mcause
   enq.except.mtval := dec.mtval
@@ -109,8 +115,8 @@ class Dispatcher extends NPCModule {
   alu_imm_src.tag := 0.U
   alu_imm_src.ready := true.B
   io.alu_iq.bits.src(1) := Mux(use_imm || is_csr, alu_imm_src, in.src(1)) //
-  io.alu_iq.bits.extra.alu_op := Mux(is_csr, ALUOpType.alu_ADD, ctrl.alu_op)
-  io.alu_iq.bits.extra.rd_wen := rd_def_en
+  io.alu_iq.bits.extra.alu_op := ctrl.alu_op
+  io.alu_iq.bits.extra.rd_defen := rd_defen
   io.alu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
@@ -126,7 +132,7 @@ class Dispatcher extends NPCModule {
   // ============================================================
   io.agu_iq.bits.src(0) := in.src(0)
   val agu_wdata = WireDefault(in.src(1))
-  when(inst_type === InstType.LOAD) {
+  when(inst_type === InstType.LOAD) { // overwrite
     agu_wdata.ready := true.B
   }
   io.agu_iq.bits.src(1) := agu_wdata
@@ -136,14 +142,14 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // RAT Write
   // ============================================================
-  io.rat.en := io.in.fire && rd_def_en
+  io.rat.en := io.in.fire && rd_defen
   io.rat.addr := dec.rd_idx
   io.rat.tag := io.rob_tag
 
   // ============================================================
   // Rename Forward
   // ============================================================
-  io.rename_fwd.rd_idx := Mux(rd_def_en, dec.rd_idx, 0.U)
-  io.rename_fwd.rd_val_wen := io.in.valid && in.disp_rd_val_valid
+  io.rename_fwd.rd_idx := Mux(rd_defen, dec.rd_idx, 0.U)
+  io.rename_fwd.rd_defen := io.in.valid && in.disp_rd_val_valid
   io.rename_fwd.value := in.disp_rd_val
 }

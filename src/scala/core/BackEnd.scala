@@ -121,7 +121,7 @@ class BackEnd extends NPCModule {
   alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
   alu_.io.in.bits.alu_op := alu_iq_.io.issue.bits.extra.alu_op
   alu_.io.in.bits.rob_tag := alu_iq_.io.issue.bits.rob_tag
-  alu_.io.in.bits.rd_wen := alu_iq_.io.issue.bits.extra.rd_wen
+  alu_.io.in.bits.rd_wen := alu_iq_.io.issue.bits.extra.rd_defen
 
   val alu_wb_valid = alu_.io.out.fire
   val alu_wb_tag = alu_.io.out.bits.rob_tag

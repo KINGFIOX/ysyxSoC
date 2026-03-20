@@ -201,6 +201,10 @@ object CU {
           case _                  => dc
         }
       case OP_JALR => bp(ALUOpType.alu_ADD)
+      case OP_SYSTEM => op.func3.rawString match {
+        case "001" | "010" => bp(ALUOpType.alu_ADD)
+        case _ => dc
+      }
       case _ => dc
     }
   }
@@ -379,5 +383,7 @@ class CU extends NPCModule {
       InstType.INVALID -> io.in.inst
     )
   )
-  io.out.has_except := Seq(InstType.EBREAK, InstType.ECALL, InstType.INVALID).map(inst_type === _).reduce(_ || _)
+  io.out.has_except := Seq(InstType.EBREAK, InstType.ECALL, InstType.INVALID)
+    .map(inst_type === _)
+    .reduce(_ || _)
 }

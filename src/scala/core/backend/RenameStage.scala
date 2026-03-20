@@ -72,9 +72,12 @@ class RenameStage extends NPCModule {
   for (i <- 0 until 2) {
     // Dispatcher tag forward: override RAT when the in-flight dispatch
     // is defining the same architectural register.
-    val disp_val_hit = disp_fwd.rd_val_wen &&
-      (disp_fwd.rd_idx === rs_idx(i)) &&
-      (rs_idx(i) =/= 0.U)
+    val disp_val_hit = disp_fwd.rd_defen && (disp_fwd.rd_idx === rs_idx(i))
+    assert(
+      // rf_defen -> (rd_idx =/= 0.U)
+      !disp_fwd.rd_defen || (rd_idx =/= 0.U),
+      "(RenameStage) x0 should not be forwarded"
+    )
 
     val tag = io.rat(i).tag
     val busy = io.rat(i).busy // x0, always free
@@ -91,7 +94,7 @@ class RenameStage extends NPCModule {
     out.src(i).value := MuxCase(
       0.U,
       Seq(
-        free -> io.rfu_query(i).data,
+        free -> io.rfu_query(i).data, // x0 -> 0
         disp_val_hit -> disp_fwd.value,
         cdb0_hit -> io.cdb(0).value,
         cdb1_hit -> io.cdb(1).value,
