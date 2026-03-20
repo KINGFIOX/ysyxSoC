@@ -10,7 +10,7 @@ class RenameStageOutput extends NPCBundle {
   val dec = new DecodeStageOutput
   val src = Vec(2, new IQSrcBundle)
   val disp_rd_val = UInt(dataBits.W)
-  val disp_rd_val_valid = Bool()
+  val disp_rd_defen = Bool()
   val disp_target_npc = UInt(addrBits.W)
 }
 
@@ -19,10 +19,10 @@ class RenameStage extends NPCModule {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
     val rat = Vec(2, new RATReadPort)
-    val rob = Vec(2, new RobFwdBundle)
-    val disp_fwd = Flipped(new DispFwdBundle)
+    val rob = Vec(2, new RobReadBundle)
+    val disp_fwd = Flipped(Valid(new DispFwdBundle))
     val rfu_query = Vec(2, new RFUReadPort)
-    val cdb = Vec(2, Flipped(new CDBBundle))
+    val cdb = Vec(2, Flipped(Valid(new CDBBundle)))
   })
 
   // backpress
@@ -45,7 +45,7 @@ class RenameStage extends NPCModule {
   // Dispatch-resolved value (jalr, jal, lui, auipc)
   // ============================================================
   // format: off
-  out.disp_rd_val_valid := Seq( InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC
+  out.disp_rd_defen := Seq( InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC
     ).map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
   // format: on
   out.disp_rd_val := MuxLookup(inst_type, 0.U)(
@@ -72,10 +72,10 @@ class RenameStage extends NPCModule {
   for (i <- 0 until 2) {
     // Dispatcher tag forward: override RAT when the in-flight dispatch
     // is defining the same architectural register.
-    val disp_val_hit = disp_fwd.rd_defen && (disp_fwd.rd_idx === rs_idx(i))
+    val disp_val_hit = disp_fwd.valid && (disp_fwd.bits.rd_idx === rs_idx(i))
     assert(
       // rf_defen -> (rd_idx =/= 0.U)
-      !disp_fwd.rd_defen || (rd_idx =/= 0.U),
+      !disp_fwd.valid || (rd_idx =/= 0.U),
       "(RenameStage) x0 should not be forwarded"
     )
 
@@ -84,9 +84,12 @@ class RenameStage extends NPCModule {
 
     io.rob(i).tag := tag
 
+    val cdb0 = io.cdb(0)
+    val cdb1 = io.cdb(1)
+
     val free = !busy
-    val cdb0_hit = io.cdb(0).valid && (io.cdb(0).tag === tag)
-    val cdb1_hit = io.cdb(1).valid && (io.cdb(1).tag === tag)
+    val cdb0_hit = cdb0.valid && (cdb0.bits.tag === tag)
+    val cdb1_hit = cdb1.valid && (cdb1.bits.tag === tag)
     val rob_hit = io.rob(i).valid
 
     out.src(i).ready := free || disp_val_hit || cdb0_hit || cdb1_hit || rob_hit
@@ -95,11 +98,32 @@ class RenameStage extends NPCModule {
       0.U,
       Seq(
         free -> io.rfu_query(i).data, // x0 -> 0
-        disp_val_hit -> disp_fwd.value,
-        cdb0_hit -> io.cdb(0).value,
-        cdb1_hit -> io.cdb(1).value,
+        disp_val_hit -> disp_fwd.bits.value,
+        cdb0_hit -> cdb0.bits.value,
+        cdb1_hit -> cdb1.bits.value,
         rob_hit -> io.rob(i).value
       )
     )
+  }
+
+  // ============================================================
+  // Immediate-to-operand: override src(1) for imm-using instructions
+  // ============================================================
+  // format: off
+  val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
+  // format: on
+  val is_csr = inst_type === InstType.CSR
+  val is_load = inst_type === InstType.LOAD
+
+  when(use_imm) {
+    out.src(1).value := imm
+    out.src(1).tag := 0.U
+    out.src(1).ready := true.B
+  }.elsewhen(is_csr) {
+    out.src(1).value := 0.U
+    out.src(1).tag := 0.U
+    out.src(1).ready := true.B
+  }.elsewhen(is_load) {
+    out.src(1).ready := true.B
   }
 }

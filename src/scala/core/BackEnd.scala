@@ -17,7 +17,7 @@ class BackEnd extends NPCModule {
   // connect to frontend
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new IFUOutput))
-    val redirect = Output(new RedirectBundle)
+    val redirect = Output(Valid(new RedirectBundle))
     val flush = Output(Bool())
   })
 
@@ -60,7 +60,7 @@ class BackEnd extends NPCModule {
   val flush = commitStage_.flush
 
   io.flush := flush
-  io.redirect := commitStage_.ifu
+  io.redirect := commitStage_.redirect
 
   rob_.io.flush := flush
   rat_.io.flush := flush
@@ -71,8 +71,8 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // CDB(common data bus) wires (declared early for rename / dispatch bypass)
   // ==========================================================
-  val cdb1 = Wire(new CDBBundle) // alu
-  val cdb2 = Wire(new CDBBundle) // late
+  val cdb1 = Wire(Valid(new CDBBundle)) // alu
+  val cdb2 = Wire(Valid(new CDBBundle)) // late
 
   alu_iq_.io.cdb1 := cdb1; bru_iq_.io.cdb1 := cdb1; agu_iq_.io.cdb1 := cdb1
   alu_iq_.io.cdb2 := cdb2; bru_iq_.io.cdb2 := cdb2; agu_iq_.io.cdb2 := cdb2
@@ -121,11 +121,11 @@ class BackEnd extends NPCModule {
   alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
   alu_.io.in.bits.alu_op := alu_iq_.io.issue.bits.extra.alu_op
   alu_.io.in.bits.rob_tag := alu_iq_.io.issue.bits.rob_tag
-  alu_.io.in.bits.rd_wen := alu_iq_.io.issue.bits.extra.rd_defen
+  alu_.io.in.bits.rd_defen := alu_iq_.io.issue.bits.extra.rd_defen
 
   val alu_wb_valid = alu_.io.out.fire
   val alu_wb_tag = alu_.io.out.bits.rob_tag
-  val alu_wb_rd_wen = alu_.io.out.bits.rd_wen
+  val alu_wb_rd_defen = alu_.io.out.bits.rd_defen
   val alu_result = alu_.io.out.bits.result
 
   rob_.io.exec(0).tag := alu_wb_tag
@@ -173,9 +173,9 @@ class BackEnd extends NPCModule {
   rob_.io.agu.bits.is_mmio := agu_.io.out.bits.is_mmio
 
   // --- CDB1 — ALU writeback broadcast ---
-  cdb1.valid := alu_wb_valid && alu_wb_rd_wen && !flush
-  cdb1.tag := alu_wb_tag
-  cdb1.value := alu_rd_val
+  cdb1.valid := alu_wb_valid && alu_wb_rd_defen && !flush
+  cdb1.bits.tag := alu_wb_tag
+  cdb1.bits.value := alu_rd_val
 
   // ==========================================================
   // Stage 5 — Commit (CommitStage module)
@@ -210,10 +210,10 @@ class BackEnd extends NPCModule {
   // ==========================================================
   val dbg = Wire(new DebugBundle)
   dbg.valid := commitStage_.probe.valid
-  dbg.pc := commitStage_.probe.pc
-  dbg.dnpc := commitStage_.probe.dnpc
-  dbg.inst := commitStage_.probe.inst
-  dbg.is_mmio := commitStage_.probe.is_mmio
+  dbg.pc := commitStage_.probe.bits.pc
+  dbg.dnpc := commitStage_.probe.bits.dnpc
+  dbg.inst := commitStage_.probe.bits.inst
+  dbg.is_mmio := commitStage_.probe.bits.is_mmio
   dbg.gpr := rfu_.probe
   dbg.csr := csru_.probe
   probe := dbg

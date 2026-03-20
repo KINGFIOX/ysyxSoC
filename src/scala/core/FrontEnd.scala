@@ -14,12 +14,13 @@ class FrontEnd extends NPCModule {
 
   val io = IO(new Bundle {
     val out = Decoupled(new IFUOutput)
-    val redirect = Input(new RedirectBundle)
+    val redirect = Input(Valid(new RedirectBundle))
   })
 
   val ifu_ = Module(new IFU)
 
   ifu_.icache <> icache
   io.out <> ifu_.io.out
-  ifu_.io.redirect := io.redirect
+  ifu_.io.redirect.valid := io.redirect.valid
+  ifu_.io.redirect.bits.correct_npc := io.redirect.bits.correct_npc
 }

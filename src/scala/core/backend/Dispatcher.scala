@@ -7,7 +7,6 @@ import ysyx.core.common._
 
 class DispFwdBundle extends NPCBundle {
   val rd_idx = UInt(NRRegbits.W)
-  val rd_defen = Bool()
   val value = UInt(dataBits.W)
 }
 
@@ -15,13 +14,13 @@ class Dispatcher extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new RenameStageOutput))
     val flush = Input(Bool())
-    val rename_fwd = new DispFwdBundle
+    val rename_fwd = Valid(new DispFwdBundle)
     val rob_enq = Decoupled(new RobEnqData)
     val rob_tag = Input(UInt(robEntryBits.W))
     val alu_iq = Decoupled(new IQEnqData(new ALUExtra, 2))
     val bru_iq = Decoupled(new IQEnqData(new BRUExtra, 2))
     val agu_iq = Decoupled(new IQEnqData(new AGUExtra, 2))
-    val rat = new RATWritePort
+    val rat = Valid(new RATWritePort)
   })
 
   val in = io.in.bits
@@ -46,9 +45,6 @@ class Dispatcher extends NPCModule {
   val rd_defen = rd_wen && (dec.rd_idx =/= 0.U)
   // format: on
 
-  // format: off
-  val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
-  // format: on
   val is_csr = inst_type === InstType.CSR
 
   // ============================================================
@@ -80,13 +76,13 @@ class Dispatcher extends NPCModule {
   enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
   enq.csr.op := ctrl.csr_op
   enq.csr.wdata := 0.U
-  enq.rd.idx := Mux(rd_defen, dec.rd_idx, 0.U)
+  enq.rd.idx := Mux(rd_defen, dec.rd_idx, DontCare)
   enq.rd.value := in.disp_rd_val
   enq.rd.state := MuxCase(
     RdRobState.nouse,
     Seq(
-      (rd_defen && in.disp_rd_val_valid) -> RdRobState.done,
-      (rd_defen && !in.disp_rd_val_valid) -> RdRobState.pending
+      (rd_defen && in.disp_rd_defen) -> RdRobState.done,
+      (rd_defen && !in.disp_rd_defen) -> RdRobState.pending
     )
   )
   enq.except.valid := has_except
@@ -110,11 +106,7 @@ class Dispatcher extends NPCModule {
   // so the instruction waitting for sources should be dispatched to the ALU's issuse queue
   // so InstType.csr is sent to ALU
   io.alu_iq.bits.src(0) := in.src(0)
-  val alu_imm_src = Wire(new IQSrcBundle)
-  alu_imm_src.value := Mux(is_csr, 0.U, dec.imm)
-  alu_imm_src.tag := 0.U
-  alu_imm_src.ready := true.B
-  io.alu_iq.bits.src(1) := Mux(use_imm || is_csr, alu_imm_src, in.src(1)) //
+  io.alu_iq.bits.src(1) := in.src(1)
   io.alu_iq.bits.extra.alu_op := ctrl.alu_op
   io.alu_iq.bits.extra.rd_defen := rd_defen
   io.alu_iq.bits.rob_tag := io.rob_tag
@@ -131,25 +123,21 @@ class Dispatcher extends NPCModule {
   // AGU Issue Queue
   // ============================================================
   io.agu_iq.bits.src(0) := in.src(0)
-  val agu_wdata = WireDefault(in.src(1))
-  when(inst_type === InstType.LOAD) { // overwrite
-    agu_wdata.ready := true.B
-  }
-  io.agu_iq.bits.src(1) := agu_wdata
+  io.agu_iq.bits.src(1) := in.src(1)
   io.agu_iq.bits.extra.offset := dec.imm
   io.agu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // RAT Write
   // ============================================================
-  io.rat.en := io.in.fire && rd_defen
-  io.rat.addr := dec.rd_idx
-  io.rat.tag := io.rob_tag
+  io.rat.valid := io.in.fire && rd_defen
+  io.rat.bits.addr := dec.rd_idx
+  io.rat.bits.tag := io.rob_tag
 
   // ============================================================
   // Rename Forward
   // ============================================================
-  io.rename_fwd.rd_idx := Mux(rd_defen, dec.rd_idx, 0.U)
-  io.rename_fwd.rd_defen := io.in.valid && in.disp_rd_val_valid
-  io.rename_fwd.value := in.disp_rd_val
+  io.rename_fwd.bits.rd_idx := Mux(rd_defen, dec.rd_idx, 0.U)
+  io.rename_fwd.valid := io.in.valid && in.disp_rd_defen
+  io.rename_fwd.bits.value := in.disp_rd_val
 }

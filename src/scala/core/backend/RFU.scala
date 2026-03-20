@@ -14,14 +14,13 @@ class RFUReadPort extends NPCBundle {
 class RFUWritePort extends NPCBundle {
   val addr = UInt(NRRegbits.W)
   val data = UInt(dataBits.W)
-  val en = Bool()
 }
 
 class RFU(val numReadPorts: Int = 2) extends NPCModule {
   val probe = IO(Vec(NRReg, UInt(dataBits.W)))
   val io = IO(new Bundle {
     val read = Vec(numReadPorts, Flipped(new RFUReadPort))
-    val write = Flipped(new RFUWritePort)
+    val write = Flipped(Valid(new RFUWritePort))
   })
 
   val regfile = RegInit(VecInit(Seq.fill(NRReg)(0.U(dataBits.W))))
@@ -30,8 +29,8 @@ class RFU(val numReadPorts: Int = 2) extends NPCModule {
     io.read(i).data := Mux(io.read(i).addr === 0.U, 0.U, regfile(io.read(i).addr))
   }
 
-  when(io.write.en && (io.write.addr =/= 0.U)) {
-    regfile(io.write.addr) := io.write.data
+  when(io.write.valid && (io.write.bits.addr =/= 0.U)) {
+    regfile(io.write.bits.addr) := io.write.bits.data
   }
 
   probe := regfile

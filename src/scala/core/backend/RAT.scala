@@ -14,13 +14,11 @@ class RATReadPort extends NPCBundle {
 }
 
 class RATWritePort extends NPCBundle {
-  val en   = Bool()
   val addr = UInt(NRRegbits.W)
   val tag  = UInt(robEntryBits.W)
 }
 
 class RATCommitPort extends NPCBundle {
-  val en   = Bool()
   val addr = UInt(NRRegbits.W)
   val tag  = UInt(robEntryBits.W)
 }
@@ -28,8 +26,8 @@ class RATCommitPort extends NPCBundle {
 class RAT(val numReadPorts: Int = 2) extends NPCModule {
   val io = IO(new Bundle {
     val rename  = Flipped(Vec(numReadPorts, new RATReadPort))
-    val disp = Flipped(new RATWritePort)
-    val commit = Flipped(new RATCommitPort)
+    val disp = Flipped(Valid(new RATWritePort)) // forward
+    val commit = Flipped(Valid(new RATCommitPort))
     val flush = Input(Bool())
   })
 
@@ -40,14 +38,14 @@ class RAT(val numReadPorts: Int = 2) extends NPCModule {
   when(io.flush) {
     busy := VecInit(Seq.fill(NRReg)(false.B))
   }.otherwise {
-    when(io.commit.en && io.commit.addr =/= 0.U) {
-      when(tags(io.commit.addr) === io.commit.tag) {
-        busy(io.commit.addr) := false.B
+    when(io.commit.valid && io.commit.bits.addr =/= 0.U) {
+      when(tags(io.commit.bits.addr) === io.commit.bits.tag) {
+        busy(io.commit.bits.addr) := false.B
       }
     }
-    when(io.disp.en && io.disp.addr =/= 0.U) {
-      busy(io.disp.addr) := true.B
-      tags(io.disp.addr) := io.disp.tag
+    when(io.disp.valid && io.disp.bits.addr =/= 0.U) {
+      busy(io.disp.bits.addr) := true.B
+      tags(io.disp.bits.addr) := io.disp.bits.tag
     }
   }
 

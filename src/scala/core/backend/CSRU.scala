@@ -8,11 +8,8 @@ import ysyx.core.common._
 // from the master(rob)'s point-of-view
 class CsrExceptWritePort extends Bundle with HasCoreParameter {
   val xepc = UInt(dataBits.W)
-  val xepc_wen = Bool()
   val xcause = UInt(dataBits.W)
-  val xcause_wen = Bool()
   val xtval = UInt(dataBits.W)
-  val xtval_wen = Bool()
 }
 
 class CsrWriteOnlyPort extends CsrRobEntry {
@@ -35,7 +32,7 @@ class CSRUDebugBundle
 
 class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
   val probe = IO(new CSRUDebugBundle)
-  val except = IO(Flipped(new CsrExceptWritePort)) // for exception
+  val except = IO(Flipped(Valid(new CsrExceptWritePort))) // for exception
   val xepc = IO(UInt(dataBits.W)) // for `mret`
   val xtvec = IO(UInt(dataBits.W)) // for `ecall`
 
@@ -53,9 +50,11 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
   val mvendorid = 0x7973_7978.U(dataBits.W) // "ysyx" in ASCII
   val marchid = 26010003.U(dataBits.W)
 
-  when(except.xcause_wen) { mcause := except.xcause }
-  when(except.xepc_wen) { mepc := except.xepc }
-  when(except.xtval_wen) { mtval := except.xtval }
+  when(except.fire) {
+    mcause := except.bits.xcause
+    mepc := except.bits.xepc
+    mtval := except.bits.xtval
+  }
 
   xepc := mepc
   xtvec := mtvec

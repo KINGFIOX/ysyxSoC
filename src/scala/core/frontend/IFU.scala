@@ -9,6 +9,7 @@ import freechips.rocketchip.util._
 import ysyx.core.common._
 import ysyx.core.lsu._
 import ysyx.core.sram._
+import ysyx.core.backend.InstType
 
 class IFUOutput extends NPCBundle {
   val inst = UInt(instBits.W)
@@ -20,77 +21,82 @@ class IFUOutput extends NPCBundle {
 }
 
 class RedirectBundle extends NPCBundle {
-  val valid = Bool()
   val correct_npc = UInt(addrBits.W)
   val wrong_pc = UInt(addrBits.W) // the pc of mispredicted instruction
+  val inst_type = InstType()
+  val is_call = Bool()
+  val is_ret = Bool()
+}
+
+class RedirectBase extends NPCBundle {
+  val correct_npc = UInt(addrBits.W)
 }
 
 class IFU extends NPCModule {
 
   val io = IO(new Bundle {
     val out = Irrevocable(new IFUOutput)
-    val redirect = Input(new RedirectBundle)
+    val redirect = Flipped(Valid(new RedirectBase))
   })
 
   val icache = IO(SRAMBundle(sramParams))
 
-  private val pcQ = RegInit(ysyx.SoCConfig.resetVector.U(addrBits.W))
-  private val instQ = RegInit(0.U(dataBits.W))
+  val pc_q = RegInit(ysyx.SoCConfig.resetVector.U(addrBits.W))
+  val inst_q = icache.rdata holdUnless icache.done
 
   object State extends ChiselEnum {
     val idle, addr_req, data_wait, output_wait = Value
   }
-  private val stateQ = RegInit(State.idle)
+  val state_q = RegInit(State.idle)
 
   // icache defaults (read-only, word-sized fetch)
-  icache.req := (stateQ === State.addr_req)
+  icache.req := (state_q === State.addr_req)
   icache.wen := false.B
   icache.size := 2.U
-  icache.addr := pcQ
+  icache.addr := pc_q
   icache.wstrb := 0.U
   icache.wdata := 0.U
 
-  io.out.valid := (stateQ === State.output_wait)
-  io.out.bits.inst := instQ
-  io.out.bits.pc := pcQ
+  io.out.valid := (state_q === State.output_wait)
+  io.out.bits.inst := inst_q
+  io.out.bits.pc := pc_q
   io.out.bits.mcause := 0.U
   io.out.bits.mtval := 0.U
   io.out.bits.has_except := false.B
-  io.out.bits.predict_npc := pcQ + 4.U
+  io.out.bits.predict_npc := pc_q + 4.U
 
-  switch(stateQ) {
+  val redirect = io.redirect
+
+  switch(state_q) {
 
     is(State.idle) {
-      stateQ := State.addr_req
+      state_q := State.addr_req
     }
 
     is(State.addr_req) {
-      when(io.redirect.valid) {
-        pcQ := io.redirect.correct_npc
-      }.elsewhen(icache.ack) {
-        stateQ := State.data_wait
+      when(icache.ack) {
+        state_q := State.data_wait
       }
     }
 
     is(State.data_wait) {
-      when(io.redirect.valid) {
-        stateQ := State.addr_req
-        pcQ := io.redirect.correct_npc
-      }.elsewhen(icache.done) {
-        stateQ := State.output_wait
-        instQ := icache.rdata
+      when(icache.done) {
+        state_q := State.output_wait
       }
     }
 
     is(State.output_wait) {
-      when(io.redirect.valid) {
-        stateQ := State.addr_req
-        pcQ := io.redirect.correct_npc
-      }.elsewhen(io.out.fire) {
-        stateQ := State.addr_req
-        pcQ := pcQ + 4.U
+      when(io.out.fire) {
+        state_q := State.addr_req
+        pc_q := pc_q + 4.U
       }
     }
 
   }
+
+  when(redirect.valid) {
+    state_q := State.addr_req
+    pc_q := redirect.bits.correct_npc
+  }
+
 }

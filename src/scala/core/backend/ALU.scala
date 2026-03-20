@@ -15,13 +15,13 @@ class ALUInput extends NPCBundle {
   val op2 = UInt(dataBits.W)
   val alu_op = ALUOpType()
   val rob_tag = UInt(robEntryBits.W)
-  val rd_wen = Bool()
+  val rd_defen = Bool()
 }
 
 class ALUOutput extends NPCBundle {
   val result = UInt(dataBits.W)
   val rob_tag = UInt(robEntryBits.W)
-  val rd_wen = Bool()
+  val rd_defen = Bool()
 }
 
 class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
@@ -34,7 +34,7 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
 
   io.out.bits.result := 0.U
   io.out.bits.rob_tag := io.in.bits.rob_tag
-  io.out.bits.rd_wen := io.in.bits.rd_wen
+  io.out.bits.rd_defen := io.in.bits.rd_defen
 
   switch(io.in.bits.alu_op) {
     is(ALUOpType.alu_ADD) { io.out.bits.result := op1 + op2 }

@@ -114,7 +114,7 @@ class LookupBundle extends NPCBundle {
 }
 
 // forward to rename stage
-class RobFwdBundle extends NPCBundle {
+class RobReadBundle extends NPCBundle {
   val tag = Output(UInt(robEntryBits.W))
   val value = Input(UInt(dataBits.W))
   val valid = Input(Bool())
@@ -140,7 +140,7 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
     val csr = ReqDone(new CsrWriteOnlyPort)
     val exec = Vec(numLookupPorts, Flipped(new LookupBundle)) // lookup
     val commit = ReqDone(new CommitBundle)
-    val rename = Vec(numFwdPorts, Flipped(new RobFwdBundle)) // lookup
+    val rename = Vec(numFwdPorts, Flipped(new RobReadBundle)) // lookup
     val flush = Input(Bool())
   })
 
@@ -268,16 +268,21 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
   io.csr.bits.wen := head_is_late && head_is_csr && !flush
 
   when(head_is_late && head_is_mem && io.lsu.done && !flush) {
-    when(io.lsu.bits.result_valid) {
+    when(io.lsu.bits.result_valid) { // load
       head_entry.rd.value := io.lsu.bits.result
-      head_entry.rd.state := RdRobState.done
+      // rd_idx == 0 -> state == nouse
+      when(head_entry.rd.state === RdRobState.pending) {
+        head_entry.rd.state := RdRobState.done
+      }
     }
     head_entry.state := RobState.complete
   }
   when(head_is_late && head_is_csr && io.csr.done && !flush) {
     head_entry.rd.value := io.csr.bits.result
-    head_entry.rd.state := RdRobState.done
     head_entry.state := RobState.complete
+    when(head_entry.rd.state === RdRobState.pending) {
+      head_entry.rd.state := RdRobState.done
+    }
   }
 
   // ============================================================
@@ -297,7 +302,7 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
   // ============================================================
   for (i <- 0 until numFwdPorts) {
     val fwd = io.rename(i)
-    fwd.valid := ram(idx(fwd.tag)).rd.state === RdRobState.done
+    fwd.valid := ram(idx(fwd.tag)).rd.state === RdRobState.done // x0 -> nouse
     fwd.value := ram(idx(fwd.tag)).rd.value
   }
 

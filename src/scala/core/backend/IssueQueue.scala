@@ -7,7 +7,6 @@ import ysyx.core.common._
 
 // from the master's point-of-view
 class CDBBundle extends NPCBundle {
-  val valid = Bool()
   val tag = UInt(robEntryBits.W)
   val value = UInt(dataBits.W)
 }
@@ -46,8 +45,8 @@ abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numOps: Int)
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new IQEnqData(gen, numOps)))
     val issue = Decoupled(new IQIssueData(gen, numOps))
-    val cdb1 = Flipped(new CDBBundle)
-    val cdb2 = Flipped(new CDBBundle)
+    val cdb1 = Flipped(Valid(new CDBBundle))
+    val cdb2 = Flipped(Valid(new CDBBundle))
     val flush = Input(Bool())
   })
 
@@ -62,17 +61,19 @@ abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numOps: Int)
   // CDB value capture: write to ram, ready on next cycle
   ram.foreach(ent =>
     when(ent.occupied && !io.flush) {
+      val cdb1 = io.cdb1
+      val cdb2 = io.cdb2
       for (i <- 0 until numOps) {
         when(
-          io.cdb1.valid && !ent.src(i).ready && ent.src(i).tag === io.cdb1.tag
+          cdb1.valid && !ent.src(i).ready && ent.src(i).tag === cdb1.bits.tag
         ) {
-          ent.src(i).value := io.cdb1.value
+          ent.src(i).value := cdb1.bits.value
           ent.src(i).ready := true.B
           assert(!ent.src(i).ready, "impossible: src already ready on CDB hit")
         }.elsewhen(
-          io.cdb2.valid && !ent.src(i).ready && ent.src(i).tag === io.cdb2.tag
+          cdb2.valid && !ent.src(i).ready && ent.src(i).tag === cdb2.bits.tag
         ) {
-          ent.src(i).value := io.cdb2.value
+          ent.src(i).value := cdb2.bits.value
           ent.src(i).ready := true.B
           assert(!ent.src(i).ready, "impossible: src already ready on CDB hit")
         }
@@ -98,19 +99,19 @@ abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numOps: Int)
 
   when(do_enq) {
     val ent = ram(enq_ptr)
+    val cdb1 = io.cdb1
+    val cdb2 = io.cdb2
     for (i <- 0 until numOps) {
       val enq_src = io.enq.bits.src(i)
-      val cdb1_hit =
-        io.cdb1.valid && !enq_src.ready && (enq_src.tag === io.cdb1.tag)
-      val cdb2_hit =
-        io.cdb2.valid && !enq_src.ready && (enq_src.tag === io.cdb2.tag)
+      val cdb1_hit = cdb1.valid && !enq_src.ready && (enq_src.tag === cdb1.bits.tag)
+      val cdb2_hit = cdb2.valid && !enq_src.ready && (enq_src.tag === cdb2.bits.tag)
       ent.src(i).tag := enq_src.tag
       ent.src(i).ready := enq_src.ready || cdb1_hit || cdb2_hit
       ent.src(i).value := MuxCase(
         enq_src.value,
         Seq(
-          cdb1_hit -> io.cdb1.value,
-          cdb2_hit -> io.cdb2.value
+          cdb1_hit -> cdb1.bits.value,
+          cdb2_hit -> cdb2.bits.value
         )
       )
     }
