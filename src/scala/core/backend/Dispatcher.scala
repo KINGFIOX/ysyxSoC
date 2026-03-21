@@ -98,6 +98,7 @@ class Dispatcher extends NPCModule {
   enq.jalr.dnpc_rdy := false.B
   enq.jalr.is_ret := dec.is_ret
   enq.predict_npc := dec.predict_npc
+  enq.ghr := dec.ghr
 
   // ============================================================
   // ALU Issue Queue

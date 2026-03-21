@@ -18,6 +18,7 @@ class DecodeStageOutput extends NPCBundle {
   val inst = UInt(instBits.W)
   val inst_bits = UInt(instBits.W)
   val predict_npc = UInt(addrBits.W)
+  val ghr = UInt(ghrBits.W)
   val mcause = UInt(dataBits.W)
   val mtval = UInt(dataBits.W)
   val has_except = Bool()
@@ -66,5 +67,6 @@ class DecodeStage extends NPCModule {
   out.pc := ifu_out.pc
   out.inst_bits := ifu_out.inst
   out.predict_npc := ifu_out.predict_npc
+  out.ghr := ifu_out.ghr
   out.inst := ifu_out.inst
 }

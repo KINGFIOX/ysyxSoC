@@ -81,6 +81,7 @@ class CommitStage extends NPCModule {
   redirect.bits.jal := head_entry.jal
   redirect.bits.jalr := head_entry.jalr
   redirect.bits.bru := head_entry.bru
+  redirect.bits.ghr := head_entry.ghr
   redirect.bits.dnpc := MuxCase(
     head_entry.predict_npc,
     Seq(

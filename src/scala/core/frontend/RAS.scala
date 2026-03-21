@@ -10,7 +10,7 @@ class RASPushPort extends NPCBundle {
 }
 
 class RASPopPort extends NPCBundle {
-  val dnpc = Input(UInt(addrBits.W))
+  val dnpc = UInt(addrBits.W)
 }
 
 // return address stack
@@ -21,17 +21,22 @@ class RAS(entries: Int = 8) extends NPCModule {
   private val entriesBits: Int = log2Ceil(entries)
 
   val io = IO(new Bundle {
-    val pop = Flipped(Valid(new RASPopPort))
+    val pop = new Bundle {
+      val valid = Input(Bool())
+      val bits = Output(new RASPopPort)
+    }
     val push = Flipped(Valid(new RASPushPort))
   })
 
-  val stack = Mem(entries, UInt(addrBits.W))
-  val top = RegInit(0.U(entriesBits.W)) // could be wrapping to 0
+  val stack = Reg(Vec(entries, UInt(addrBits.W)))
+  val top = RegInit(0.U(entriesBits.W))
 
   assert(
     !(io.pop.valid && io.push.valid),
     "pop and push should not be valid at the same time"
   )
+
+  io.pop.bits.dnpc := stack(top - 1.U)
 
   when( io.push.valid ) {
     top := top + 1.U
@@ -40,7 +45,6 @@ class RAS(entries: Int = 8) extends NPCModule {
 
   when( io.pop.valid ) {
     top := top - 1.U
-    io.pop.bits.dnpc := stack(top)
   }
 
 }

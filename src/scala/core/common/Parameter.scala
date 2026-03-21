@@ -43,6 +43,7 @@ trait HasCoreParameter {
   val dataBytes = dataBits >> 3 // 一个 word 有几个字节  4
   val dataBytesBits = log2Ceil(dataBytes) // 一个 word 有几个字节的位宽 2
   val robEntryBits = 6 // 2^6 = 64
+  val ghrBits: Int = 12 // log2Ceil(4096), matches BHT entries
 }
 
 trait HasSRAMParameter extends HasCoreParameter {

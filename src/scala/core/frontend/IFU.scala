@@ -16,6 +16,7 @@ class IFUOutput extends NPCBundle {
   val inst = UInt(instBits.W)
   val pc = UInt(addrBits.W)
   val predict_npc = UInt(addrBits.W)
+  val ghr = UInt(ghrBits.W)
   val mcause = UInt(dataBits.W)
   val mtval = UInt(dataBits.W) // access fault address
   val has_except = Bool()
@@ -30,11 +31,13 @@ class RedirectBundle extends NPCBundle {
   val bru = new BruRobEntry
   val jal = new JalRobEntry
   val jalr = new JalrRobEntry
+  val ghr = UInt(ghrBits.W)
   val dnpc = UInt(addrBits.W)
 }
 
 class PredictBundle extends NPCBundle {
   val dnpc = UInt(addrBits.W)
+  val ghr = UInt(ghrBits.W)
   val pc = Input(UInt(addrBits.W))
   val inst = Input(UInt(instBits.W))
 }
@@ -74,6 +77,7 @@ class IFU extends NPCModule {
   io.out.bits.mtval := 0.U
   io.out.bits.has_except := false.B
   io.out.bits.predict_npc := io.predict.dnpc
+  io.out.bits.ghr := io.predict.ghr
   io.predict.pc := pc_q
   io.predict.inst := inst_q
 

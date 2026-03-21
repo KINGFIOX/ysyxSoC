@@ -73,6 +73,7 @@ class RobEntry extends NPCBundle {
   val jalr = new JalrRobEntry
   val except = new ExceptRobEntry
   val predict_npc = UInt(addrBits.W)
+  val ghr = UInt(ghrBits.W)
   val state = RobState()
 }
 
@@ -89,6 +90,7 @@ class RobEnqData extends NPCBundle {
   val jalr = new JalrRobEntry
   val except = new ExceptRobEntry
   val predict_npc = UInt(addrBits.W)
+  val ghr = UInt(ghrBits.W)
 }
 
 class WBALUBundle extends NPCBundle {
@@ -235,6 +237,7 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
     ent.jalr := enq.jalr
     ent.jalr.dnpc_rdy := false.B
     ent.predict_npc := enq.predict_npc
+    ent.ghr := enq.ghr
     // format: off
     val go_to_fu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR,
       InstType.CSR, InstType.BRANCH, InstType.LOAD, InstType.STORE)
