@@ -23,7 +23,7 @@ verilate(model
   TRACE_FST
   DIRECTORY "${OUTPUT_DIR}"
   VERILATOR_ARGS
-    --no-timing --autoflush --assert
+    --no-timing
     --timescale "1ns/1ns"
     -O2 -Wall -Wno-fatal
     "-I${NPC_HOME}/src/verilog/spi/rtl"
@@ -32,6 +32,7 @@ verilate(model
     "-I${RTL_DIR}/verification/assert"
     "-I${RTL_DIR}/verification/assume"
     "-I${RTL_DIR}/verification/cover"
+  THREADS 4
   OPT_FAST -O2
   OPT_SLOW -O2
   OPT_GLOBAL -O2
