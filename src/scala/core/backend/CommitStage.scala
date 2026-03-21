@@ -6,12 +6,17 @@ import chisel3.util._
 import ysyx.core.common._
 import ysyx.core.frontend._
 
+class PerfBundle extends NPCBundle {
+  val commit_cnt = UInt(dataBits.W)
+  val branch_cnt = UInt(dataBits.W)
+  val branch_mispredict_cnt = UInt(dataBits.W)
+}
+
 class DebugCommitBundle extends NPCBundle {
   val pc = UInt(dataBits.W)
   val dnpc = UInt(dataBits.W)
   val inst = UInt(instBits.W)
   val is_mmio = Bool()
-  // val has_except = Bool()
 }
 
 class CommitStage extends NPCModule {
@@ -75,7 +80,7 @@ class CommitStage extends NPCModule {
   redirect.bits.inst_type := head_entry.inst_type
   redirect.bits.is_call := head_entry.jal.is_call
   redirect.bits.is_ret := head_entry.jalr.is_ret
-  redirect.bits.dnpc := MuxCase(
+  redirect.bits.snpc := MuxCase(
     head_entry.predict_npc,
     Seq(
       (head_entry.inst_type === InstType.JAL) -> head_entry.jal.dnpc,
@@ -85,7 +90,7 @@ class CommitStage extends NPCModule {
       (head_entry.except.valid) -> csr.xtvec
     )
   )
-  redirect.bits.mispredict := redirect.bits.dnpc =/= head_entry.predict_npc
+  redirect.bits.mispredict := redirect.bits.snpc =/= head_entry.predict_npc
   flush := rob.fire && redirect.bits.mispredict
 
   // ---- Commit logic ----
@@ -107,7 +112,30 @@ class CommitStage extends NPCModule {
   val probe = IO(Valid(new DebugCommitBundle))
   probe.valid := RegNext(rob.fire)
   probe.bits.pc := RegNext(head_entry.pc)
-  probe.bits.dnpc := RegNext(redirect.bits.dnpc)
+  probe.bits.dnpc := RegNext(redirect.bits.snpc)
   probe.bits.inst := RegNext(head_entry.inst)
   probe.bits.is_mmio := RegNext(dbg_is_mmio)
+
+  // ---- Perf counters ----
+  val perf_commit_cnt = RegInit(0.U(dataBits.W))
+  val perf_branch_cnt = RegInit(0.U(dataBits.W))
+  val perf_branch_mispredict_cnt = RegInit(0.U(dataBits.W))
+
+  when(rob.fire) {
+    perf_commit_cnt := perf_commit_cnt + 1.U
+    val is_cf = head_entry.inst_type === InstType.BRANCH ||
+                head_entry.inst_type === InstType.JAL ||
+                head_entry.inst_type === InstType.JALR
+    when(is_cf) {
+      perf_branch_cnt := perf_branch_cnt + 1.U
+      when(redirect.bits.mispredict) {
+        perf_branch_mispredict_cnt := perf_branch_mispredict_cnt + 1.U
+      }
+    }
+  }
+
+  val perf = IO(Output(new PerfBundle))
+  perf.commit_cnt := perf_commit_cnt
+  perf.branch_cnt := perf_branch_cnt
+  perf.branch_mispredict_cnt := perf_branch_mispredict_cnt
 }

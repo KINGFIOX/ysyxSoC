@@ -18,12 +18,15 @@ class FrontEnd extends NPCModule {
   })
 
   val ifu_ = Module(new IFU)
-
-  ifu_.io.predict.bits.dnpc := ifu_.io.predict.bits.pc + 4.U
-
   ifu_.icache <> icache
+
+  val pdu_ = Module(new Predict)
+  pdu_.io.predict.pc := ifu_.io.predict.pc
+  ifu_.io.predict.dnpc := pdu_.io.predict.dnpc
+  pdu_.io.update := io.redirect
+
   io.out <> ifu_.io.out
   // Only redirect on commit; bits are combinational from ROB head when valid is false.
   ifu_.io.redirect.mispredict := io.redirect.valid && io.redirect.bits.mispredict
-  ifu_.io.redirect.dnpc := io.redirect.bits.dnpc
+  ifu_.io.redirect.snpc := io.redirect.bits.snpc
 }

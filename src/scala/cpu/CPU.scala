@@ -41,12 +41,12 @@ class CPU(idBits: Int)(implicit p: Parameters)
     val (perip, _) = peripNode.out(0)
     val interrupt = IO(Input(Bool()))
     val slave = IO(Flipped(AXI4Bundle(axiParams))) // used for chiplink
-    val probe = IO(Output(new DebugBundle))
 
     // --- modules ---
     val core = Module(new NPCCore)
 
     // --- connect ---
+    val probe = IO(chiselTypeOf(core.probe))
     probe := core.probe
 
     icache <> core.icache

@@ -177,7 +177,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     externalPins.uart <> masic.uart
 
     // expose step and debug for simulation
-    val probe = IO(Output(new DebugBundle))
+    val probe = IO(chiselTypeOf(masic.probe))
     probe := masic.probe
   }
 }
@@ -188,7 +188,7 @@ class NPCSoC
       val clock = Input(Clock())
       val reset = Input(Bool())
       val externalPins = new ExternalPins
-      val debug = Output(new DebugBundle)
+      val probe = Valid(new DebugBundle)
     })
     with ImplicitClock
     with ImplicitReset {
@@ -203,7 +203,7 @@ class NPCSoC
   val mdut = Module(dut.module)
   mdut.externalPins <> io.externalPins
 
-  io.debug := mdut.probe
+  io.probe := mdut.probe
 }
 
 object ElaborateNPCSoC extends App {

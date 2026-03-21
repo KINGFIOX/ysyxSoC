@@ -26,7 +26,7 @@ class BackEnd extends NPCModule {
   val perip = IO(SRAMBundle(sramParams))
   val interrupt = IO(Input(Bool()))
   val fence_i = IO(Output(Bool()))
-  val probe = IO(Output(new DebugBundle))
+  val probe = IO(Valid(new DebugBundle))
 
   // ==========================================================
   // Sub-modules
@@ -208,13 +208,12 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Debug probe
   // ==========================================================
-  val dbg = Wire(new DebugBundle)
-  dbg.valid := commitStage_.probe.valid
-  dbg.pc := commitStage_.probe.bits.pc
-  dbg.dnpc := commitStage_.probe.bits.dnpc
-  dbg.inst := commitStage_.probe.bits.inst
-  dbg.is_mmio := commitStage_.probe.bits.is_mmio
-  dbg.gpr := rfu_.probe
-  dbg.csr := csru_.probe
-  probe := dbg
+  probe.bits.pc := commitStage_.probe.bits.pc
+  probe.bits.dnpc := commitStage_.probe.bits.dnpc
+  probe.bits.inst := commitStage_.probe.bits.inst
+  probe.bits.is_mmio := commitStage_.probe.bits.is_mmio
+  probe.bits.gpr := rfu_.probe
+  probe.bits.csr := csru_.probe
+  probe.bits.perf := commitStage_.perf
+  probe.valid := commitStage_.probe.valid
 }

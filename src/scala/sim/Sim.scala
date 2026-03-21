@@ -42,7 +42,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     cpu.module.slave := DontCare
     cpu.module.interrupt := false.B
 
-    val probe = IO(Output(new DebugBundle))
+    val probe = IO(chiselTypeOf(cpu.module.probe))
     val uart = IO(chiselTypeOf(luart.module.uart))
     val gpio = IO(chiselTypeOf(lgpio.module.gpio_bundle))
     val ps2 = IO(chiselTypeOf(lkeyboard.module.ps2_bundle))
@@ -75,7 +75,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     externalPins.vga <> masic.vga
     externalPins.uart <> masic.uart
 
-    val probe = IO(Output(new DebugBundle))
+    val probe = IO(chiselTypeOf(masic.probe))
     probe := masic.probe
   }
 }
@@ -85,7 +85,7 @@ class NPCSoC
       val clock = Input(Clock())
       val reset = Input(Bool())
       val externalPins = new ExternalPins
-      val debug = Output(new DebugBundle)
+      val probe = Valid(new DebugBundle)
     })
     with ImplicitClock
     with ImplicitReset {
@@ -99,7 +99,7 @@ class NPCSoC
   val dut = LazyModule(new ysyxSoCFull)
   val mdut = Module(dut.module)
   mdut.externalPins <> io.externalPins
-  io.debug := mdut.probe
+  io.probe := mdut.probe
 }
 
 object ElaborateNPCSoC extends App {

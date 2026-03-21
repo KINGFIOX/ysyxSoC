@@ -19,19 +19,23 @@ void vnpcsoc_final(VNPCSoC* top);
 void vnpcsoc_set_clock(VNPCSoC* top, uint8_t val);
 void vnpcsoc_set_reset(VNPCSoC* top, uint8_t val);
 
-uint8_t  vnpcsoc_get_debug_valid(const VNPCSoC* top);
-uint8_t  vnpcsoc_get_debug_is_mmio(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_pc(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_dnpc(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_inst(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_gpr(const VNPCSoC* top, int index);
-uint32_t vnpcsoc_get_debug_csr_mstatus(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_csr_mtvec(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_csr_mepc(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_csr_mcause(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_csr_mtval(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_csr_mvendorid(const VNPCSoC* top);
-uint32_t vnpcsoc_get_debug_csr_marchid(const VNPCSoC* top);
+uint8_t  vnpcsoc_get_probe_valid(const VNPCSoC* top);
+uint8_t  vnpcsoc_get_probe_is_mmio(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_pc(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_dnpc(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_inst(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_gpr(const VNPCSoC* top, int index);
+uint32_t vnpcsoc_get_probe_csr_mstatus(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_csr_mtvec(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_csr_mepc(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_csr_mcause(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_csr_mtval(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_csr_mvendorid(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_csr_marchid(const VNPCSoC* top);
+
+uint32_t vnpcsoc_get_probe_perf_commit_cnt(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_perf_branch_cnt(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_perf_branch_mispredict_cnt(const VNPCSoC* top);
 
 // FST trace
 class VerilatedFstC;

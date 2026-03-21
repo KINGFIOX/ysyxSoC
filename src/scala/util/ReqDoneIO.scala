@@ -19,13 +19,3 @@ object ReqDoneIO {
 object ReqDone {
   def apply[T <: Data](gen: T): ReqDoneIO[T] = new ReqDoneIO(gen)
 }
-
-// from the master's view of point
-class AckIO[T <: Data](gen: => T) extends Bundle {
-  val ack = Input(Bool())
-  val bits = gen
-}
-
-object Ack {
-  def apply[T <: Data](gen: T): AckIO[T] = new AckIO(gen)
-}

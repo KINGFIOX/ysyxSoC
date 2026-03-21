@@ -96,15 +96,27 @@ impl VerilatorCpu {
 
 impl VerilatorCpu {
     pub fn is_mmio(&self) -> bool {
-        unsafe { vnpcsoc_get_debug_is_mmio(self.top) != 0 }
+        unsafe { vnpcsoc_get_probe_is_mmio(self.top) != 0 }
     }
 
     pub fn dnpc(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_dnpc(self.top) as u32 }
+        unsafe { vnpcsoc_get_probe_dnpc(self.top) as u32 }
     }
 
     pub fn inst(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_inst(self.top) as u32 }
+        unsafe { vnpcsoc_get_probe_inst(self.top) as u32 }
+    }
+
+    pub fn perf_commit_cnt(&self) -> u32 {
+        unsafe { vnpcsoc_get_probe_perf_commit_cnt(self.top) }
+    }
+
+    pub fn perf_branch_cnt(&self) -> u32 {
+        unsafe { vnpcsoc_get_probe_perf_branch_cnt(self.top) }
+    }
+
+    pub fn perf_branch_mispredict_cnt(&self) -> u32 {
+        unsafe { vnpcsoc_get_probe_perf_branch_mispredict_cnt(self.top) }
     }
 }
 
@@ -127,7 +139,7 @@ impl Drop for VerilatorCpu {
 
 impl AbstractCpu for VerilatorCpu {
     fn pc(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_pc(self.top) }
+        unsafe { vnpcsoc_get_probe_pc(self.top) }
     }
 
     fn set_pc(&mut self, _value: u32) -> miette::Result<()> {
@@ -138,7 +150,7 @@ impl AbstractCpu for VerilatorCpu {
         if index >= 32 {
             return Err(miette::Error::msg("invalid register index"));
         }
-        Ok(unsafe { vnpcsoc_get_debug_gpr(self.top, (index as i32).into()) })
+        Ok(unsafe { vnpcsoc_get_probe_gpr(self.top, (index as i32).into()) })
     }
 
     fn set_gpr(&mut self, _index: usize, _value: u32) -> miette::Result<()> {
@@ -149,7 +161,7 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn mstatus(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_csr_mstatus(self.top) }
+        unsafe { vnpcsoc_get_probe_csr_mstatus(self.top) }
     }
 
     fn set_mstatus(&mut self, _value: u32) -> miette::Result<()> {
@@ -157,7 +169,7 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn mtvec(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_csr_mtvec(self.top) }
+        unsafe { vnpcsoc_get_probe_csr_mtvec(self.top) }
     }
 
     fn set_mtvec(&mut self, _value: u32) -> miette::Result<()> {
@@ -165,7 +177,7 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn mepc(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_csr_mepc(self.top) }
+        unsafe { vnpcsoc_get_probe_csr_mepc(self.top) }
     }
 
     fn set_mepc(&mut self, _value: u32) -> miette::Result<()> {
@@ -173,7 +185,7 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn mcause(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_csr_mcause(self.top) }
+        unsafe { vnpcsoc_get_probe_csr_mcause(self.top) }
     }
 
     fn set_mcause(&mut self, _value: u32) -> miette::Result<()> {
@@ -181,7 +193,7 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn mtval(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_csr_mtval(self.top) }
+        unsafe { vnpcsoc_get_probe_csr_mtval(self.top) }
     }
 
     fn set_mtval(&mut self, _value: u32) -> miette::Result<()> {
@@ -189,7 +201,7 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn mvendorid(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_csr_mvendorid(self.top) }
+        unsafe { vnpcsoc_get_probe_csr_mvendorid(self.top) }
     }
 
     fn set_mvendorid(&mut self, _value: u32) -> miette::Result<()> {
@@ -197,7 +209,7 @@ impl AbstractCpu for VerilatorCpu {
     }
 
     fn marchid(&self) -> u32 {
-        unsafe { vnpcsoc_get_debug_csr_marchid(self.top) }
+        unsafe { vnpcsoc_get_probe_csr_marchid(self.top) }
     }
 
     fn set_marchid(&mut self, _value: u32) -> miette::Result<()> {
@@ -252,11 +264,11 @@ impl AbstractCpu for VerilatorCpu {
 
         for i in 0..MAX_STEP_CYCLES {
             self.tick();
-            if unsafe { vnpcsoc_get_debug_valid(self.top) } != 0 {
+            if unsafe { vnpcsoc_get_probe_valid(self.top) } != 0 {
                 break;
             }
             if i == MAX_STEP_CYCLES - 1 {
-                return Err(miette::Error::msg(format!("step exceeded {} cycles without debug_valid", MAX_STEP_CYCLES)));
+                return Err(miette::Error::msg(format!("step exceeded {} cycles without probe_valid", MAX_STEP_CYCLES)));
             }
         }
         unsafe {
