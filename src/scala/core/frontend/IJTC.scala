@@ -4,32 +4,32 @@ import chisel3._
 import chisel3.util._
 import ysyx.core.common._
 
-// branch target buffer
-class BTBUpdate extends NPCBundle {
+class IJTCUpdate extends NPCBundle {
   val pc = UInt(addrBits.W)
   val dnpc = UInt(addrBits.W)
 }
 
-class BTBEntry extends BTBUpdate {
+class IJTCEntry extends IJTCUpdate {
   val occupied = Bool()
 }
 
-class BTBReadPort extends NPCBundle {
+class IJTCReadPort extends NPCBundle {
   val pc = UInt(addrBits.W)
   val dnpc = Input(UInt(addrBits.W))
   val hit = Input(Bool())
 }
 
-class BTB(entries: Int = 4) extends NPCModule {
+// indirect jump target cache, excluding `ret`
+class IJTC(entries: Int = 8) extends NPCModule {
   require(isPow2(entries))
   private val entriesBits = log2Ceil(entries)
 
   val io = IO(new Bundle {
-    val lookup = Flipped(new BTBReadPort)
-    val update = Flipped(Valid(new BTBUpdate))
+    val update = Flipped(Valid(new IJTCUpdate))
+    val lookup = Flipped(new IJTCReadPort)
   })
 
-  val cam = Reg(Vec(entries, new BTBEntry))
+  val cam = Reg(Vec(entries, new IJTCEntry))
 
   val evict = RegInit(0.U(entriesBits.W))
 
@@ -56,15 +56,4 @@ class BTB(entries: Int = 4) extends NPCModule {
       evict := evict +% 1.U
     }
   }
-}
-
-// branch history table
-class BHTUpdate extends NPCBundle {
-  val br_flag = Bool()
-}
-
-// from the master's view of point
-class RASUpdate extends NPCBundle {
-  val is_call = Bool()
-  val is_ret = Bool()
 }

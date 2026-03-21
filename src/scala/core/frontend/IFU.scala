@@ -10,6 +10,7 @@ import ysyx.core.common._
 import ysyx.core.lsu._
 import ysyx.core.sram._
 import ysyx.core.backend.InstType
+import ysyx.core.backend.{BruRobEntry, JalRobEntry, JalrRobEntry, MretRobEntry, ExceptRobEntry}
 
 class IFUOutput extends NPCBundle {
   val inst = UInt(instBits.W)
@@ -20,16 +21,16 @@ class IFUOutput extends NPCBundle {
   val has_except = Bool()
 }
 
-class RedirectBundle extends RedirectBase {
+class RedirectBundle extends NPCBundle {
   val wrong_pc = UInt(addrBits.W) // the pc of mispredicted instruction
   val inst_type = InstType()
-  val is_call = Bool()
-  val is_ret = Bool()
-}
-
-class RedirectBase extends NPCBundle {
-  val snpc = UInt(addrBits.W)
   val mispredict = Bool()
+  // only predict for `bru`, `jal`, `jalr`,
+  // not for `mret` or `except`
+  val bru = new BruRobEntry
+  val jal = new JalRobEntry
+  val jalr = new JalrRobEntry
+  val dnpc = UInt(addrBits.W)
 }
 
 class PredictBundle extends NPCBundle {
@@ -45,7 +46,7 @@ class IFU extends NPCModule {
     // correct when mispredict
     val predict = Flipped(new PredictBundle)
     val flush = Input(Bool())
-    val snpc = Input(UInt(dataBits.W)) // correct pc
+    val dnpc = Input(UInt(dataBits.W)) // correct pc
   })
 
   val icache = IO(SRAMBundle(sramParams))
@@ -105,7 +106,7 @@ class IFU extends NPCModule {
 
   when(io.flush) {
     state_q := State.addr_req
-    pc_q := io.snpc
+    pc_q := io.dnpc
   }
 
 }

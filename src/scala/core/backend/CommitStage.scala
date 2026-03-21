@@ -78,9 +78,10 @@ class CommitStage extends NPCModule {
   redirect.valid := rob.fire
   redirect.bits.wrong_pc := head_entry.pc
   redirect.bits.inst_type := head_entry.inst_type
-  redirect.bits.is_call := head_entry.jal.is_call
-  redirect.bits.is_ret := head_entry.jalr.is_ret
-  redirect.bits.snpc := MuxCase(
+  redirect.bits.jal := head_entry.jal
+  redirect.bits.jalr := head_entry.jalr
+  redirect.bits.bru := head_entry.bru
+  redirect.bits.dnpc := MuxCase(
     head_entry.predict_npc,
     Seq(
       (head_entry.inst_type === InstType.JAL) -> head_entry.jal.dnpc,
@@ -90,7 +91,7 @@ class CommitStage extends NPCModule {
       (head_entry.except.valid) -> csr.xtvec
     )
   )
-  val is_diff = (redirect.bits.snpc =/= head_entry.predict_npc)
+  val is_diff = (redirect.bits.dnpc =/= head_entry.predict_npc)
   redirect.bits.mispredict := false.B
   flush := rob.fire && is_diff
 
@@ -113,7 +114,7 @@ class CommitStage extends NPCModule {
   val probe = IO(Valid(new DebugCommitBundle))
   probe.valid := RegNext(rob.fire)
   probe.bits.pc := RegNext(head_entry.pc)
-  probe.bits.dnpc := RegNext(redirect.bits.snpc)
+  probe.bits.dnpc := RegNext(redirect.bits.dnpc)
   probe.bits.inst := RegNext(head_entry.inst)
   probe.bits.is_mmio := RegNext(dbg_is_mmio)
 

@@ -29,5 +29,5 @@ class FrontEnd extends NPCModule {
   io.out <> ifu_.io.out
 
   ifu_.io.flush := io.flush
-  ifu_.io.snpc := io.redirect.bits.snpc
+  ifu_.io.dnpc := io.redirect.bits.dnpc
 }
