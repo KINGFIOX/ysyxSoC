@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import ysyx.core.common._
 import ysyx.core.backend.InstType
+import ysyx.core.backend.CU
 
 class Predict extends NPCModule {
 
@@ -15,8 +16,12 @@ class Predict extends NPCModule {
 
   val io = IO(new Bundle {
     val predict = new PredictBundle
-    val update = Input(Valid(new RedirectBundle))
+    val redirect = Input(Valid(new RedirectBundle)) // update
   })
+
+  val minicu = Module(new CU)
+  minicu.io.in.inst := io.predict.inst
+  minicu.io.in.pc := io.predict.pc
 
   // BTB (direct-mapped)
   val btb_valid = RegInit(VecInit(Seq.fill(nBTBEntries)(false.B)))
@@ -43,8 +48,8 @@ class Predict extends NPCModule {
   io.predict.dnpc := Mux(predict_taken, btb_target(btb_idx), pc + 4.U)
 
   // ---- Update (from commit) ----
-  when(io.update.valid) {
-    val u = io.update.bits
+  when(io.redirect.valid) {
+    val u = io.redirect.bits
     val is_branch = u.inst_type === InstType.BRANCH
     val is_jal = u.inst_type === InstType.JAL
     val is_jalr = u.inst_type === InstType.JALR

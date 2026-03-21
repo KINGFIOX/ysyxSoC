@@ -90,8 +90,9 @@ class CommitStage extends NPCModule {
       (head_entry.except.valid) -> csr.xtvec
     )
   )
-  redirect.bits.mispredict := redirect.bits.snpc =/= head_entry.predict_npc
-  flush := rob.fire && redirect.bits.mispredict
+  val is_diff = (redirect.bits.snpc =/= head_entry.predict_npc)
+  redirect.bits.mispredict := false.B
+  flush := rob.fire && is_diff
 
   // ---- Commit logic ----
   when(head_valid) {
@@ -103,7 +104,7 @@ class CommitStage extends NPCModule {
       rat.valid := rob_rd_wen
       cdb.valid := rob_rd_wen && (head_is_mem || head_is_csr) // cdb
       dbg_is_mmio := head_is_mem && head_entry.mem.is_mmio // debug commit mmio
-
+      redirect.bits.mispredict := is_diff
     }
   }
 

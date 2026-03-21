@@ -15,18 +15,19 @@ class FrontEnd extends NPCModule {
   val io = IO(new Bundle {
     val out = Decoupled(new IFUOutput)
     val redirect = Input(Valid(new RedirectBundle))
+    val flush = Input(Bool())
   })
 
   val ifu_ = Module(new IFU)
   ifu_.icache <> icache
 
   val pdu_ = Module(new Predict)
-  pdu_.io.predict.pc := ifu_.io.predict.pc
-  ifu_.io.predict.dnpc := pdu_.io.predict.dnpc
-  pdu_.io.update := io.redirect
+  pdu_.io.predict <> ifu_.io.predict
+
+  pdu_.io.redirect := io.redirect
 
   io.out <> ifu_.io.out
-  // Only redirect on commit; bits are combinational from ROB head when valid is false.
-  ifu_.io.redirect.mispredict := io.redirect.valid && io.redirect.bits.mispredict
-  ifu_.io.redirect.snpc := io.redirect.bits.snpc
+
+  ifu_.io.flush := io.flush
+  ifu_.io.snpc := io.redirect.bits.snpc
 }

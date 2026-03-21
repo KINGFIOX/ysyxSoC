@@ -34,6 +34,7 @@ class NPCCore extends NPCModule {
   val instQueue = Queue(fe.io.out, entries = 4, flush = Some(be.io.flush))
   be.io.in <> instQueue
   fe.io.redirect := be.io.redirect
+  fe.io.flush := be.io.flush
 
   // bus
   fe.icache <> icache

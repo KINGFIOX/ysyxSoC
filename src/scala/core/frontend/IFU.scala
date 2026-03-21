@@ -35,6 +35,7 @@ class RedirectBase extends NPCBundle {
 class PredictBundle extends NPCBundle {
   val dnpc = UInt(addrBits.W)
   val pc = Input(UInt(addrBits.W))
+  val inst = Input(UInt(instBits.W))
 }
 
 class IFU extends NPCModule {
@@ -42,8 +43,9 @@ class IFU extends NPCModule {
   val io = IO(new Bundle {
     val out = Irrevocable(new IFUOutput)
     // correct when mispredict
-    val redirect = Flipped(new RedirectBase)
     val predict = Flipped(new PredictBundle)
+    val flush = Input(Bool())
+    val snpc = Input(UInt(dataBits.W)) // correct pc
   })
 
   val icache = IO(SRAMBundle(sramParams))
@@ -72,8 +74,7 @@ class IFU extends NPCModule {
   io.out.bits.has_except := false.B
   io.out.bits.predict_npc := io.predict.dnpc
   io.predict.pc := pc_q
-
-  val redirect = io.redirect
+  io.predict.inst := inst_q
 
   switch(state_q) {
 
@@ -102,9 +103,9 @@ class IFU extends NPCModule {
 
   }
 
-  when(redirect.mispredict) {
+  when(io.flush) {
     state_q := State.addr_req
-    pc_q := redirect.snpc
+    pc_q := io.snpc
   }
 
 }
