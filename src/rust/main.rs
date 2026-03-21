@@ -28,6 +28,15 @@ fn main() -> miette::Result<()> {
         scoreboard.dump_traces(&dut);
         Err(e)
     } else {
+        let branch_cnt = dut.perf_branch_cnt();
+        let mispredict_cnt = dut.perf_branch_mispredict_cnt();
+        let hit_rate: f32 = (branch_cnt - mispredict_cnt) as f32 / branch_cnt as f32;
+        let flush_cnt = dut. perf_flush_cnt();
+        info!("commit: {0}", dut.perf_commit_cnt());
+        info!("branch: {0}", branch_cnt);
+        info!("mispredict: {0}", mispredict_cnt);
+        info!("hit rate: {0}", hit_rate);
+        info!("flush: {0}", flush_cnt);
         Ok(())
     }
 }

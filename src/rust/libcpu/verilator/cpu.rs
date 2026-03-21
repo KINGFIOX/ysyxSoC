@@ -118,6 +118,10 @@ impl VerilatorCpu {
     pub fn perf_branch_mispredict_cnt(&self) -> u32 {
         unsafe { vnpcsoc_get_probe_perf_branch_mispredict_cnt(self.top) }
     }
+
+    pub fn perf_flush_cnt(&self) -> u32 {
+        unsafe { vnpcsoc_get_probe_perf_flush_cnt(self.top) }
+    }
 }
 
 impl Drop for VerilatorCpu {

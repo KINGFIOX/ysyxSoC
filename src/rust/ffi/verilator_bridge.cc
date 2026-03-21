@@ -57,9 +57,10 @@ uint32_t vnpcsoc_get_probe_csr_mtval(const VNPCSoC* top)     { return top->probe
 uint32_t vnpcsoc_get_probe_csr_mvendorid(const VNPCSoC* top) { return top->probe_bits_csr_mvendorid; }
 uint32_t vnpcsoc_get_probe_csr_marchid(const VNPCSoC* top)   { return top->probe_bits_csr_marchid; }
 
-uint32_t vnpcsoc_get_probe_perf_commit_cnt(const VNPCSoC* top)            { return top->probe_bits_perf_commit_cnt; }
-uint32_t vnpcsoc_get_probe_perf_branch_cnt(const VNPCSoC* top)            { return top->probe_bits_perf_branch_cnt; }
+uint32_t vnpcsoc_get_probe_perf_commit_cnt(const VNPCSoC* top) { return top->probe_bits_perf_commit_cnt; }
+uint32_t vnpcsoc_get_probe_perf_branch_cnt(const VNPCSoC* top) { return top->probe_bits_perf_branch_cnt; }
 uint32_t vnpcsoc_get_probe_perf_branch_mispredict_cnt(const VNPCSoC* top) { return top->probe_bits_perf_branch_mispredict_cnt; }
+uint32_t vnpcsoc_get_probe_perf_flush_cnt(const VNPCSoC* top) { return top->probe_bits_perf_flush_cnt; }
 
 // FST trace
 

@@ -10,6 +10,7 @@ class PerfBundle extends NPCBundle {
   val commit_cnt = UInt(dataBits.W)
   val branch_cnt = UInt(dataBits.W)
   val branch_mispredict_cnt = UInt(dataBits.W)
+  val flush_cnt = UInt(dataBits.W)
 }
 
 class DebugCommitBundle extends NPCBundle {
@@ -123,9 +124,11 @@ class CommitStage extends NPCModule {
   val perf_commit_cnt = RegInit(0.U(dataBits.W))
   val perf_branch_cnt = RegInit(0.U(dataBits.W))
   val perf_branch_mispredict_cnt = RegInit(0.U(dataBits.W))
+  val perf_flush_cnt = RegInit(0.U(dataBits.W))
 
   when(rob.fire) {
     perf_commit_cnt := perf_commit_cnt + 1.U
+    // is control flow
     val is_cf = head_entry.inst_type === InstType.BRANCH ||
                 head_entry.inst_type === InstType.JAL ||
                 head_entry.inst_type === InstType.JALR
@@ -135,10 +138,14 @@ class CommitStage extends NPCModule {
         perf_branch_mispredict_cnt := perf_branch_mispredict_cnt + 1.U
       }
     }
+    when(flush) {
+      perf_flush_cnt := perf_flush_cnt + 1.U
+    }
   }
 
   val perf = IO(Output(new PerfBundle))
   perf.commit_cnt := perf_commit_cnt
   perf.branch_cnt := perf_branch_cnt
   perf.branch_mispredict_cnt := perf_branch_mispredict_cnt
+  perf.flush_cnt := perf_flush_cnt
 }

@@ -40,6 +40,7 @@ include_cpp! {
     generate!("vnpcsoc_get_probe_perf_commit_cnt")
     generate!("vnpcsoc_get_probe_perf_branch_cnt")
     generate!("vnpcsoc_get_probe_perf_branch_mispredict_cnt")
+    generate!("vnpcsoc_get_probe_perf_flush_cnt")
     generate!("vl_trace_ever_on")
     generate!("vl_fst_new")
     generate!("vl_fst_delete")

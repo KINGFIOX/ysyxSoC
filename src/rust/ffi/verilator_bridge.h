@@ -36,6 +36,7 @@ uint32_t vnpcsoc_get_probe_csr_marchid(const VNPCSoC* top);
 uint32_t vnpcsoc_get_probe_perf_commit_cnt(const VNPCSoC* top);
 uint32_t vnpcsoc_get_probe_perf_branch_cnt(const VNPCSoC* top);
 uint32_t vnpcsoc_get_probe_perf_branch_mispredict_cnt(const VNPCSoC* top);
+uint32_t vnpcsoc_get_probe_perf_flush_cnt(const VNPCSoC* top);
 
 // FST trace
 class VerilatedFstC;
