@@ -50,7 +50,9 @@ class RAT(val numReadPorts: Int = 2) extends NPCModule {
   }
 
   for (i <- 0 until numReadPorts) {
-    io.rename(i).busy := busy(io.rename(i).addr) && io.rename(i).addr =/= 0.U
-    io.rename(i).tag := tags(io.rename(i).addr)
+    val raddr = io.rename(i).addr
+    val disp_hit = io.disp.valid && io.disp.bits.addr === raddr && raddr =/= 0.U
+    io.rename(i).busy := Mux(disp_hit, true.B, busy(raddr) && raddr =/= 0.U)
+    io.rename(i).tag  := Mux(disp_hit, io.disp.bits.tag, tags(raddr))
   }
 }

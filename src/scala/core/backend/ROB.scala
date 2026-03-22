@@ -301,12 +301,15 @@ class Rob(val numFwdPorts: Int, val numLookupPorts: Int) extends NPCModule {
   }
 
   // ============================================================
-  // name Forward ports
+  // Rename Forward ports (with enqueue bypass)
   // ============================================================
   for (i <- 0 until numFwdPorts) {
     val fwd = io.rename(i)
-    fwd.valid := ram(idx(fwd.tag)).rd.state === RdRobState.done // x0 -> nouse
-    fwd.value := ram(idx(fwd.tag)).rd.value
+    val enq_bypass = enq_fire && idx(fwd.tag) === tail_q
+    val rd_state = Mux(enq_bypass, io.enq.bits.rd.state, ram(idx(fwd.tag)).rd.state)
+    val rd_value = Mux(enq_bypass, io.enq.bits.rd.value, ram(idx(fwd.tag)).rd.value)
+    fwd.valid := rd_state === RdRobState.done
+    fwd.value := rd_value
   }
 
   // ============================================================

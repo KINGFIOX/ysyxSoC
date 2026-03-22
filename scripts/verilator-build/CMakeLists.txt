@@ -32,7 +32,7 @@ verilate(model
     "-I${RTL_DIR}/verification/assert"
     "-I${RTL_DIR}/verification/assume"
     "-I${RTL_DIR}/verification/cover"
-  THREADS 4
+  # THREADS 4
   OPT_FAST -O2
   OPT_SLOW -O2
   OPT_GLOBAL -O2
