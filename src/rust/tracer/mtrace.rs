@@ -14,8 +14,8 @@ impl fmt::Display for MTraceEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{:#010x}: {:14} data={:#010x} width={} ({})",
-            self.0.pc, self.0.dir, self.0.data, self.0.width, self.0.disasm
+            "{:#08x}: {:14} addr={:#08x} data={:#08x} width={} ({})",
+            self.0.pc, self.0.dir, self.0.addr, self.0.data, self.0.width, self.0.disasm
         )
     }
 }
