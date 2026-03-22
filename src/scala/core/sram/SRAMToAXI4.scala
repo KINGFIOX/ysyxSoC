@@ -39,6 +39,7 @@ case class SRAMToAXI4Node()(implicit valName: ValName)
     )
 
 class SRAMToAXI4Impl(
+    id: Int,
     sramParams: SRAMBundleParameters,
     axiParams: AXI4BundleParameters
 ) extends Module {
@@ -61,7 +62,7 @@ class SRAMToAXI4Impl(
 
   // AR channel defaults
   out.ar.valid := false.B
-  out.ar.bits.id := 0.U
+  out.ar.bits.id := id.U
   out.ar.bits.addr := in.addr
   out.ar.bits.len := 0.U
   out.ar.bits.size := in.size
@@ -73,7 +74,7 @@ class SRAMToAXI4Impl(
 
   // AW channel defaults
   out.aw.valid := false.B
-  out.aw.bits.id := 0.U
+  out.aw.bits.id := id.U
   out.aw.bits.addr := in.addr
   out.aw.bits.len := 0.U
   out.aw.bits.size := in.size
@@ -141,13 +142,13 @@ class SRAMToAXI4Impl(
   }
 }
 
-class SRAMToAXI4()(implicit p: Parameters) extends LazyModule {
+class SRAMToAXI4(id: Int)(implicit p: Parameters) extends LazyModule {
   val node = SRAMToAXI4Node()
   lazy val module = new LazyModuleImp(this) {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val sramParams = edgeIn.bundle
       val axiParams = edgeOut.bundle
-      val impl = Module(new SRAMToAXI4Impl(sramParams, axiParams))
+      val impl = Module(new SRAMToAXI4Impl(id, sramParams, axiParams))
       impl.io.in <> in
       out <> impl.io.out
     }
@@ -155,8 +156,8 @@ class SRAMToAXI4()(implicit p: Parameters) extends LazyModule {
 }
 
 object SRAMToAXI4 {
-  def apply()(implicit p: Parameters): SRAMToAXI4Node = {
-    val sram2axi4 = LazyModule(new SRAMToAXI4)
+  def apply(id: Int)(implicit p: Parameters): SRAMToAXI4Node = {
+    val sram2axi4 = LazyModule(new SRAMToAXI4(id))
     sram2axi4.node
   }
 }

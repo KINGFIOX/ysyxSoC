@@ -1,4 +1,4 @@
-package ysyx.core.cache
+package ysyx.cpu.cache
 
 import chisel3._
 import chisel3.util._
@@ -23,6 +23,7 @@ class Set extends Bundle {
 // tree-PLRU replacement policy
 // 16KB/32KB/64KB cache size -> 256 cachelines -> 64 sets
 class ICacheImpl(
+    id: Int,
     sramParams: SRAMBundleParameters,
     axiParams: AXI4BundleParameters
 ) extends Module {
@@ -67,11 +68,11 @@ class ICacheImpl(
   // AXI4 AR channel defaults
   out.ar.valid := false.B
   out.ar.bits := DontCare
-  out.ar.bits.id := 0.U
-  out.ar.bits.addr := Cat(tag_reg, index_reg, offset_reg(5, 2), 0.U(2.W))
+  out.ar.bits.id := id.U
+  out.ar.bits.addr := Cat(tag_reg, index_reg, 0.U(6.W))
   out.ar.bits.len := 15.U
   out.ar.bits.size := 2.U
-  out.ar.bits.burst := AXI4Parameters.BURST_WRAP
+  out.ar.bits.burst := AXI4Parameters.BURST_INCR
   out.ar.bits.lock := 0.U
   out.ar.bits.cache := 0.U
   out.ar.bits.prot := 0.U
@@ -135,11 +136,10 @@ class ICacheImpl(
     }
 
     is(State.refill) {
-      val word_idx = (offset_reg(5, 2) + beat_counter)(3, 0)
       out.r.ready := true.B
       when(out.r.fire) {
-        data_bank_sram(index_reg)(replace_way_reg)(word_idx) := out.r.bits.data
-        when(beat_counter === 0.U) {
+        data_bank_sram(index_reg)(replace_way_reg)(beat_counter) := out.r.bits.data
+        when(beat_counter === offset_reg(5, 2)) {
           refill_data := out.r.bits.data
         }
         beat_counter := beat_counter + 1.U
@@ -154,7 +154,7 @@ class ICacheImpl(
           }
           state_q := State.idle
           in.done := true.B
-          in.rdata := refill_data
+          in.rdata := Mux(beat_counter === offset_reg(5, 2), out.r.bits.data, refill_data)
         }
       }
     }
@@ -173,7 +173,7 @@ class AXI4ICache(implicit p: Parameters) extends LazyModule {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val sramParams = edgeIn.bundle
       val axiParams = edgeOut.bundle
-      val cache = Module(new ICacheImpl(sramParams, axiParams))
+      val cache = Module(new ICacheImpl(id = 0, sramParams, axiParams))
       cache.io.in <> in
       out <> cache.io.out
 

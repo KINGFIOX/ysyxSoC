@@ -11,7 +11,7 @@ import freechips.rocketchip.util._
 
 import ysyx.core.NPCCore
 import ysyx.core.DebugBundle
-import ysyx.core.cache.{AXI4DCache, AXI4ICache}
+import ysyx.cpu.cache.{AXI4DCache, AXI4ICache}
 import ysyx.core.common.HasAXIParameter
 import ysyx.core.sram._
 
@@ -28,10 +28,10 @@ class CPU(idBits: Int)(implicit p: Parameters)
   val masterNode = AXI4Xbar()
   val licache = LazyModule(new AXI4ICache)
 
-  // masterNode := licache.node := icacheNode
-  masterNode := SRAMToAXI4() := icacheNode
-  masterNode := SRAMToAXI4() := dcacheNode
-  masterNode := SRAMToAXI4() := peripNode
+  masterNode := licache.node := icacheNode // 0
+  // masterNode := SRAMToAXI4() := icacheNode
+  masterNode := SRAMToAXI4(1) := dcacheNode
+  masterNode := SRAMToAXI4(2) := peripNode
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
