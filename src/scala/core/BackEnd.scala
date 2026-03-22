@@ -82,7 +82,7 @@ class BackEnd extends NPCModule {
   // ==========================================================
   PipelineConnect(io.in, decodeStage_.io.in, flush)
   PipelineConnect(decodeStage_.io.out, renameStage_.io.in, flush)
-  PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush)
+  PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush, Seq(cdb1, cdb2))
 
   // --- RenameStage side-band ---
   renameStage_.io.rat(0) <> rat_.io.rename(0)
