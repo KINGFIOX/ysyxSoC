@@ -85,8 +85,11 @@ fn main() -> miette::Result<()> {
     println!("cargo:rerun-if-changed=build/obj-verilator/VNPCSoC__ALL.a");
 
     // System libraries
-    println!("cargo:rustc-link-lib=stdc++");
-    println!("cargo:rustc-link-lib=dl");
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-lib=c++");
+    } else {
+        println!("cargo:rustc-link-lib=stdc++");
+    }
     println!("cargo:rustc-link-lib=pthread");
 
     println!("cargo:rerun-if-changed=src/rust/ffi/mod.rs");

@@ -4,6 +4,8 @@
 #include "verilated.h"
 #include "verilated_fst_c.h"
 
+__attribute__((weak)) double sc_time_stamp() { return 0; }
+
 // VerilatedContext
 
 VerilatedContext* vl_context_new() { return new VerilatedContext; }
