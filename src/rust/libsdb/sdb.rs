@@ -419,7 +419,9 @@ fn child_run_to_end(dut: &mut VerilatorCpu, end_cycles: u64) {
         "[lightsss] child dumping wave from {} to {end_cycles}...",
         dut.sim_time()
     );
-    dut.run_until(end_cycles);
+    if let Err(e) = dut.run_until(end_cycles) {
+        info!("[lightsss] child replay stopped early: {e}");
+    }
     dut.flush_wave();
     info!("[lightsss] child wave dump finished, exiting");
     std::process::exit(0);

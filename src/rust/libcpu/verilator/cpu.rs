@@ -39,10 +39,14 @@ impl VerilatorCpu {
         cpu
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self) -> miette::Result<()> {
         unsafe {
             vnpcsoc_set_clock(self.top, 0);
             vnpcsoc_eval(self.top);
+            if vl_stop_triggered() {
+                vl_stop_clear();
+                return Err(miette::miette!("Verilator $stop triggered (assertion failure)"));
+            }
             if let Some(tfp) = self.tfp {
                 vl_fst_dump(tfp, self.sim_time);
             }
@@ -50,6 +54,10 @@ impl VerilatorCpu {
 
             vnpcsoc_set_clock(self.top, 1);
             vnpcsoc_eval(self.top);
+            if vl_stop_triggered() {
+                vl_stop_clear();
+                return Err(miette::miette!("Verilator $stop triggered (assertion failure)"));
+            }
             if let Some(tfp) = self.tfp {
                 vl_fst_dump(tfp, self.sim_time);
             }
@@ -59,6 +67,7 @@ impl VerilatorCpu {
                 nvboard_bridge_update();
             }
         }
+        Ok(())
     }
 }
 
@@ -67,10 +76,11 @@ impl VerilatorCpu {
         self.sim_time
     }
 
-    pub fn run_until(&mut self, target_sim_time: u64) {
+    pub fn run_until(&mut self, target_sim_time: u64) -> miette::Result<()> {
         while self.sim_time < target_sim_time {
-            self.tick();
+            self.tick()?;
         }
+        Ok(())
     }
 
     pub fn flush_wave(&mut self) {
@@ -259,7 +269,7 @@ impl AbstractCpu for VerilatorCpu {
     fn reset(&mut self) {
         unsafe { vnpcsoc_set_reset(self.top, 1) };
         for _ in 0..RESET_CYCLES {
-            self.tick();
+            self.tick().expect("tick failed during reset");
         }
         unsafe { vnpcsoc_set_reset(self.top, 0) };
     }
@@ -267,16 +277,13 @@ impl AbstractCpu for VerilatorCpu {
     fn step(&mut self) -> miette::Result<()> {
 
         for i in 0..MAX_STEP_CYCLES {
-            self.tick();
+            self.tick()?;
             if unsafe { vnpcsoc_get_probe_valid(self.top) } != 0 {
                 break;
             }
             if i == MAX_STEP_CYCLES - 1 {
                 return Err(miette::Error::msg(format!("step exceeded {} cycles without probe_valid", MAX_STEP_CYCLES)));
             }
-        }
-        unsafe {
-            vnpcsoc_eval(self.top);
         }
         Ok(())
     }

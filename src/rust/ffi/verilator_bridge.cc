@@ -3,8 +3,21 @@
 #include "VNPCSoC___024root.h"
 #include "verilated.h"
 #include "verilated_fst_c.h"
+#include <csetjmp>
 
 __attribute__((weak)) double sc_time_stamp() { return 0; }
+
+static bool g_vl_stop_flag = false;
+static jmp_buf g_vl_stop_jmpbuf;
+
+void vl_stop(const char* filename, int linenum, const char* hier) {
+    fprintf(stderr, "%%Error: %s:%d: Verilog $stop (in %s)\n", filename, linenum, hier);
+    g_vl_stop_flag = true;
+    longjmp(g_vl_stop_jmpbuf, 1);
+}
+
+bool vl_stop_triggered() { return g_vl_stop_flag; }
+void vl_stop_clear() { g_vl_stop_flag = false; }
 
 // VerilatedContext
 
@@ -19,7 +32,11 @@ bool vl_context_got_finish(const VerilatedContext* ctx) { return ctx->gotFinish(
 
 VNPCSoC* vnpcsoc_new(VerilatedContext* ctx, const char* name) { return new VNPCSoC(ctx, name); }
 void vnpcsoc_delete(VNPCSoC* top) { top->final(); delete top; }
-void vnpcsoc_eval(VNPCSoC* top) { top->eval(); }
+void vnpcsoc_eval(VNPCSoC* top) {
+    if (setjmp(g_vl_stop_jmpbuf) == 0) {
+        top->eval();
+    }
+}
 void vnpcsoc_final(VNPCSoC* top) { top->final(); }
 
 void vnpcsoc_set_clock(VNPCSoC* top, uint8_t val) { top->clock = val; }

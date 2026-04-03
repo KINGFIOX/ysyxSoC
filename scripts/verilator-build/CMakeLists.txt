@@ -38,6 +38,7 @@ verilate(model
   OPT_GLOBAL -O2
 )
 
+target_compile_definitions(model PRIVATE VL_USER_STOP)
 target_compile_features(model PRIVATE cxx_std_17)
 
 set_target_properties(model PROPERTIES

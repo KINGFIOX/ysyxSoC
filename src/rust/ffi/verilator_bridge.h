@@ -1,6 +1,9 @@
 #pragma once
 #include <cstdint>
 
+bool vl_stop_triggered();
+void vl_stop_clear();
+
 class VerilatedContext;
 class VNPCSoC;
 
