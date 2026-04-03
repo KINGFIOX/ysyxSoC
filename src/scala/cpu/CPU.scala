@@ -9,7 +9,7 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
-import ysyx.core.NPCCore
+import ysyx.spike.NPCCore // TODO: spike or core
 import ysyx.core.DebugBundle
 import ysyx.cpu.cache.{AXI4DCache, AXI4ICache}
 import ysyx.core.common.HasAXIParameter

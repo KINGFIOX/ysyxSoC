@@ -7,26 +7,45 @@ import ysyx.core.common._
 import ysyx.core.backend.BackEnd
 import ysyx.core.sram.SRAMBundle
 
-class NPCCore extends NPCBundle {
+class NPCCore extends NPCModule {
 
+  val icache = IO(SRAMBundle(sramParams))
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
   val interrupt = IO(Input(Bool()))
   val fence_i = IO(Output(Bool()))
 
   // modules
+  val fe = Module(new FrontEnd)
   val be = Module(new BackEnd)
 
-  // bpus
+  // frontend -> instruction queue -> backend
+  val instQueue = Queue(fe.io.out, entries = 4, flush = Some(be.io.flush))
+  be.io.in <> instQueue
+
+  // backend -> frontend control
+  fe.io.redirect := be.io.redirect
+  fe.io.flush := be.io.flush
+  fe.flush_gpr := be.probe.bits.gpr
+
+  // tie off icache (spike frontend fetches via DPI, not through cache)
+  icache.req   := false.B
+  icache.wen   := false.B
+  icache.size  := 0.U
+  icache.addr  := 0.U
+  icache.wstrb := 0.U
+  icache.wdata := 0.U
+
+  // bus
   be.dcache <> dcache
   be.perip <> perip
 
   // int
   be.interrupt := interrupt
-  
+
   // fence
   fence_i := be.fence_i
-  
+
   // probe
   val probe = IO(chiselTypeOf(be.probe))
   probe := be.probe
