@@ -29,9 +29,8 @@ class AGU extends ExecUnit(new AGUInput, new AGUOutput) {
   io.out.bits.wdata := io.in.bits.wdata
 }
 
-// issuse queue's extra data
 class AGUExtra extends NPCBundle {
   val offset = UInt(dataBits.W)
 }
 
-class AGUIssueQueue extends IssueQueue(new AGUExtra, entries = 4, numOps = 2)
+class AGUIssueQueue extends IssueQueue(new AGUExtra, entries = 4)

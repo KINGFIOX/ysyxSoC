@@ -14,14 +14,12 @@ import ysyx.core.sram._
 
 class BackEnd extends NPCModule {
 
-  // connect to frontend
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new IFUOutput))
     val redirect = Output(Valid(new RedirectBundle))
     val flush = Output(Bool())
   })
 
-  // connect to bus
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
   val interrupt = IO(Input(Bool()))
@@ -36,9 +34,12 @@ class BackEnd extends NPCModule {
   val dispatcher_ = Module(new Dispatcher)
   val commitStage_ = Module(new CommitStage)
 
-  val rfu_ = Module(new RFU)
-  val rob_ = Module(new Rob(numFwdPorts = 2, numLookupPorts = 1))
-  val rat_ = Module(new RAT)
+  val prf_ = Module(new PRF(numReadPorts = 6, numWritePorts = 3))
+  val freeList_ = Module(new FreeList)
+  val busyTable_ = Module(new BusyTable(numReadPorts = 2, numWakeupPorts = 3))
+  val futureRat_ = Module(new FutureRAT(numReadPorts = 3))
+  val archRat_ = Module(new ArchRAT)
+  val rob_ = Module(new Rob)
   val alu_ = Module(new ALU)
   val bru_ = Module(new BRU)
   val agu_ = Module(new AGU)
@@ -63,41 +64,56 @@ class BackEnd extends NPCModule {
   io.redirect := commitStage_.redirect
 
   rob_.io.flush := flush
-  rat_.io.flush := flush
+  freeList_.io.flush := flush
+  busyTable_.io.flush := flush
+  futureRat_.io.flush := flush
   alu_iq_.io.flush := flush
   bru_iq_.io.flush := flush
   agu_iq_.io.flush := flush
 
-  // ==========================================================
-  // CDB(common data bus) wires (declared early for rename / dispatch bypass)
-  // ==========================================================
-  val cdb1 = Wire(Valid(new CDBBundle)) // alu
-  val cdb2 = Wire(Valid(new CDBBundle)) // late
+  // FutureRAT flush recovery: copy from ArchRAT
+  futureRat_.io.arch_snapshot := archRat_.io.snapshot
 
-  alu_iq_.io.cdb1 := cdb1; bru_iq_.io.cdb1 := cdb1; agu_iq_.io.cdb1 := cdb1
-  alu_iq_.io.cdb2 := cdb2; bru_iq_.io.cdb2 := cdb2; agu_iq_.io.cdb2 := cdb2
+  // ==========================================================
+  // Wakeup buses (3 sources)
+  // ==========================================================
+  // wakeup0: ALU execution writeback
+  val wakeup_alu = Wire(Valid(new BusyTableWakeupPort))
+  // wakeup1: dispatch-resolved (JAL/JALR/LUI/AUIPC)
+  val wakeup_disp = dispatcher_.io.wakeup
+  // wakeup2: commit late execution (load/CSR)
+  val wakeup_late = commitStage_.wakeup
+
+  val wakeups = Seq(wakeup_alu, wakeup_disp, wakeup_late)
+
+  // Connect wakeup buses to IQs
+  alu_iq_.io.wakeup.zip(wakeups).foreach { case (iq_wk, wk) => iq_wk := wk }
+  bru_iq_.io.wakeup.zip(wakeups).foreach { case (iq_wk, wk) => iq_wk := wk }
+  agu_iq_.io.wakeup.zip(wakeups).foreach { case (iq_wk, wk) => iq_wk := wk }
+
+  // Connect wakeup buses to BusyTable
+  busyTable_.io.wakeup.zip(wakeups).foreach { case (bt_wk, wk) => bt_wk := wk }
 
   // ==========================================================
   // Stage pipeline: IFU -> Decode -> Rename -> Dispatch
   // ==========================================================
   PipelineConnect(io.in, decodeStage_.io.in, flush)
   PipelineConnect(decodeStage_.io.out, renameStage_.io.in, flush)
-  PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush, Seq(cdb1, cdb2))
+  PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush, wakeups)
 
   // --- RenameStage side-band ---
-  renameStage_.io.rat(0) <> rat_.io.rename(0)
-  renameStage_.io.rat(1) <> rat_.io.rename(1)
+  renameStage_.io.frat(0) <> futureRat_.io.read(0)
+  renameStage_.io.frat(1) <> futureRat_.io.read(1)
+  renameStage_.io.frat(2) <> futureRat_.io.read(2)
+  futureRat_.io.write := renameStage_.io.frat_write
 
-  rfu_.io.read(0) <> renameStage_.io.rfu_query(0)
-  rfu_.io.read(1) <> renameStage_.io.rfu_query(1)
+  renameStage_.io.busy_read(0) <> busyTable_.io.read(0)
+  renameStage_.io.busy_read(1) <> busyTable_.io.read(1)
+  busyTable_.io.set_busy := renameStage_.io.busy_set
 
-  renameStage_.io.rob(0) <> rob_.io.rename(0)
-  renameStage_.io.rob(1) <> rob_.io.rename(1)
+  renameStage_.io.freelist_alloc <> freeList_.io.alloc
 
-  renameStage_.io.disp_fwd <> dispatcher_.io.rename_fwd
-
-  renameStage_.io.cdb(0) := cdb1
-  renameStage_.io.cdb(1) := cdb2
+  renameStage_.io.wakeup_fwd.zip(wakeups).foreach { case (dst, src) => dst := src }
 
   // --- Dispatcher ---
   dispatcher_.io.flush := flush
@@ -107,45 +123,53 @@ class BackEnd extends NPCModule {
   dispatcher_.io.bru_iq <> bru_iq_.io.enq
   dispatcher_.io.agu_iq <> agu_iq_.io.enq
 
-  rat_.io.disp <> dispatcher_.io.rat
-
   // ==========================================================
   // Stage 4 — Issue + Execute + Writeback
   // ==========================================================
 
   // --- ALU path ---
-  alu_.io.out.ready := true.B // backpress
+  alu_.io.out.ready := true.B
   alu_.io.in.valid := alu_iq_.io.issue.valid
   alu_iq_.io.issue.ready := alu_.io.in.ready
-  alu_.io.in.bits.op1 := alu_iq_.io.issue.bits.src_v(0) //
-  alu_.io.in.bits.op2 := alu_iq_.io.issue.bits.src_v(1)
-  alu_.io.in.bits.alu_op := alu_iq_.io.issue.bits.extra.alu_op
-  alu_.io.in.bits.rob_tag := alu_iq_.io.issue.bits.rob_tag
-  alu_.io.in.bits.rd_defen := alu_iq_.io.issue.bits.extra.rd_defen
+  val alu_issue = alu_iq_.io.issue.bits
+  // PRF read for ALU: ports 0, 1
+  prf_.io.read(0).addr := alu_issue.prs1
+  prf_.io.read(1).addr := alu_issue.prs2
+  alu_.io.in.bits.op1 := prf_.io.read(0).data
+  alu_.io.in.bits.op2 := Mux(alu_issue.extra.use_imm, alu_issue.imm, prf_.io.read(1).data)
+  alu_.io.in.bits.alu_op := alu_issue.extra.alu_op
+  alu_.io.in.bits.rob_tag := alu_issue.rob_tag
+  alu_.io.in.bits.prd := alu_issue.extra.prd
+  alu_.io.in.bits.prf_wen := alu_issue.extra.prf_wen
 
   val alu_wb_valid = alu_.io.out.fire
   val alu_wb_tag = alu_.io.out.bits.rob_tag
-  val alu_wb_rd_defen = alu_.io.out.bits.rd_defen
+  val alu_wb_prd = alu_.io.out.bits.prd
+  val alu_wb_prf_wen = alu_.io.out.bits.prf_wen
   val alu_result = alu_.io.out.bits.result
-
-  rob_.io.exec(0).tag := alu_wb_tag
-  val alu_rob_entry = rob_.io.exec(0).entry // write alu target entry
-
-  // format: off
-  // for `jalr`: rd is defined at dispatch; however, it operands still be sent to alu
-  val alu_rd_val = Mux( alu_rob_entry.inst_type === InstType.JALR , alu_rob_entry.rd.value, alu_result )
-  // format: on
 
   rob_.io.alu.valid := alu_wb_valid
   rob_.io.alu.bits.tag := alu_wb_tag
   rob_.io.alu.bits.alu_result := alu_result
 
+  // ALU PRF write (port 0): for R_ALU / I_ALU
+  prf_.io.write(0).valid := alu_wb_valid && alu_wb_prf_wen && !flush
+  prf_.io.write(0).bits.addr := alu_wb_prd
+  prf_.io.write(0).bits.data := alu_result
+
+  // ALU wakeup
+  wakeup_alu.valid := alu_wb_valid && alu_wb_prf_wen && !flush
+  wakeup_alu.bits.prd := alu_wb_prd
+
   // --- BRU path ---
-  bru_.io.out.ready := true.B // backpress
+  bru_.io.out.ready := true.B
   bru_iq_.io.issue.ready := bru_.io.in.ready
   bru_.io.in.valid := bru_iq_.io.issue.valid
-  bru_.io.in.bits.rs1_v := bru_iq_.io.issue.bits.src_v(0)
-  bru_.io.in.bits.rs2_v := bru_iq_.io.issue.bits.src_v(1)
+  // PRF read for BRU: ports 2, 3
+  prf_.io.read(2).addr := bru_iq_.io.issue.bits.prs1
+  prf_.io.read(3).addr := bru_iq_.io.issue.bits.prs2
+  bru_.io.in.bits.rs1_v := prf_.io.read(2).data
+  bru_.io.in.bits.rs2_v := prf_.io.read(3).data
   bru_.io.in.bits.op := bru_iq_.io.issue.bits.extra.bru_op
   bru_.io.in.bits.rob_tag := bru_iq_.io.issue.bits.rob_tag
 
@@ -158,13 +182,16 @@ class BackEnd extends NPCModule {
   rob_.io.bru.bits.br_flag := br_flag
 
   // --- AGU path ---
-  agu_.io.in.valid := agu_iq_.io.issue.valid // backpress
+  agu_.io.in.valid := agu_iq_.io.issue.valid
   agu_iq_.io.issue.ready := agu_.io.in.ready
   agu_.io.out.ready := true.B
-  agu_.io.in.bits.base := agu_iq_.io.issue.bits.src_v(0)
+  // PRF read for AGU: ports 4, 5
+  prf_.io.read(4).addr := agu_iq_.io.issue.bits.prs1
+  prf_.io.read(5).addr := agu_iq_.io.issue.bits.prs2
+  agu_.io.in.bits.base := prf_.io.read(4).data
   agu_.io.in.bits.offset := agu_iq_.io.issue.bits.extra.offset
   agu_.io.in.bits.rob_tag := agu_iq_.io.issue.bits.rob_tag
-  agu_.io.in.bits.wdata := agu_iq_.io.issue.bits.src_v(1)
+  agu_.io.in.bits.wdata := prf_.io.read(5).data
 
   rob_.io.agu.valid := agu_.io.out.fire
   rob_.io.agu.bits.tag := agu_.io.out.bits.rob_tag
@@ -172,10 +199,10 @@ class BackEnd extends NPCModule {
   rob_.io.agu.bits.wdata := agu_.io.out.bits.wdata
   rob_.io.agu.bits.is_mmio := agu_.io.out.bits.is_mmio
 
-  // --- CDB1 — ALU writeback broadcast ---
-  cdb1.valid := alu_wb_valid && alu_wb_rd_defen && !flush
-  cdb1.bits.tag := alu_wb_tag
-  cdb1.bits.value := alu_rd_val
+  // ==========================================================
+  // Dispatch-resolved PRF write (port 1): JAL/JALR/LUI/AUIPC
+  // ==========================================================
+  prf_.io.write(1) := dispatcher_.io.prf_write
 
   // ==========================================================
   // Stage 5 — Commit (CommitStage module)
@@ -195,12 +222,15 @@ class BackEnd extends NPCModule {
   commitStage_.csr.xepc := csru_.xepc
   commitStage_.csr.xtvec := csru_.xtvec
 
-  // --- RFU writeback ---
-  rfu_.io.write <> commitStage_.rfu_w
-  rat_.io.commit <> commitStage_.rat
+  // --- ArchRAT write ---
+  archRat_.io.write := commitStage_.arch_rat_w
 
-  // --- CDB2 ---
-  cdb2 := commitStage_.cdb
+  // --- FreeList: free old_prd ---
+  freeList_.io.free := commitStage_.freelist_free
+  freeList_.io.commit_alloc := commitStage_.freelist_commit_alloc
+
+  // --- Late exec PRF write (port 2): load / CSR results (latched in ROB entry) ---
+  prf_.io.write(2) := commitStage_.prf_write
 
   // --- fence_i ---
   fence_i := commitStage_.fence_i
@@ -208,11 +238,14 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Debug probe
   // ==========================================================
+  // GPR: derived from ArchRAT + PRF
+  prf_.probe.arch_rat := archRat_.io.snapshot
+
   probe.bits.pc := commitStage_.probe.bits.pc
   probe.bits.dnpc := commitStage_.probe.bits.dnpc
   probe.bits.inst := commitStage_.probe.bits.inst
   probe.bits.is_mmio := commitStage_.probe.bits.is_mmio
-  probe.bits.gpr := rfu_.probe
+  probe.bits.gpr := prf_.probe.gpr
   probe.bits.csr := csru_.probe
   probe.bits.perf := commitStage_.perf
   probe.valid := commitStage_.probe.valid

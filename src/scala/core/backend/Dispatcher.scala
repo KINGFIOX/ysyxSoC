@@ -5,22 +5,19 @@ import chisel3.util._
 
 import ysyx.core.common._
 
-class DispFwdBundle extends NPCBundle {
-  val rd_idx = UInt(NRRegbits.W)
-  val value = UInt(dataBits.W)
-}
-
 class Dispatcher extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new RenameStageOutput))
     val flush = Input(Bool())
-    val rename_fwd = Valid(new DispFwdBundle)
     val rob_enq = Decoupled(new RobEnqData)
     val rob_tag = Input(UInt(robEntryBits.W))
-    val alu_iq = Decoupled(new IQEnqData(new ALUExtra, 2))
-    val bru_iq = Decoupled(new IQEnqData(new BRUExtra, 2))
-    val agu_iq = Decoupled(new IQEnqData(new AGUExtra, 2))
-    val rat = Valid(new RATWritePort)
+    val alu_iq = Decoupled(new IQEnqData(new ALUExtra))
+    val bru_iq = Decoupled(new IQEnqData(new BRUExtra))
+    val agu_iq = Decoupled(new IQEnqData(new AGUExtra))
+    // dispatch-resolved PRF write
+    val prf_write = Valid(new PRFWritePort)
+    // dispatch-resolved wakeup
+    val wakeup = Valid(new BusyTableWakeupPort)
   })
 
   val in = io.in.bits
@@ -34,18 +31,12 @@ class Dispatcher extends NPCModule {
   val has_except = dec.has_except
 
   // format: off
-  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.CSR) .map(inst_type === _).reduce(_ || _) && !has_except
+  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.CSR).map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
-  val go_to_agu = Seq(InstType.LOAD, InstType.STORE) .map(inst_type === _).reduce(_ || _) && !has_except
+  val go_to_agu = Seq(InstType.LOAD, InstType.STORE).map(inst_type === _).reduce(_ || _) && !has_except
   // format: on
 
-  // format: off
-  val rd_wen = Seq( InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD, InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR).map(inst_type === _).reduce(_ || _)
-  // for forwarding, write RobEntry, which is the source, it should filter the x0
-  val rd_defen = rd_wen && (dec.rd_idx =/= 0.U)
-  // format: on
-
-  val is_csr = inst_type === InstType.CSR
+  val rd_wen = in.rd_wen
 
   // ============================================================
   // Ready / Valid
@@ -76,15 +67,10 @@ class Dispatcher extends NPCModule {
   enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
   enq.csr.op := ctrl.csr_op
   enq.csr.wdata := 0.U
-  enq.rd.idx := Mux(rd_defen, dec.rd_idx, DontCare)
-  enq.rd.value := in.disp_rd_val
-  enq.rd.state := MuxCase(
-    RdRobState.nouse,
-    Seq(
-      (rd_defen && in.disp_rd_defen) -> RdRobState.done,
-      (rd_defen && !in.disp_rd_defen) -> RdRobState.pending
-    )
-  )
+  enq.arch_rd := Mux(rd_wen, dec.rd_idx, 0.U)
+  enq.new_prd := in.prd
+  enq.old_prd := in.old_prd
+  enq.rd_wen := rd_wen
   enq.except.valid := has_except
   enq.except.mcause := dec.mcause
   enq.except.mtval := dec.mtval
@@ -103,42 +89,54 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // ALU Issue Queue
   // ============================================================
-  // for the reason that rob is unable to wait for rs1, rs2
-  // so the instruction waitting for sources should be dispatched to the ALU's issuse queue
-  // so InstType.csr is sent to ALU
-  io.alu_iq.bits.src(0) := in.src(0)
-  io.alu_iq.bits.src(1) := in.src(1)
+  // format: off
+  val alu_prf_wen = Seq(InstType.R_ALU, InstType.I_ALU).map(inst_type === _).reduce(_ || _) && rd_wen
+  // format: on
+  io.alu_iq.bits.prs1.preg := in.prs1
+  io.alu_iq.bits.prs1.ready := in.prs1_ready
+  io.alu_iq.bits.prs2.preg := in.prs2
+  io.alu_iq.bits.prs2.ready := in.prs2_ready
+  io.alu_iq.bits.imm := dec.imm
   io.alu_iq.bits.extra.alu_op := ctrl.alu_op
-  io.alu_iq.bits.extra.rd_defen := rd_defen
+  io.alu_iq.bits.extra.prd := in.prd
+  io.alu_iq.bits.extra.prf_wen := alu_prf_wen
+  // format: off
+  io.alu_iq.bits.extra.use_imm := Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
+  // format: on
   io.alu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // BRU Issue Queue
   // ============================================================
-  io.bru_iq.bits.src(0) := in.src(0)
-  io.bru_iq.bits.src(1) := in.src(1)
+  io.bru_iq.bits.prs1.preg := in.prs1
+  io.bru_iq.bits.prs1.ready := in.prs1_ready
+  io.bru_iq.bits.prs2.preg := in.prs2
+  io.bru_iq.bits.prs2.ready := in.prs2_ready
+  io.bru_iq.bits.imm := dec.imm
   io.bru_iq.bits.extra.bru_op := ctrl.bru_op
   io.bru_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // AGU Issue Queue
   // ============================================================
-  io.agu_iq.bits.src(0) := in.src(0)
-  io.agu_iq.bits.src(1) := in.src(1)
+  io.agu_iq.bits.prs1.preg := in.prs1
+  io.agu_iq.bits.prs1.ready := in.prs1_ready
+  io.agu_iq.bits.prs2.preg := in.prs2
+  io.agu_iq.bits.prs2.ready := in.prs2_ready
+  io.agu_iq.bits.imm := dec.imm
   io.agu_iq.bits.extra.offset := dec.imm
   io.agu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
-  // RAT Write
+  // Dispatch-resolved PRF write (JAL, JALR, LUI, AUIPC)
   // ============================================================
-  io.rat.valid := io.in.fire && rd_defen
-  io.rat.bits.addr := dec.rd_idx
-  io.rat.bits.tag := io.rob_tag
+  io.prf_write.valid := io.in.fire && in.disp_rd_defen
+  io.prf_write.bits.addr := in.prd
+  io.prf_write.bits.data := in.disp_rd_val
 
   // ============================================================
-  // Rename Forward
+  // Dispatch-resolved wakeup
   // ============================================================
-  io.rename_fwd.bits.rd_idx := Mux(rd_defen, dec.rd_idx, 0.U)
-  io.rename_fwd.valid := io.in.valid && in.disp_rd_defen
-  io.rename_fwd.bits.value := in.disp_rd_val
+  io.wakeup.valid := io.in.fire && in.disp_rd_defen
+  io.wakeup.bits.prd := in.prd
 }

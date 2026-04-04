@@ -21,8 +21,17 @@ class DebugCommitBundle extends NPCBundle {
 }
 
 class CommitStage extends NPCModule {
-  val rfu_w = IO(Valid(new RFUWritePort))
-  val rat = IO(Valid(new RATCommitPort))
+  // ArchRAT write
+  val arch_rat_w = IO(Valid(new ArchRATWritePort))
+  // FreeList: release old_prd
+  val freelist_free = IO(Valid(UInt(NRPhyRegBits.W)))
+  // FreeList: confirm allocation is now committed
+  val freelist_commit_alloc = IO(Output(Bool()))
+  // PRF write for late execution results (load/CSR)
+  val prf_write = IO(Valid(new PRFWritePort))
+  // Wakeup for late execution results
+  val wakeup = IO(Valid(new BusyTableWakeupPort))
+
   val csr = IO(new Bundle {
     val except = Valid(new CsrExceptWritePort)
     val xepc = Input(UInt(dataBits.W))
@@ -30,7 +39,6 @@ class CommitStage extends NPCModule {
   })
   val rob = IO(Flipped(ReqDone(new CommitBundle)))
   val redirect = IO(Valid(new RedirectBundle))
-  val cdb = IO(Valid(new CDBBundle))
   val flush = IO(Bool())
   val fence_i = IO(Bool())
 
@@ -39,33 +47,31 @@ class CommitStage extends NPCModule {
   val head_tag = rob.bits.tag
   val head_valid = rob.req
 
-  val rob_rd_wen = head_entry.rd.state === RdRobState.done
-  assert(
-    // done -> !x0
-    !(head_entry.rd.state === RdRobState.done) || (head_entry.rd.idx =/= 0.U),
-    "(commit) impossible"
-  )
   val head_is_mem = head_entry.mem.r_en || head_entry.mem.w_en
   val head_is_csr = head_entry.inst_type === InstType.CSR
   val head_is_mret = head_entry.inst_type === InstType.MRET
-  // is control flow instruction, but not `mret` or `ecall`
 
   // ---- Defaults ----
-  cdb.valid := false.B
-  cdb.bits.tag := head_tag
-  cdb.bits.value := head_entry.rd.value
-
   rob.done := head_valid
 
-  // regfile unit
-  rfu_w.valid := false.B
-  rfu_w.bits.addr := head_entry.rd.idx
-  rfu_w.bits.data := head_entry.rd.value
+  // ArchRAT
+  arch_rat_w.valid := false.B
+  arch_rat_w.bits.addr := head_entry.arch_rd
+  arch_rat_w.bits.preg := head_entry.new_prd
 
-  // register alias table
-  rat.valid := false.B
-  rat.bits.addr := head_entry.rd.idx
-  rat.bits.tag := head_tag
+  // FreeList
+  freelist_free.valid := false.B
+  freelist_free.bits := head_entry.old_prd
+  freelist_commit_alloc := false.B
+
+  // PRF write (late exec)
+  prf_write.valid := false.B
+  prf_write.bits.addr := head_entry.new_prd
+  prf_write.bits.data := 0.U
+
+  // Wakeup (late exec)
+  wakeup.valid := false.B
+  wakeup.bits.prd := head_entry.new_prd
 
   csr.except.valid := false.B
   csr.except.bits.xepc := head_entry.pc
@@ -88,7 +94,7 @@ class CommitStage extends NPCModule {
     Seq(
       (head_entry.inst_type === InstType.JAL) -> head_entry.jal.dnpc,
       (head_entry.inst_type === InstType.JALR) -> head_entry.jalr.dnpc,
-      (head_entry.inst_type === InstType.BRANCH) -> Mux( head_entry.bru.br_flag, head_entry.bru.dnpc, head_entry.bru.snpc),
+      (head_entry.inst_type === InstType.BRANCH) -> Mux(head_entry.bru.br_flag, head_entry.bru.dnpc, head_entry.bru.snpc),
       (head_entry.inst_type === InstType.MRET) -> csr.xepc,
       (head_entry.except.valid) -> csr.xtvec
     )
@@ -99,20 +105,28 @@ class CommitStage extends NPCModule {
 
   // ---- Commit logic ----
   when(head_valid) {
-    when(head_entry.except.valid) { // except happen
+    when(head_entry.except.valid) {
       csr.except.valid := true.B
-    }.elsewhen(head_is_mret) { // mret
+    }.elsewhen(head_is_mret) {
+      // mret: no register write, no PRF change
     }.otherwise {
-      rfu_w.valid := rob_rd_wen
-      rat.valid := rob_rd_wen
-      cdb.valid := rob_rd_wen && (head_is_mem || head_is_csr) // cdb
-      dbg_is_mmio := head_is_mem && head_entry.mem.is_mmio // debug commit mmio
+      // Write ArchRAT and free old_prd
+      when(head_entry.rd_wen) {
+        arch_rat_w.valid := true.B
+        freelist_free.valid := true.B
+        freelist_commit_alloc := true.B
+      }
+      // Late exec PRF write + wakeup (load/CSR results latched in ROB)
+      prf_write.valid := head_entry.late_rd_wen
+      prf_write.bits.data := head_entry.late_result
+      wakeup.valid := head_entry.late_rd_wen
+
+      dbg_is_mmio := head_is_mem && head_entry.mem.is_mmio
       redirect.bits.mispredict := is_diff
     }
   }
 
   // sequential sync: delay 1 cycle
-  // for writing the register could be read
   val probe = IO(Valid(new DebugCommitBundle))
   probe.valid := RegNext(rob.fire)
   probe.bits.pc := RegNext(head_entry.pc)
@@ -128,7 +142,6 @@ class CommitStage extends NPCModule {
 
   when(rob.fire) {
     perf_commit_cnt := perf_commit_cnt + 1.U
-    // is control flow
     val is_cf = head_entry.inst_type === InstType.BRANCH ||
                 head_entry.inst_type === InstType.JAL ||
                 head_entry.inst_type === InstType.JALR

@@ -8,7 +8,13 @@ import ysyx.core.frontend._
 
 class RenameStageOutput extends NPCBundle {
   val dec = new DecodeStageOutput
-  val src = Vec(2, new IQSrcBundle)
+  val prs1 = UInt(NRPhyRegBits.W)
+  val prs2 = UInt(NRPhyRegBits.W)
+  val prd = UInt(NRPhyRegBits.W)
+  val old_prd = UInt(NRPhyRegBits.W)
+  val prs1_ready = Bool()
+  val prs2_ready = Bool()
+  val rd_wen = Bool()
   val disp_rd_val = UInt(dataBits.W)
   val disp_rd_defen = Bool()
   val disp_target_npc = UInt(addrBits.W)
@@ -18,37 +24,92 @@ class RenameStage extends NPCModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new DecodeStageOutput))
     val out = Decoupled(new RenameStageOutput)
-    val rat = Vec(2, new RATReadPort)
-    val rob = Vec(2, new RobReadBundle)
-    val disp_fwd = Flipped(Valid(new DispFwdBundle))
-    val rfu_query = Vec(2, new RFUReadPort)
-    val cdb = Vec(2, Flipped(Valid(new CDBBundle)))
+    val frat = Vec(3, new FutureRATReadPort) // rs1, rs2, rd(old_prd)
+    val frat_write = Valid(new FutureRATWritePort)
+    val busy_read = Vec(2, new Bundle {
+      val addr = Output(UInt(NRPhyRegBits.W))
+      val busy = Input(Bool())
+    })
+    val busy_set = Valid(UInt(NRPhyRegBits.W))
+    val freelist_alloc = Flipped(Decoupled(UInt(NRPhyRegBits.W)))
+    val wakeup_fwd = Vec(3, Flipped(Valid(new BusyTableWakeupPort)))
   })
 
-  // backpress
-  io.in.ready := io.out.ready
-  io.out.valid := io.in.valid
-
-  val out = io.out.bits
   val dec_out = io.in.bits
-  out.dec := dec_out
-
   val inst_type = dec_out.ctrl.inst_type
   val pc = dec_out.pc
   val imm = dec_out.imm
   val rd_idx = dec_out.rd_idx
-  val rs_idx = VecInit(dec_out.rs1_idx, dec_out.rs2_idx)
+  val rs1_idx = dec_out.rs1_idx
+  val rs2_idx = dec_out.rs2_idx
 
-  val disp_fwd = io.disp_fwd
+  // ============================================================
+  // Determine if instruction writes a register
+  // ============================================================
+  // format: off
+  val rd_wen = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD,
+    InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR)
+    .map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
+  // format: on
+
+  // ============================================================
+  // FutureRAT lookup: rs1, rs2, rd(for old_prd)
+  // ============================================================
+  io.frat(0).addr := rs1_idx
+  io.frat(1).addr := rs2_idx
+  io.frat(2).addr := rd_idx
+
+  val prs1 = io.frat(0).preg
+  val prs2 = io.frat(1).preg
+  val old_prd = io.frat(2).preg
+
+  // ============================================================
+  // FreeList allocation
+  // ============================================================
+  val new_prd = io.freelist_alloc.bits
+  val need_alloc = io.in.valid && io.out.ready && rd_wen
+  io.freelist_alloc.ready := need_alloc
+
+  val prd = Mux(rd_wen, new_prd, 0.U)
+
+  // ============================================================
+  // FutureRAT write (rd -> new_prd)
+  // ============================================================
+  io.frat_write.valid := io.in.fire && rd_wen
+  io.frat_write.bits.addr := rd_idx
+  io.frat_write.bits.preg := new_prd
+
+  // ============================================================
+  // BusyTable: set new_prd as busy, read prs1/prs2
+  // ============================================================
+  io.busy_set.valid := io.in.fire && rd_wen
+  io.busy_set.bits := new_prd
+
+  io.busy_read(0).addr := prs1
+  io.busy_read(1).addr := prs2
+
+  val prs1_busy = io.busy_read(0).busy
+  val prs2_busy = io.busy_read(1).busy
+
+  // Wakeup forwarding: check if prs matches any in-flight wakeup
+  val prs1_wakeup = io.wakeup_fwd.map(wk =>
+    wk.valid && wk.bits.prd === prs1
+  ).reduce(_ || _)
+  val prs2_wakeup = io.wakeup_fwd.map(wk =>
+    wk.valid && wk.bits.prd === prs2
+  ).reduce(_ || _)
+
+  val prs1_ready = !prs1_busy || prs1_wakeup
+  val prs2_ready = !prs2_busy || prs2_wakeup
 
   // ============================================================
   // Dispatch-resolved value (jalr, jal, lui, auipc)
   // ============================================================
   // format: off
-  out.disp_rd_defen := Seq( InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC
-    ).map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
+  val disp_rd_defen = Seq(InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC)
+    .map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
   // format: on
-  out.disp_rd_val := MuxLookup(inst_type, 0.U)(
+  val disp_rd_val = MuxLookup(inst_type, 0.U)(
     Seq(
       InstType.JALR -> (pc + 4.U),
       InstType.JAL -> (pc + 4.U),
@@ -56,58 +117,9 @@ class RenameStage extends NPCModule {
       InstType.AUIPC -> (pc + imm)
     )
   )
-  out.disp_target_npc := pc + imm
 
   // ============================================================
-  // RAT lookup + RFU read
-  // ============================================================
-  for (i <- 0 until 2) {
-    io.rat(i).addr := rs_idx(i)
-    io.rfu_query(i).addr := rs_idx(i)
-  }
-
-  // ============================================================
-  // Source operand resolution (symmetric for RS1 / RS2)
-  // ============================================================
-  for (i <- 0 until 2) {
-    // Dispatcher tag forward: override RAT when the in-flight dispatch
-    // is defining the same architectural register.
-    val disp_val_hit = disp_fwd.valid && (disp_fwd.bits.rd_idx === rs_idx(i))
-    assert(
-      // rf_defen -> (rd_idx =/= 0.U)
-      !disp_fwd.valid || (rd_idx =/= 0.U),
-      "(RenameStage) x0 should not be forwarded"
-    )
-
-    val tag = io.rat(i).tag
-    val busy = io.rat(i).busy // x0, always free
-
-    io.rob(i).tag := tag
-
-    val cdb0 = io.cdb(0)
-    val cdb1 = io.cdb(1)
-
-    val free = !busy
-    val cdb0_hit = cdb0.valid && (cdb0.bits.tag === tag)
-    val cdb1_hit = cdb1.valid && (cdb1.bits.tag === tag)
-    val rob_hit = io.rob(i).valid
-
-    out.src(i).ready := free || disp_val_hit || cdb0_hit || cdb1_hit || rob_hit
-    out.src(i).tag := tag
-    out.src(i).value := MuxCase(
-      0.U,
-      Seq(
-        free -> io.rfu_query(i).data, // x0 -> 0
-        disp_val_hit -> disp_fwd.bits.value,
-        cdb0_hit -> cdb0.bits.value,
-        cdb1_hit -> cdb1.bits.value,
-        rob_hit -> io.rob(i).value
-      )
-    )
-  }
-
-  // ============================================================
-  // Immediate-to-operand: override src(1) for imm-using instructions
+  // Override prs2 readiness for immediate-using instructions
   // ============================================================
   // format: off
   val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
@@ -115,15 +127,29 @@ class RenameStage extends NPCModule {
   val is_csr = inst_type === InstType.CSR
   val is_load = inst_type === InstType.LOAD
 
-  when(use_imm) {
-    out.src(1).value := imm
-    out.src(1).tag := 0.U
-    out.src(1).ready := true.B
-  }.elsewhen(is_csr) {
-    out.src(1).value := 0.U
-    out.src(1).tag := 0.U
-    out.src(1).ready := true.B
-  }.elsewhen(is_load) {
-    out.src(1).ready := true.B
-  }
+  val final_prs2_ready = Mux(use_imm || is_csr || is_load, true.B, prs2_ready)
+  val final_prs2 = Mux(use_imm || is_csr, 0.U, prs2)
+
+  // ============================================================
+  // Backpressure: stall if freelist empty and need alloc
+  // ============================================================
+  val stall = need_alloc && !io.freelist_alloc.valid
+  io.in.ready := io.out.ready && !stall
+  io.out.valid := io.in.valid && !stall
+
+  // ============================================================
+  // Output
+  // ============================================================
+  val out = io.out.bits
+  out.dec := dec_out
+  out.prs1 := prs1
+  out.prs2 := final_prs2
+  out.prd := prd
+  out.old_prd := Mux(rd_wen, old_prd, 0.U)
+  out.prs1_ready := prs1_ready
+  out.prs2_ready := final_prs2_ready
+  out.rd_wen := rd_wen
+  out.disp_rd_val := disp_rd_val
+  out.disp_rd_defen := disp_rd_defen
+  out.disp_target_npc := pc + imm
 }
