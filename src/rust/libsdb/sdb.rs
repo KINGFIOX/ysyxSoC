@@ -150,8 +150,8 @@ impl<'a> Sdb<'a> {
                     };
                     match self.execute_line(&input, dut) {
                         Ok(Action::Continue) => {}
-                        Ok(Action::Quit) => return Ok(()),
                         Err(SdbError::Input(msg)) => warn!("{msg}"),
+                        Ok(Action::Quit) => return Ok(()),
                         Err(SdbError::Fatal(e)) => return Err(e),
                     }
                 }
@@ -321,7 +321,7 @@ fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult 
         if i % 4 == 0 {
             let _ = write!(buf, "{a:#010x}:");
         }
-        match dut.mem_load_u32(a) {
+        match dut.mem_load(a, 4) {
             Ok(val) => {
                 let _ = write!(buf, "  {val:#010x}");
             }

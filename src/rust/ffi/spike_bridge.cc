@@ -1,6 +1,7 @@
 #include "spike_bridge.h"
 #include "sim.h"
 #include "mmu.h"
+#include "trap.h"
 #include <vector>
 #include <string>
 #include <utility>
@@ -45,7 +46,10 @@ processor_t* sim_get_core(sim_t* sim, int index) { return sim->get_core(index); 
 
 // ============ processor_t ============
 
-void proc_step(processor_t* proc, uint64_t n) { proc->step(n); }
+int proc_step(processor_t* proc, uint64_t n) {
+    try { proc->step(n); return 0; }
+    catch (const trap_t&) { return 1; }
+}
 void proc_reset(processor_t* proc) { proc->reset(); }
 void proc_set_debug(processor_t* proc, bool value) { proc->set_debug(value); }
 uint32_t proc_get_id(const processor_t* proc) { return proc->get_id(); }
@@ -68,10 +72,27 @@ void state_set_gpr(state_t* st, int index, uint64_t val) { st->XPR.write(index, 
 
 // ============ mmu_t ============
 
-uint8_t  mmu_load_u8(mmu_t* mmu, uint64_t addr)  { return mmu->load<uint8_t>(addr); }
-uint16_t mmu_load_u16(mmu_t* mmu, uint64_t addr) { return mmu->load<uint16_t>(addr); }
-uint32_t mmu_load_u32(mmu_t* mmu, uint64_t addr) { return mmu->load<uint32_t>(addr); }
-
-void mmu_store_u8(mmu_t* mmu, uint64_t addr, uint8_t val)   { mmu->store<uint8_t>(addr, val); }
-void mmu_store_u16(mmu_t* mmu, uint64_t addr, uint16_t val) { mmu->store<uint16_t>(addr, val); }
-void mmu_store_u32(mmu_t* mmu, uint64_t addr, uint32_t val) { mmu->store<uint32_t>(addr, val); }
+int mmu_load_u8(mmu_t* mmu, uint64_t addr, uint8_t* out) {
+    try { *out = mmu->load<uint8_t>(addr); return 0; }
+    catch (const trap_t&) { return 1; }
+}
+int mmu_load_u16(mmu_t* mmu, uint64_t addr, uint16_t* out) {
+    try { *out = mmu->load<uint16_t>(addr); return 0; }
+    catch (const trap_t&) { return 1; }
+}
+int mmu_load_u32(mmu_t* mmu, uint64_t addr, uint32_t* out) {
+    try { *out = mmu->load<uint32_t>(addr); return 0; }
+    catch (const trap_t&) { return 1; }
+}
+int mmu_store_u8(mmu_t* mmu, uint64_t addr, uint8_t val) {
+    try { mmu->store<uint8_t>(addr, val); return 0; }
+    catch (const trap_t&) { return 1; }
+}
+int mmu_store_u16(mmu_t* mmu, uint64_t addr, uint16_t val) {
+    try { mmu->store<uint16_t>(addr, val); return 0; }
+    catch (const trap_t&) { return 1; }
+}
+int mmu_store_u32(mmu_t* mmu, uint64_t addr, uint32_t val) {
+    try { mmu->store<uint32_t>(addr, val); return 0; }
+    catch (const trap_t&) { return 1; }
+}

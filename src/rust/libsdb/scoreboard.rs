@@ -142,7 +142,7 @@ impl ScoreBoard {
                 let base_val = self.golden.gpr(rs1(inst)).unwrap();
                 let addr = (base_val as i32).wrapping_add(imm_i(inst)) as u32;
                 let width = mem_width(&mnemonic);
-                let data = dut.mem_load_u32(addr).unwrap_or(0); // FIXME: mtrace 仅做个记录, 但是似乎有错 ?
+                let data = dut.mem_load(addr, width).unwrap_or(0);
                 self.mtrace.push(MTraceEntry::new(
                     pc,
                     MemDir::Read,
@@ -256,38 +256,16 @@ impl ScoreBoard {
         let addr = (base_val as i32).wrapping_add(imm_s(inst)) as u32;
         let width = mem_width(mnemonic);
 
-        match width {
-            1 => {
-                let dut_val = dut.mem_load_u8(addr).unwrap();
-                let ref_val = self.golden.mem_load_u8(addr).unwrap();
-                if dut_val != ref_val {
-                    error!(
-                        "difftest FAIL: mem[{addr:#010x}] (u8)  dut={dut_val:#04x}  ref={ref_val:#04x}"
-                    );
-                    return false;
-                }
-            }
-            2 => {
-                let dut_val = dut.mem_load_u16(addr).unwrap();
-                let ref_val = self.golden.mem_load_u16(addr).unwrap();
-                if dut_val != ref_val {
-                    error!(
-                        "difftest FAIL: mem[{addr:#010x}] (u16)  dut={dut_val:#06x}  ref={ref_val:#06x}"
-                    );
-                    return false;
-                }
-            }
-            4 => {
-                let dut_val = dut.mem_load_u32(addr).unwrap();
-                let ref_val = self.golden.mem_load_u32(addr).unwrap();
-                if dut_val != ref_val {
-                    error!(
-                        "difftest FAIL: mem[{addr:#010x}] (u32)  dut={dut_val:#010x}  ref={ref_val:#010x}"
-                    );
-                    return false;
-                }
-            }
-            _ => {}
+        if width == 0 {
+            return true;
+        }
+        let dut_val = dut.mem_load(addr, width).unwrap();
+        let ref_val = self.golden.mem_load(addr, width).unwrap();
+        if dut_val != ref_val {
+            error!(
+                "difftest FAIL: mem[{addr:#010x}] (w{width})  dut={dut_val:#010x}  ref={ref_val:#010x}"
+            );
+            return false;
         }
         true
     }

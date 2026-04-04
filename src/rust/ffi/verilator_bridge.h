@@ -1,9 +1,6 @@
 #pragma once
 #include <cstdint>
 
-bool vl_stop_triggered();
-void vl_stop_clear();
-
 class VerilatedContext;
 class VNPCSoC;
 
@@ -16,7 +13,7 @@ bool vl_context_got_finish(const VerilatedContext* ctx);
 
 VNPCSoC* vnpcsoc_new(VerilatedContext* ctx, const char* name);
 void vnpcsoc_delete(VNPCSoC* top);
-void vnpcsoc_eval(VNPCSoC* top);
+int vnpcsoc_eval(VNPCSoC* top);
 void vnpcsoc_final(VNPCSoC* top);
 
 void vnpcsoc_set_clock(VNPCSoC* top, uint8_t val);

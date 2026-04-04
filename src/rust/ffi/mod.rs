@@ -11,8 +11,6 @@ include_cpp! {
     #include "verilator_bridge.h"
     name!(verilator)
     safety!(unsafe)
-    generate!("vl_stop_triggered")
-    generate!("vl_stop_clear")
     generate!("vl_context_new")
     generate!("vl_context_delete")
     // vl_context_command_args has const char** which autocxx can't handle;

@@ -17,6 +17,7 @@ const MEM_BASES: &[u64] = &[
     0x30000000, // XIP_FLASH
     0x80000000, // PSRAM
     0xa0000000, // SDRAM
+    0x10000000, // uart
 ];
 
 const MEM_SIZES: &[u64] = &[
@@ -27,6 +28,7 @@ const MEM_SIZES: &[u64] = &[
     0x10000000, // XIP_FLASH
     0x400000,   // PSRAM
     0x2000000,  // SDRAM
+    0x1000,     // uart
 ];
 
 pub struct SpikeCpu {
@@ -63,7 +65,7 @@ impl SpikeCpu {
         };
         for (i, &byte) in flash_data.iter().enumerate() {
             let addr = RESET_VECTOR as u32 + i as u32;
-            cpu.mem_store_u8(addr, byte).unwrap();
+            cpu.mem_store(addr, byte as u32, 1).unwrap();
         }
         cpu
     }
@@ -175,28 +177,44 @@ impl AbstractCpu for SpikeCpu {
         Ok(())
     }
 
-    fn mem_load_u8(&self, addr: u32) -> miette::Result<u8> {
-        Ok(unsafe { mmu_load_u8(self.mmu, addr as u64) } as u8)
+    fn mem_load(&self, addr: u32, width: u8) -> miette::Result<u32> {
+        match width {
+            1 => {
+                let mut v: u8 = 0;
+                if unsafe { mmu_load_u8(self.mmu, addr as u64, &mut v) } != 0.into() {
+                    return Err(miette::miette!("spike trap: load u8 @ {addr:#010x}"));
+                }
+                Ok(v as u32)
+            }
+            2 => {
+                let mut v: u16 = 0;
+                if unsafe { mmu_load_u16(self.mmu, addr as u64, &mut v) } != 0.into() {
+                    return Err(miette::miette!("spike trap: load u16 @ {addr:#010x}"));
+                }
+                Ok(v as u32)
+            }
+            4 => {
+                let mut v: u32 = 0;
+                if unsafe { mmu_load_u32(self.mmu, addr as u64, &mut v) } != 0.into() {
+                    return Err(miette::miette!("spike trap: load u32 @ {addr:#010x}"));
+                }
+                Ok(v)
+            }
+            _ => Err(miette::miette!("invalid load width: {width}")),
+        }
     }
 
-    fn mem_load_u16(&self, addr: u32) -> miette::Result<u16> {
-        Ok(unsafe { mmu_load_u16(self.mmu, addr as u64) } as u16)
-    }
-
-    fn mem_load_u32(&self, addr: u32) -> miette::Result<u32> {
-        Ok(unsafe { mmu_load_u32(self.mmu, addr as u64) } as u32)
-    }
-
-    fn mem_store_u8(&mut self, addr: u32, value: u8) -> miette::Result<()> {
-        Ok(unsafe { mmu_store_u8(self.mmu, addr as u64, value as u8) })
-    }
-
-    fn mem_store_u16(&mut self, addr: u32, value: u16) -> miette::Result<()> {
-        Ok(unsafe { mmu_store_u16(self.mmu, addr as u64, value as u16) })
-    }
-
-    fn mem_store_u32(&mut self, addr: u32, value: u32) -> miette::Result<()> {
-        Ok(unsafe { mmu_store_u32(self.mmu, addr as u64, value as u32) })
+    fn mem_store(&mut self, addr: u32, value: u32, width: u8) -> miette::Result<()> {
+        let rc = match width {
+            1 => unsafe { mmu_store_u8(self.mmu, addr as u64, value as u8) },
+            2 => unsafe { mmu_store_u16(self.mmu, addr as u64, value as u16) },
+            4 => unsafe { mmu_store_u32(self.mmu, addr as u64, value) },
+            _ => return Err(miette::miette!("invalid store width: {width}")),
+        };
+        if rc != 0.into() {
+            return Err(miette::miette!("spike trap: store w{width} @ {addr:#010x}"));
+        }
+        Ok(())
     }
 
     fn reset(&mut self) {
@@ -204,7 +222,10 @@ impl AbstractCpu for SpikeCpu {
     }
 
     fn step(&mut self) -> miette::Result<()> {
-        unsafe { proc_step(self.proc, 1) }; // always succeed
+        let rc: i32 = unsafe { proc_step(self.proc, 1) }.into();
+        if rc != 0 {
+            return Err(miette::miette!("spike trap during step (pc={:#010x})", self.pc()));
+        }
         Ok(())
     }
 }

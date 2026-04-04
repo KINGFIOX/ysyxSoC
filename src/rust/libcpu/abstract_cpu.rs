@@ -78,12 +78,8 @@ pub trait AbstractCpu {
     fn marchid(&self) -> u32;
     fn set_marchid(&mut self, value: u32) -> miette::Result<()>;
 
-    fn mem_load_u8(&self, addr: u32) -> miette::Result<u8>;
-    fn mem_load_u16(&self, addr: u32) -> miette::Result<u16>;
-    fn mem_load_u32(&self, addr: u32) -> miette::Result<u32>;
-    fn mem_store_u8(&mut self, addr: u32, value: u8) -> miette::Result<()>;
-    fn mem_store_u16(&mut self, addr: u32, value: u16) -> miette::Result<()>;
-    fn mem_store_u32(&mut self, addr: u32, value: u32) -> miette::Result<()>;
+    fn mem_load(&self, addr: u32, width: u8) -> miette::Result<u32>;
+    fn mem_store(&mut self, addr: u32, value: u32, width: u8) -> miette::Result<()>;
 
     fn reset(&mut self);
     fn step(&mut self) -> miette::Result<()>;

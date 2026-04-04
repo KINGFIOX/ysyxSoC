@@ -21,7 +21,7 @@ processor_t* sim_get_core(sim_t* sim, int index);
 
 // ============ processor_t ============
 
-void proc_step(processor_t* proc, uint64_t n);
+int proc_step(processor_t* proc, uint64_t n);
 void proc_reset(processor_t* proc);
 void proc_set_debug(processor_t* proc, bool value);
 uint32_t proc_get_id(const processor_t* proc);
@@ -41,9 +41,9 @@ void state_set_gpr(state_t* st, int index, uint64_t val);
 
 // ============ mmu_t ============
 
-uint8_t  mmu_load_u8(mmu_t* mmu, uint64_t addr);
-uint16_t mmu_load_u16(mmu_t* mmu, uint64_t addr);
-uint32_t mmu_load_u32(mmu_t* mmu, uint64_t addr);
-void mmu_store_u8(mmu_t* mmu, uint64_t addr, uint8_t val);
-void mmu_store_u16(mmu_t* mmu, uint64_t addr, uint16_t val);
-void mmu_store_u32(mmu_t* mmu, uint64_t addr, uint32_t val);
+int mmu_load_u8(mmu_t* mmu, uint64_t addr, uint8_t * payload);
+int mmu_load_u16(mmu_t* mmu, uint64_t addr, uint16_t * payload);
+int mmu_load_u32(mmu_t* mmu, uint64_t addr, uint32_t * payload);
+int mmu_store_u8(mmu_t* mmu, uint64_t addr, uint8_t val);
+int mmu_store_u16(mmu_t* mmu, uint64_t addr, uint16_t val);
+int mmu_store_u32(mmu_t* mmu, uint64_t addr, uint32_t val);

@@ -1,23 +1,20 @@
 #include "verilator_bridge.h"
 #include "VNPCSoC.h"
-#include "VNPCSoC___024root.h"
 #include "verilated.h"
 #include "verilated_fst_c.h"
-#include <csetjmp>
+#include <stdexcept>
+#include <string>
 
 __attribute__((weak)) double sc_time_stamp() { return 0; }
 
-static bool g_vl_stop_flag = false;
-static jmp_buf g_vl_stop_jmpbuf;
+struct vl_stop_exception : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 void vl_stop(const char* filename, int linenum, const char* hier) {
-    fprintf(stderr, "%%Error: %s:%d: Verilog $stop (in %s)\n", filename, linenum, hier);
-    g_vl_stop_flag = true;
-    longjmp(g_vl_stop_jmpbuf, 1);
+    throw vl_stop_exception(
+        std::string(filename) + ":" + std::to_string(linenum) + ": Verilog $stop (in " + hier + ")");
 }
-
-bool vl_stop_triggered() { return g_vl_stop_flag; }
-void vl_stop_clear() { g_vl_stop_flag = false; }
 
 // VerilatedContext
 
@@ -32,9 +29,13 @@ bool vl_context_got_finish(const VerilatedContext* ctx) { return ctx->gotFinish(
 
 VNPCSoC* vnpcsoc_new(VerilatedContext* ctx, const char* name) { return new VNPCSoC(ctx, name); }
 void vnpcsoc_delete(VNPCSoC* top) { top->final(); delete top; }
-void vnpcsoc_eval(VNPCSoC* top) {
-    if (setjmp(g_vl_stop_jmpbuf) == 0) {
+int vnpcsoc_eval(VNPCSoC* top) {
+    try {
         top->eval();
+        return 0;
+    } catch (const vl_stop_exception& e) {
+        fprintf(stderr, "%%Error: %s\n", e.what());
+        return 1;
     }
 }
 void vnpcsoc_final(VNPCSoC* top) { top->final(); }

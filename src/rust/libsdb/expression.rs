@@ -225,7 +225,7 @@ fn parse_unary<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
         }
         [Token::Star, rest @ ..] => {
             let (rest, addr) = parse_unary(rest, cpu)?;
-            let v = cpu.mem_load_u32(addr)?;
+            let v = cpu.mem_load(addr, 4)?;
             Ok((rest, v))
         }
         _ => parse_primary(t, cpu),
@@ -328,22 +328,10 @@ mod tests {
         fn set_marchid(&mut self, _: u32) -> miette::Result<()> {
             Ok(())
         }
-        fn mem_load_u8(&self, _: u32) -> miette::Result<u8> {
-            Ok(0)
-        }
-        fn mem_load_u16(&self, _: u32) -> miette::Result<u16> {
-            Ok(0)
-        }
-        fn mem_load_u32(&self, _: u32) -> miette::Result<u32> {
+        fn mem_load(&self, _: u32, _: u8) -> miette::Result<u32> {
             Ok(0x12345678)
         }
-        fn mem_store_u8(&mut self, _: u32, _: u8) -> miette::Result<()> {
-            Ok(())
-        }
-        fn mem_store_u16(&mut self, _: u32, _: u16) -> miette::Result<()> {
-            Ok(())
-        }
-        fn mem_store_u32(&mut self, _: u32, _: u32) -> miette::Result<()> {
+        fn mem_store(&mut self, _: u32, _: u32, _: u8) -> miette::Result<()> {
             Ok(())
         }
         fn reset(&mut self) {}

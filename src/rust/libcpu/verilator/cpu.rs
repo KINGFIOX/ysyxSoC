@@ -42,9 +42,7 @@ impl VerilatorCpu {
     fn tick(&mut self) -> miette::Result<()> {
         unsafe {
             vnpcsoc_set_clock(self.top, 0);
-            vnpcsoc_eval(self.top);
-            if vl_stop_triggered() {
-                vl_stop_clear();
+            if vnpcsoc_eval(self.top) != 0.into() {
                 return Err(miette::miette!("Verilator $stop triggered (assertion failure)"));
             }
             if let Some(tfp) = self.tfp {
@@ -53,9 +51,7 @@ impl VerilatorCpu {
             self.sim_time += 1;
 
             vnpcsoc_set_clock(self.top, 1);
-            vnpcsoc_eval(self.top);
-            if vl_stop_triggered() {
-                vl_stop_clear();
+            if vnpcsoc_eval(self.top) != 0.into() {
                 return Err(miette::miette!("Verilator $stop triggered (assertion failure)"));
             }
             if let Some(tfp) = self.tfp {
@@ -230,40 +226,40 @@ impl AbstractCpu for VerilatorCpu {
         Err(miette::Error::msg("dut should not call set_marchid"))
     }
 
-    fn mem_load_u8(&self, addr: u32) -> miette::Result<u8> {
-        self.mem.load_u8(addr)
+    fn mem_load(&self, addr: u32, width: u8) -> miette::Result<u32> {
+        match width {
+            1 => Ok(self.mem.load_u8(addr)? as u32),
+            2 => {
+                let b0 = self.mem.load_u8(addr)? as u32;
+                let b1 = self.mem.load_u8(addr + 1)? as u32;
+                Ok(b0 | (b1 << 8))
+            }
+            4 => {
+                let b0 = self.mem.load_u8(addr)? as u32;
+                let b1 = self.mem.load_u8(addr + 1)? as u32;
+                let b2 = self.mem.load_u8(addr + 2)? as u32;
+                let b3 = self.mem.load_u8(addr + 3)? as u32;
+                Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
+            }
+            _ => Err(miette::miette!("invalid load width: {width}")),
+        }
     }
 
-    fn mem_load_u16(&self, addr: u32) -> miette::Result<u16> {
-        let b0 = self.mem.load_u8(addr)? as u16;
-        let b1 = self.mem.load_u8(addr + 1)? as u16;
-        Ok(b0 | (b1 << 8))
-    }
-
-    fn mem_load_u32(&self, addr: u32) -> miette::Result<u32> {
-        let b0 = self.mem.load_u8(addr)? as u32;
-        let b1 = self.mem.load_u8(addr + 1)? as u32;
-        let b2 = self.mem.load_u8(addr + 2)? as u32;
-        let b3 = self.mem.load_u8(addr + 3)? as u32;
-        Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
-    }
-
-    fn mem_store_u8(&mut self, addr: u32, value: u8) -> miette::Result<()> {
-        self.mem.store_u8(addr, value)
-    }
-
-    fn mem_store_u16(&mut self, addr: u32, value: u16) -> miette::Result<()> {
-        self.mem.store_u8(addr, value as u8)?;
-        self.mem.store_u8(addr + 1, (value >> 8) as u8)?;
-        Ok(())
-    }
-
-    fn mem_store_u32(&mut self, addr: u32, value: u32) -> miette::Result<()> {
-        self.mem.store_u8(addr, value as u8)?;
-        self.mem.store_u8(addr + 1, (value >> 8) as u8)?;
-        self.mem.store_u8(addr + 2, (value >> 16) as u8)?;
-        self.mem.store_u8(addr + 3, (value >> 24) as u8)?;
-        Ok(())
+    fn mem_store(&mut self, addr: u32, value: u32, width: u8) -> miette::Result<()> {
+        match width {
+            1 => self.mem.store_u8(addr, value as u8),
+            2 => {
+                self.mem.store_u8(addr, value as u8)?;
+                self.mem.store_u8(addr + 1, (value >> 8) as u8)
+            }
+            4 => {
+                self.mem.store_u8(addr, value as u8)?;
+                self.mem.store_u8(addr + 1, (value >> 8) as u8)?;
+                self.mem.store_u8(addr + 2, (value >> 16) as u8)?;
+                self.mem.store_u8(addr + 3, (value >> 24) as u8)
+            }
+            _ => Err(miette::miette!("invalid store width: {width}")),
+        }
     }
 
     fn reset(&mut self) {
