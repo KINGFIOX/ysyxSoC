@@ -17,8 +17,8 @@ object CSROpType extends ChiselEnum {
 }
 
 object InstType extends ChiselEnum {
-  val INVALID, R_ALU, I_ALU, JALR, LOAD, STORE, BRANCH, JAL, LUI, AUIPC, ECALL,
-      EBREAK, MRET, CSR = Value
+  val INVALID, R_ALU, I_ALU, R_ALU_W, I_ALU_W, JALR, LOAD, STORE, BRANCH, JAL,
+      LUI, AUIPC, ECALL, EBREAK, MRET, CSR = Value
 }
 
 class CUOutputBase extends NPCBundle {
@@ -70,16 +70,18 @@ object CU {
   // format: on
 
   // format: off
-  private val OP_R      = "0110011" // R-type                      -> ALU
-  private val OP_I_ALU  = "0010011" // I-type                      -> ALU
-  private val OP_JALR   = "1100111" // JALR                        -> ALU
-  private val OP_LOAD   = "0000011" // Load                        -> AGU
-  private val OP_STORE  = "0100011" // Store                       -> AGU
-  private val OP_BRANCH = "1100011" // Branch                      -> BRU
-  private val OP_JAL    = "1101111" // JAL                         -> dispatch_resolved
-  private val OP_LUI    = "0110111" // LUI                         -> dispatch_resolved
-  private val OP_AUIPC  = "0010111" // AUIPC                       -> dispatch_resolved
-  private val OP_SYSTEM = "1110011" // ECALL / EBREAK / MRET / CSR -> 
+  private val OP_R       = "0110011" // R-type                      -> ALU
+  private val OP_I_ALU   = "0010011" // I-type                      -> ALU
+  private val OP_R_W     = "0111011" // RV64 R-type *W              -> ALU (32-bit op)
+  private val OP_I_ALU_W = "0011011" // RV64 I-type *W              -> ALU (32-bit op)
+  private val OP_JALR    = "1100111" // JALR                        -> ALU
+  private val OP_LOAD    = "0000011" // Load                        -> AGU
+  private val OP_STORE   = "0100011" // Store                       -> AGU
+  private val OP_BRANCH  = "1100011" // Branch                      -> BRU
+  private val OP_JAL     = "1101111" // JAL                         -> dispatch_resolved
+  private val OP_LUI     = "0110111" // LUI                         -> dispatch_resolved
+  private val OP_AUIPC   = "0010111" // AUIPC                       -> dispatch_resolved
+  private val OP_SYSTEM  = "1110011" // ECALL / EBREAK / MRET / CSR -> 
   // format: on
 
   // ==================== 指令表 (纯编码信息) ====================
@@ -102,21 +104,35 @@ object CU {
     InstPattern(func3 = BitPat("b111"), opcode = BitPat("b0010011")), // ANDI
     InstPattern(func3 = BitPat("b110"), opcode = BitPat("b0010011")), // ORI
     InstPattern(func3 = BitPat("b100"), opcode = BitPat("b0010011")), // XORI
-    InstPattern( func7 = BitPat("b000000?"), func3 = BitPat("b001"), opcode = BitPat("b0010011")), // SLLI
-    InstPattern( func7 = BitPat("b000000?"), func3 = BitPat("b101"), opcode = BitPat("b0010011")), // SRLI
-    InstPattern( func7 = BitPat("b010000?"), func3 = BitPat("b101"), opcode = BitPat("b0010011")), // SRAI
+    InstPattern( func7 = BitPat("b000000?"), func3 = BitPat("b001"), opcode = BitPat("b0010011")), // SLLI (RV64: shamt[5:0])
+    InstPattern( func7 = BitPat("b000000?"), func3 = BitPat("b101"), opcode = BitPat("b0010011")), // SRLI (RV64: shamt[5:0])
+    InstPattern( func7 = BitPat("b010000?"), func3 = BitPat("b101"), opcode = BitPat("b0010011")), // SRAI (RV64: shamt[5:0])
     InstPattern(func3 = BitPat("b010"), opcode = BitPat("b0010011")), // SLTI
     InstPattern(func3 = BitPat("b011"), opcode = BitPat("b0010011")), // SLTIU
+    // RV64 I-type ALU *W (func3 + opcode, ADDIW; shift needs func7)
+    InstPattern(func3 = BitPat("b000"), opcode = BitPat("b0011011")), // ADDIW
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b001"), opcode = BitPat("b0011011")), // SLLIW
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b101"), opcode = BitPat("b0011011")), // SRLIW
+    InstPattern( func7 = BitPat("b0100000"), func3 = BitPat("b101"), opcode = BitPat("b0011011")), // SRAIW
+    // RV64 R-type *W (func7 + func3 + opcode)
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b000"), opcode = BitPat("b0111011")), // ADDW
+    InstPattern( func7 = BitPat("b0100000"), func3 = BitPat("b000"), opcode = BitPat("b0111011")), // SUBW
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b001"), opcode = BitPat("b0111011")), // SLLW
+    InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b101"), opcode = BitPat("b0111011")), // SRLW
+    InstPattern( func7 = BitPat("b0100000"), func3 = BitPat("b101"), opcode = BitPat("b0111011")), // SRAW
     // Load (func3 + opcode)
     InstPattern(func3 = BitPat("b000"), opcode = BitPat("b0000011")), // LB
     InstPattern(func3 = BitPat("b001"), opcode = BitPat("b0000011")), // LH
     InstPattern(func3 = BitPat("b010"), opcode = BitPat("b0000011")), // LW
+    InstPattern(func3 = BitPat("b011"), opcode = BitPat("b0000011")), // LD
     InstPattern(func3 = BitPat("b100"), opcode = BitPat("b0000011")), // LBU
     InstPattern(func3 = BitPat("b101"), opcode = BitPat("b0000011")), // LHU
+    InstPattern(func3 = BitPat("b110"), opcode = BitPat("b0000011")), // LWU
     // Store (func3 + opcode)
     InstPattern(func3 = BitPat("b000"), opcode = BitPat("b0100011")), // SB
     InstPattern(func3 = BitPat("b001"), opcode = BitPat("b0100011")), // SH
     InstPattern(func3 = BitPat("b010"), opcode = BitPat("b0100011")), // SW
+    InstPattern(func3 = BitPat("b011"), opcode = BitPat("b0100011")), // SD
     // Branch (func3 + opcode)
     InstPattern(func3 = BitPat("b000"), opcode = BitPat("b1100011")), // BEQ
     InstPattern(func3 = BitPat("b001"), opcode = BitPat("b1100011")), // BNE
@@ -148,15 +164,17 @@ object CU {
     def chiselType = UInt(log2Ceil(InstType.all.length).W)
     private def bp(v: InstType.Type): BitPat = litBP(v.litValue, width)
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R      => bp(InstType.R_ALU)
-      case OP_I_ALU  => bp(InstType.I_ALU)
-      case OP_JALR   => bp(InstType.JALR)
-      case OP_LOAD   => bp(InstType.LOAD)
-      case OP_STORE  => bp(InstType.STORE)
-      case OP_BRANCH => bp(InstType.BRANCH)
-      case OP_JAL    => bp(InstType.JAL)
-      case OP_LUI    => bp(InstType.LUI)
-      case OP_AUIPC  => bp(InstType.AUIPC)
+      case OP_R       => bp(InstType.R_ALU)
+      case OP_I_ALU   => bp(InstType.I_ALU)
+      case OP_R_W     => bp(InstType.R_ALU_W)
+      case OP_I_ALU_W => bp(InstType.I_ALU_W)
+      case OP_JALR    => bp(InstType.JALR)
+      case OP_LOAD    => bp(InstType.LOAD)
+      case OP_STORE   => bp(InstType.STORE)
+      case OP_BRANCH  => bp(InstType.BRANCH)
+      case OP_JAL     => bp(InstType.JAL)
+      case OP_LUI     => bp(InstType.LUI)
+      case OP_AUIPC   => bp(InstType.AUIPC)
       case OP_SYSTEM =>
         (op.func7.rawString, op.rs2.rawString, op.func3.rawString) match {
           case ("0000000", "00000", "000") => bp(InstType.ECALL)
@@ -200,6 +218,21 @@ object CU {
           case ("010000?", "101") => bp(ALUOpType.alu_SRA)  // SRAI
           case _                  => dc
         }
+      case OP_R_W => (op.func7.rawString, op.func3.rawString) match {
+          case ("0000000", "000") => bp(ALUOpType.alu_ADDW)
+          case ("0100000", "000") => bp(ALUOpType.alu_SUBW)
+          case ("0000000", "001") => bp(ALUOpType.alu_SLLW)
+          case ("0000000", "101") => bp(ALUOpType.alu_SRLW)
+          case ("0100000", "101") => bp(ALUOpType.alu_SRAW)
+          case _                  => dc
+        }
+      case OP_I_ALU_W => (op.func7.rawString, op.func3.rawString) match {
+          case (_, "000")         => bp(ALUOpType.alu_ADDW)  // ADDIW
+          case ("0000000", "001") => bp(ALUOpType.alu_SLLW)  // SLLIW
+          case ("0000000", "101") => bp(ALUOpType.alu_SRLW)  // SRLIW
+          case ("0100000", "101") => bp(ALUOpType.alu_SRAW)  // SRAIW
+          case _                  => dc
+        }
       case OP_JALR => bp(ALUOpType.alu_ADD)
       case OP_SYSTEM => op.func3.rawString match {
         case "001" | "010" => bp(ALUOpType.alu_ADD)
@@ -216,12 +249,12 @@ object CU {
     def chiselType = UInt(log2Ceil(ImmType.all.length).W)
     private def bp(v: ImmType.Type): BitPat = litBP(v.litValue, width)
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_I_ALU | OP_LOAD | OP_JALR | OP_SYSTEM => bp(ImmType.IMM_I)
-      case OP_STORE                                 => bp(ImmType.IMM_S)
-      case OP_BRANCH                                => bp(ImmType.IMM_B)
-      case OP_LUI | OP_AUIPC                        => bp(ImmType.IMM_U)
-      case OP_JAL                                   => bp(ImmType.IMM_J)
-      case _                                        => dc
+      case OP_I_ALU | OP_I_ALU_W | OP_LOAD | OP_JALR | OP_SYSTEM => bp(ImmType.IMM_I)
+      case OP_STORE                                               => bp(ImmType.IMM_S)
+      case OP_BRANCH                                              => bp(ImmType.IMM_B)
+      case OP_LUI | OP_AUIPC                                     => bp(ImmType.IMM_U)
+      case OP_JAL                                                 => bp(ImmType.IMM_J)
+      case _                                                      => dc
     }
   }
   // format: on
@@ -259,8 +292,10 @@ object CU {
           case "000" => bp(0) // LB
           case "001" => bp(1) // LH
           case "010" => bp(2) // LW
+          case "011" => bp(3) // LD
           case "100" => bp(0) // LBU
           case "101" => bp(1) // LHU
+          case "110" => bp(2) // LWU
           case _     => dc
         }
       case OP_STORE =>
@@ -268,6 +303,7 @@ object CU {
           case "000" => bp(0) // SB
           case "001" => bp(1) // SH
           case "010" => bp(2) // SW
+          case "011" => bp(3) // SD
           case _     => dc
         }
       case _ => dc
@@ -283,6 +319,7 @@ object CU {
         op.func3.rawString match {
           case "100" => n // lbu — zero extend
           case "101" => n // lhu — zero extend
+          case "110" => n // lwu — zero extend
           case _     => y
         }
       case _ => n

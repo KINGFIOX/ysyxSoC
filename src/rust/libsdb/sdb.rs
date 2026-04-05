@@ -90,7 +90,7 @@ const COMMANDS: &[CommandDef] = &[
 
 #[allow(unused)]
 pub struct Sdb<'a> {
-    breakpoints: Vec<u32>,
+    breakpoints: Vec<u64>,
     watchpoints: WatchpointPool,
     last_cmd: Option<String>,
     scoreboard: &'a mut ScoreBoard,
@@ -232,7 +232,7 @@ impl<'a> Sdb<'a> {
         let pc = dut.pc();
         for &bp in &self.breakpoints {
             if pc == bp {
-                info!("breakpoint hit at {pc:#010x}");
+                info!("breakpoint hit at {pc:#018x}");
                 return true;
             }
         }
@@ -273,9 +273,9 @@ fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     let sub = args.trim();
     match sub {
         "r" | "registers" | "reg" => {
-            let mut buf = format!("pc  = {:#010x}\n", dut.pc());
+            let mut buf = format!("pc  = {:#018x}\n", dut.pc());
             for i in 0..32 {
-                let _ = write!(buf, "{:4} = {:#010x}  ", GPR_NAMES[i], dut.gpr(i).unwrap());
+                let _ = write!(buf, "{:4} = {:#018x}  ", GPR_NAMES[i], dut.gpr(i).unwrap());
                 if (i + 1) % 4 == 0 {
                     buf.push('\n');
                 }
@@ -293,7 +293,7 @@ fn cmd_info(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
             } else {
                 let mut buf = String::new();
                 for (i, &bp) in sdb.breakpoints.iter().enumerate() {
-                    let _ = writeln!(buf, "  #{}: {bp:#010x}", i + 1);
+                    let _ = writeln!(buf, "  #{}: {bp:#018x}", i + 1);
                 }
                 info!("{buf}");
             }
@@ -317,16 +317,16 @@ fn cmd_examine(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult 
 
     let mut buf = String::new();
     for i in 0..n {
-        let a = addr.wrapping_add((i as u32) * 4);
+        let a = addr.wrapping_add((i as u64) * 4);
         if i % 4 == 0 {
-            let _ = write!(buf, "{a:#010x}:");
+            let _ = write!(buf, "{a:#018x}:");
         }
         match dut.mem_load(a, 4) {
             Ok(val) => {
-                let _ = write!(buf, "  {val:#010x}");
+                let _ = write!(buf, "  {val:#018x}");
             }
             Err(_) => {
-                let _ = write!(buf, "  ??????????");
+                let _ = write!(buf, "  ??????????????????");
             }
         }
         if (i + 1) % 4 == 0 || i + 1 == n {
@@ -343,7 +343,7 @@ fn cmd_print(args: &str, _sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     }
     let val = expression::eval(args.trim(), dut)
         .map_err(|e| SdbError::Input(format!("expression error: {e}")))?;
-    info!("{val:#010x} ({val})");
+    info!("{val:#018x} ({val})");
     Ok(Action::Continue)
 }
 
@@ -387,7 +387,7 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
             } else {
                 let mut buf = String::new();
                 for (i, &bp) in sdb.breakpoints.iter().enumerate() {
-                    let _ = writeln!(buf, "  #{}: {bp:#010x}", i + 1);
+                    let _ = writeln!(buf, "  #{}: {bp:#018x}", i + 1);
                 }
                 info!("{buf}");
             }
@@ -400,7 +400,7 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
                 _ => return Err(SdbError::Input("usage: b rm N".into())),
             };
             let addr = sdb.breakpoints.remove(idx);
-            info!("deleted breakpoint #{} at {addr:#010x}", idx + 1);
+            info!("deleted breakpoint #{} at {addr:#018x}", idx + 1);
             return Ok(Action::Continue);
         }
         _ => {}
@@ -409,7 +409,7 @@ fn cmd_break(args: &str, sdb: &mut Sdb, dut: &mut VerilatorCpu) -> CmdResult {
     let addr = expression::eval(expr, dut)
         .map_err(|e| SdbError::Input(format!("expression error: {e}")))?;
     sdb.breakpoints.push(addr);
-    info!("breakpoint #{} at {addr:#010x}", sdb.breakpoints.len());
+    info!("breakpoint #{} at {addr:#018x}", sdb.breakpoints.len());
     Ok(Action::Continue)
 }
 

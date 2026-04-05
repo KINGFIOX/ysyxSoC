@@ -32,19 +32,19 @@ class IGU extends NPCModule {
   private val inst = io.in.inst_31_7
 
   // I-type: imm[11:0] = 原inst[31:20] = inst[24:13]
-  private val immI = Cat(Fill(20, inst(24)) /*符号拓展*/, inst(24, 13))
+  private val immI = Cat(Fill(dataBits - 12, inst(24)), inst(24, 13))
 
   // S-type: imm[11:0] = {原inst[31:25], 原inst[11:7]} = {inst[24:18], inst[4:0]}
-  private val immS = Cat(Fill(20, inst(24)), inst(24, 18), inst(4, 0))
+  private val immS = Cat(Fill(dataBits - 12, inst(24)), inst(24, 18), inst(4, 0))
 
   // B-type: imm[12:1] = {原inst[31], 原inst[7], 原inst[30:25], 原inst[11:8]} = {inst[24], inst[0], inst[23:18], inst[4:1]}
-  private val immB = Cat(Fill(19, inst(24)), inst(24), inst(0), inst(23, 18), inst(4, 1), 0.U(1.W))
+  private val immB = Cat(Fill(dataBits - 13, inst(24)), inst(24), inst(0), inst(23, 18), inst(4, 1), 0.U(1.W))
 
-  // U-type: imm[31:12] = 原inst[31:12] = inst[24:5], imm[11:0] = 0
-  private val immU = Cat(inst(24, 5), 0.U(12.W))
+  // U-type: imm[31:12] = 原inst[31:12] = inst[24:5], imm[11:0] = 0 (RV64: sign-extend bit 31 to 64)
+  private val immU = Cat(Fill(dataBits - 32, inst(24)), inst(24, 5), 0.U(12.W))
 
   // J-type: imm[20:1] = {原inst[31], 原inst[19:12], 原inst[20], 原inst[30:21]} = {inst[24], inst[12:5], inst[13], inst[23:14]}
-  private val immJ = Cat(Fill(11, inst(24)), inst(24), inst(12, 5), inst(13), inst(23, 14), 0.U(1.W))
+  private val immJ = Cat(Fill(dataBits - 21, inst(24)), inst(24), inst(12, 5), inst(13), inst(23, 14), 0.U(1.W))
 
   io.out.imm := MuxCase(
     0.U,

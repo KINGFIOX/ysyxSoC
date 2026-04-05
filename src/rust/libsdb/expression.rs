@@ -6,7 +6,7 @@ use crate::libcpu::abstract_cpu::AbstractCpu;
 // ── Tokenizer ──
 
 pub enum Token {
-    Num(u32),
+    Num(u64),
     Reg(String),
     Plus,
     Minus,
@@ -41,7 +41,7 @@ pub fn tokenize(input: &str) -> miette::Result<Vec<Token>> {
                     &s[..2]
                 )));
             }
-            let v = u32::from_str_radix(&rest[..end], 16)
+            let v = u64::from_str_radix(&rest[..end], 16)
                 .map_err(|e| miette::Error::msg(format!("bad hex number: {e}")))?;
             tokens.push(Token::Num(v));
             s = &rest[end..];
@@ -50,7 +50,7 @@ pub fn tokenize(input: &str) -> miette::Result<Vec<Token>> {
 
         if s.starts_with(|c: char| c.is_ascii_digit()) {
             let end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
-            let v: u32 = s[..end]
+            let v: u64 = s[..end]
                 .parse()
                 .map_err(|e| miette::Error::msg(format!("bad number: {e}")))?;
             tokens.push(Token::Num(v));
@@ -111,7 +111,7 @@ pub fn tokenize(input: &str) -> miette::Result<Vec<Token>> {
 
 // ── Parser (recursive descent on token slice) ──
 
-type Res<'a> = miette::Result<(&'a [Token], u32)>;
+type Res<'a> = miette::Result<(&'a [Token], u64)>;
 
 fn parse_or<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
     let (mut t, mut acc) = parse_and(t, cpu)?;
@@ -119,7 +119,7 @@ fn parse_or<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
         match t {
             [Token::Or, rest @ ..] => {
                 let (rest, v) = parse_and(rest, cpu)?;
-                acc = u32::from(acc != 0 || v != 0);
+                acc = u64::from(acc != 0 || v != 0);
                 t = rest;
             }
             _ => return Ok((t, acc)),
@@ -133,7 +133,7 @@ fn parse_and<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
         match t {
             [Token::And, rest @ ..] => {
                 let (rest, v) = parse_eq(rest, cpu)?;
-                acc = u32::from(acc != 0 && v != 0);
+                acc = u64::from(acc != 0 && v != 0);
                 t = rest;
             }
             _ => return Ok((t, acc)),
@@ -147,12 +147,12 @@ fn parse_eq<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
         match t {
             [Token::Eq, rest @ ..] => {
                 let (rest, v) = parse_cmp(rest, cpu)?;
-                acc = u32::from(acc == v);
+                acc = u64::from(acc == v);
                 t = rest;
             }
             [Token::Ne, rest @ ..] => {
                 let (rest, v) = parse_cmp(rest, cpu)?;
-                acc = u32::from(acc != v);
+                acc = u64::from(acc != v);
                 t = rest;
             }
             _ => return Ok((t, acc)),
@@ -163,7 +163,7 @@ fn parse_eq<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
 fn parse_cmp<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
     let (mut t, mut acc) = parse_add(t, cpu)?;
     loop {
-        let cmp: fn(i32, i32) -> bool = match t.first() {
+        let cmp: fn(i64, i64) -> bool = match t.first() {
             Some(Token::Lt) => |a, b| a < b,
             Some(Token::Le) => |a, b| a <= b,
             Some(Token::Gt) => |a, b| a > b,
@@ -171,7 +171,7 @@ fn parse_cmp<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
             _ => return Ok((t, acc)),
         };
         let (rest, v) = parse_add(&t[1..], cpu)?;
-        acc = u32::from(cmp(acc as i32, v as i32));
+        acc = u64::from(cmp(acc as i64, v as i64));
         t = rest;
     }
 }
@@ -209,7 +209,7 @@ fn parse_mul<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
                 if v == 0 {
                     return Err(miette::Error::msg("division by zero"));
                 }
-                acc = (acc as i32).wrapping_div(v as i32) as u32;
+                acc = (acc as i64).wrapping_div(v as i64) as u64;
                 t = rest;
             }
             _ => return Ok((t, acc)),
@@ -221,7 +221,7 @@ fn parse_unary<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
     match t {
         [Token::Minus, rest @ ..] => {
             let (rest, v) = parse_unary(rest, cpu)?;
-            Ok((rest, 0u32.wrapping_sub(v)))
+            Ok((rest, 0u64.wrapping_sub(v)))
         }
         [Token::Star, rest @ ..] => {
             let (rest, addr) = parse_unary(rest, cpu)?;
@@ -254,7 +254,7 @@ fn parse_primary<'a>(t: &'a [Token], cpu: &dyn AbstractCpu) -> Res<'a> {
 
 // ── Public API ──
 
-pub fn eval_tokens(tokens: &[Token], cpu: &dyn AbstractCpu) -> miette::Result<u32> {
+pub fn eval_tokens(tokens: &[Token], cpu: &dyn AbstractCpu) -> miette::Result<u64> {
     let (rest, val) = parse_or(tokens, cpu)?;
     if !rest.is_empty() {
         return Err(miette::Error::msg("unexpected trailing tokens"));
@@ -262,7 +262,7 @@ pub fn eval_tokens(tokens: &[Token], cpu: &dyn AbstractCpu) -> miette::Result<u3
     Ok(val)
 }
 
-pub fn eval(expr: &str, cpu: &dyn AbstractCpu) -> miette::Result<u32> {
+pub fn eval(expr: &str, cpu: &dyn AbstractCpu) -> miette::Result<u64> {
     let tokens = tokenize(expr)?;
     eval_tokens(&tokens, cpu)
 }
@@ -274,64 +274,64 @@ mod tests {
     struct DummyCpu;
 
     impl AbstractCpu for DummyCpu {
-        fn pc(&self) -> u32 {
+        fn pc(&self) -> u64 {
             0x80000000
         }
-        fn set_pc(&mut self, _: u32) -> miette::Result<()> {
+        fn set_pc(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn gpr(&self, index: usize) -> miette::Result<u32> {
-            Ok((index as u32) * 10)
+        fn gpr(&self, index: usize) -> miette::Result<u64> {
+            Ok((index as u64) * 10)
         }
-        fn set_gpr(&mut self, _: usize, _: u32) -> miette::Result<()> {
+        fn set_gpr(&mut self, _: usize, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn mstatus(&self) -> u32 {
+        fn mstatus(&self) -> u64 {
             0
         }
-        fn set_mstatus(&mut self, _: u32) -> miette::Result<()> {
+        fn set_mstatus(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn mtvec(&self) -> u32 {
+        fn mtvec(&self) -> u64 {
             0
         }
-        fn set_mtvec(&mut self, _: u32) -> miette::Result<()> {
+        fn set_mtvec(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn mepc(&self) -> u32 {
+        fn mepc(&self) -> u64 {
             0
         }
-        fn set_mepc(&mut self, _: u32) -> miette::Result<()> {
+        fn set_mepc(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn mcause(&self) -> u32 {
+        fn mcause(&self) -> u64 {
             0
         }
-        fn set_mcause(&mut self, _: u32) -> miette::Result<()> {
+        fn set_mcause(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn mtval(&self) -> u32 {
+        fn mtval(&self) -> u64 {
             0
         }
-        fn set_mtval(&mut self, _: u32) -> miette::Result<()> {
+        fn set_mtval(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn mvendorid(&self) -> u32 {
+        fn mvendorid(&self) -> u64 {
             0
         }
-        fn set_mvendorid(&mut self, _: u32) -> miette::Result<()> {
+        fn set_mvendorid(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn marchid(&self) -> u32 {
+        fn marchid(&self) -> u64 {
             0
         }
-        fn set_marchid(&mut self, _: u32) -> miette::Result<()> {
+        fn set_marchid(&mut self, _: u64) -> miette::Result<()> {
             Ok(())
         }
-        fn mem_load(&self, _: u32, _: u8) -> miette::Result<u32> {
+        fn mem_load(&self, _: u64, _: u8) -> miette::Result<u64> {
             Ok(0x12345678)
         }
-        fn mem_store(&mut self, _: u32, _: u32, _: u8) -> miette::Result<()> {
+        fn mem_store(&mut self, _: u64, _: u64, _: u8) -> miette::Result<()> {
             Ok(())
         }
         fn reset(&mut self) {}
@@ -354,9 +354,9 @@ mod tests {
     #[test]
     fn test_unary() {
         let cpu = DummyCpu;
-        assert_eq!(eval("-1", &cpu).unwrap(), (-1i32) as u32);
+        assert_eq!(eval("-1", &cpu).unwrap(), (-1i64) as u64);
         assert_eq!(eval("--1", &cpu).unwrap(), 1);
-        assert_eq!(eval("-(3 + 4)", &cpu).unwrap(), (-7i32) as u32);
+        assert_eq!(eval("-(3 + 4)", &cpu).unwrap(), (-7i64) as u64);
     }
 
     #[test]

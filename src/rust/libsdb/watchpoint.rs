@@ -8,7 +8,7 @@ pub struct Watchpoint {
     pub id: usize,
     pub expr_str: String,
     pub tokens: Vec<Token>,
-    pub last_value: u32,
+    pub last_value: u64,
 }
 
 pub struct WatchpointPool {
@@ -61,7 +61,7 @@ impl WatchpointPool {
                     if new_val != wp.last_value {
                         let _ = writeln!(
                             out,
-                            "watchpoint {}: {} changed from {:#010x} to {:#010x}",
+                            "watchpoint {}: {} changed from {:#018x} to {:#018x}",
                             wp.id, wp.expr_str, wp.last_value, new_val
                         );
                         wp.last_value = new_val;
@@ -85,7 +85,7 @@ impl WatchpointPool {
         for wp in &self.watchpoints {
             let _ = writeln!(
                 out,
-                "  #{}: {} = {:#010x}",
+                "  #{}: {} = {:#018x}",
                 wp.id, wp.expr_str, wp.last_value
             );
         }

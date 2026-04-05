@@ -36,34 +36,37 @@ class FrontEnd extends NPCModule {
     state === State.sInit && !reset.asBool
   )
 
-  // spike_fe_fetch_and_step(handle) -> packed {npc[63:32], inst[31:0]}, all-1 on failure
+  // spike_fe_fetch_and_step(handle) -> 128-bit packed struct:
+  //   bits[31:0]   = ok (non-zero on success)
+  //   bits[63:32]  = inst
+  //   bits[127:64] = npc
   val fetchResult =
-    RawClockedNonVoidFunctionCall("spike_fe_fetch_and_step", UInt(64.W))(
+    RawClockedNonVoidFunctionCall("spike_fe_fetch_and_step", UInt(128.W))(
       clock,
       fetchEn,
       handle
     )
-  val fetchOk = fetchResult =/= ~(0.U(64.W))
-  val fetchInst = fetchResult(31, 0)
-  val fetchNpc = fetchResult(63, 32)
+  val fetchOk = fetchResult(31, 0) =/= 0.U
+  val fetchInst = fetchResult(63, 32)
+  val fetchNpc = fetchResult(127, 64)
 
-  // spike_fe_set_gpr(handle, idx, val) x 32
+  // spike_fe_set_gpr(handle, idx, val) x 32 — val is 64-bit
   for (i <- 0 until NRReg) {
     RawClockedVoidFunctionCall("spike_fe_set_gpr")(
       clock,
       flushEn,
       handle,
       i.U(32.W),
-      flush_gpr(i)
+      flush_gpr(i).asUInt.pad(64)
     )
   }
 
-  // spike_fe_set_pc(handle, pc)
+  // spike_fe_set_pc(handle, pc) — pc is 64-bit
   RawClockedVoidFunctionCall("spike_fe_set_pc")(
     clock,
     flushEn,
     handle,
-    saved_dnpc
+    saved_dnpc.asUInt.pad(64)
   )
 
   // Output defaults

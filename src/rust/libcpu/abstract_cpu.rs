@@ -8,13 +8,13 @@ pub const CSR_MARCHID: u16 = 0x0F12;
 
 #[allow(dead_code)]
 pub trait AbstractCpu {
-    fn pc(&self) -> u32;
-    fn set_pc(&mut self, value: u32) -> miette::Result<()>;
+    fn pc(&self) -> u64;
+    fn set_pc(&mut self, value: u64) -> miette::Result<()>;
 
-    fn gpr(&self, index: usize) -> miette::Result<u32>;
-    fn set_gpr(&mut self, index: usize, value: u32) -> miette::Result<()>;
+    fn gpr(&self, index: usize) -> miette::Result<u64>;
+    fn set_gpr(&mut self, index: usize, value: u64) -> miette::Result<()>;
 
-    fn value(&self, name: &str) -> miette::Result<u32> {
+    fn value(&self, name: &str) -> miette::Result<u64> {
         match name {
             "pc" => Ok(self.pc()),
             "mstatus" => Ok(self.mstatus()),
@@ -63,23 +63,23 @@ pub trait AbstractCpu {
         }
     }
 
-    fn mstatus(&self) -> u32;
-    fn set_mstatus(&mut self, value: u32) -> miette::Result<()>;
-    fn mtvec(&self) -> u32;
-    fn set_mtvec(&mut self, value: u32) -> miette::Result<()>;
-    fn mepc(&self) -> u32;
-    fn set_mepc(&mut self, value: u32) -> miette::Result<()>;
-    fn mcause(&self) -> u32;
-    fn set_mcause(&mut self, value: u32) -> miette::Result<()>;
-    fn mtval(&self) -> u32;
-    fn set_mtval(&mut self, value: u32) -> miette::Result<()>;
-    fn mvendorid(&self) -> u32;
-    fn set_mvendorid(&mut self, value: u32) -> miette::Result<()>;
-    fn marchid(&self) -> u32;
-    fn set_marchid(&mut self, value: u32) -> miette::Result<()>;
+    fn mstatus(&self) -> u64;
+    fn set_mstatus(&mut self, value: u64) -> miette::Result<()>;
+    fn mtvec(&self) -> u64;
+    fn set_mtvec(&mut self, value: u64) -> miette::Result<()>;
+    fn mepc(&self) -> u64;
+    fn set_mepc(&mut self, value: u64) -> miette::Result<()>;
+    fn mcause(&self) -> u64;
+    fn set_mcause(&mut self, value: u64) -> miette::Result<()>;
+    fn mtval(&self) -> u64;
+    fn set_mtval(&mut self, value: u64) -> miette::Result<()>;
+    fn mvendorid(&self) -> u64;
+    fn set_mvendorid(&mut self, value: u64) -> miette::Result<()>;
+    fn marchid(&self) -> u64;
+    fn set_marchid(&mut self, value: u64) -> miette::Result<()>;
 
-    fn mem_load(&self, addr: u32, width: u8) -> miette::Result<u32>;
-    fn mem_store(&mut self, addr: u32, value: u32, width: u8) -> miette::Result<()>;
+    fn mem_load(&self, addr: u64, width: u8) -> miette::Result<u64>;
+    fn mem_store(&mut self, addr: u64, value: u64, width: u8) -> miette::Result<()>;
 
     fn reset(&mut self);
     fn step(&mut self) -> miette::Result<()>;

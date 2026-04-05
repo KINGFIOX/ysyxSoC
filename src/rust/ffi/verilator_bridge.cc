@@ -45,10 +45,10 @@ void vnpcsoc_set_reset(VNPCSoC* top, uint8_t val) { top->reset = val; }
 
 uint8_t  vnpcsoc_get_probe_valid(const VNPCSoC* top)  { return top->probe_valid; }
 uint8_t  vnpcsoc_get_probe_is_mmio(const VNPCSoC* top)  { return top->probe_bits_is_mmio; }
-uint32_t vnpcsoc_get_probe_pc(const VNPCSoC* top)      { return top->probe_bits_pc; }
-uint32_t vnpcsoc_get_probe_dnpc(const VNPCSoC* top)    { return top->probe_bits_dnpc; }
+uint64_t vnpcsoc_get_probe_pc(const VNPCSoC* top)      { return top->probe_bits_pc; }
+uint64_t vnpcsoc_get_probe_dnpc(const VNPCSoC* top)    { return top->probe_bits_dnpc; }
 uint32_t vnpcsoc_get_probe_inst(const VNPCSoC* top)    { return top->probe_bits_inst; }
-uint32_t vnpcsoc_get_probe_gpr(const VNPCSoC* top, int index) {
+uint64_t vnpcsoc_get_probe_gpr(const VNPCSoC* top, int index) {
     switch (index) {
         case  0: return top->probe_bits_gpr_0;  case  1: return top->probe_bits_gpr_1;
         case  2: return top->probe_bits_gpr_2;  case  3: return top->probe_bits_gpr_3;
@@ -69,13 +69,13 @@ uint32_t vnpcsoc_get_probe_gpr(const VNPCSoC* top, int index) {
         default: return 0;
     }
 }
-uint32_t vnpcsoc_get_probe_csr_mstatus(const VNPCSoC* top)   { return top->probe_bits_csr_mstatus; }
-uint32_t vnpcsoc_get_probe_csr_mtvec(const VNPCSoC* top)     { return top->probe_bits_csr_mtvec; }
-uint32_t vnpcsoc_get_probe_csr_mepc(const VNPCSoC* top)      { return top->probe_bits_csr_mepc; }
-uint32_t vnpcsoc_get_probe_csr_mcause(const VNPCSoC* top)    { return top->probe_bits_csr_mcause; }
-uint32_t vnpcsoc_get_probe_csr_mtval(const VNPCSoC* top)     { return top->probe_bits_csr_mtval; }
-uint32_t vnpcsoc_get_probe_csr_mvendorid(const VNPCSoC* top) { return top->probe_bits_csr_mvendorid; }
-uint32_t vnpcsoc_get_probe_csr_marchid(const VNPCSoC* top)   { return top->probe_bits_csr_marchid; }
+uint64_t vnpcsoc_get_probe_csr_mstatus(const VNPCSoC* top)   { return top->probe_bits_csr_mstatus; }
+uint64_t vnpcsoc_get_probe_csr_mtvec(const VNPCSoC* top)     { return top->probe_bits_csr_mtvec; }
+uint64_t vnpcsoc_get_probe_csr_mepc(const VNPCSoC* top)      { return top->probe_bits_csr_mepc; }
+uint64_t vnpcsoc_get_probe_csr_mcause(const VNPCSoC* top)    { return top->probe_bits_csr_mcause; }
+uint64_t vnpcsoc_get_probe_csr_mtval(const VNPCSoC* top)     { return top->probe_bits_csr_mtval; }
+uint64_t vnpcsoc_get_probe_csr_mvendorid(const VNPCSoC* top) { return top->probe_bits_csr_mvendorid; }
+uint64_t vnpcsoc_get_probe_csr_marchid(const VNPCSoC* top)   { return top->probe_bits_csr_marchid; }
 
 uint32_t vnpcsoc_get_probe_perf_commit_cnt(const VNPCSoC* top) { return top->probe_bits_perf_commit_cnt; }
 uint32_t vnpcsoc_get_probe_perf_branch_cnt(const VNPCSoC* top) { return top->probe_bits_perf_branch_cnt; }

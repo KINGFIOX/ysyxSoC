@@ -11,44 +11,50 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
 import ysyx.core.sram._
+import ysyx.core.common.HasCoreParameter
 
-class Set extends Bundle {
-  val tags = Vec(4, UInt(20.W))
-  val valids = Vec(4, Bool())
-  val plru = Vec(3, Bool())
-}
-
-// cacheline: 64B
-// 4-way set associative
-// tree-PLRU replacement policy
-// 16KB/32KB/64KB cache size -> 256 cachelines -> 64 sets
+// cacheline: 64B, 4-way set associative, tree-PLRU
+// 64 sets, offset 6 bits, index 6 bits, tag = addrBits - 12
+// 8 beats x 8B = 64B per cacheline (64-bit data bus)
 class ICacheImpl(
     id: Int,
     sramParams: SRAMBundleParameters,
     axiParams: AXI4BundleParameters
-) extends Module {
+) extends Module with HasCoreParameter {
   val io = IO(new Bundle {
     val in = Flipped(new SRAMBundle(sramParams))
     val out = new AXI4Bundle(axiParams)
   })
   val fence_i = IO(Input(Bool()))
 
+  private val offsetBits = 6 // 64B cacheline
+  private val indexBits = 6 // 64 sets
+  private val tagBits = addrBits - offsetBits - indexBits
+  private val nBeats = 8 // 8 beats x 8B = 64B
+  private val beatIdxBits = log2Ceil(nBeats)
+
   val in = io.in
   val out = io.out
 
-  val offset = in.addr(5, 0)
-  val index = in.addr(11, 6)
-  val tag = in.addr(31, 12)
+  val offset = in.addr(offsetBits - 1, 0)
+  val index = in.addr(offsetBits + indexBits - 1, offsetBits)
+  val tag = in.addr(addrBits - 1, offsetBits + indexBits)
 
-  val tag_ram = Reg(Vec(64, new Set))
-  val data_bank_sram = Reg(Vec(64, Vec(4, Vec(16, UInt(32.W)))))
+  class CacheSet extends Bundle {
+    val tags = Vec(4, UInt(tagBits.W))
+    val valids = Vec(4, Bool())
+    val plru = Vec(3, Bool())
+  }
 
-  val offset_reg = Reg(UInt(6.W))
-  val index_reg = Reg(UInt(6.W))
-  val tag_reg = Reg(UInt(20.W))
+  val tag_ram = Reg(Vec(64, new CacheSet))
+  val data_bank_sram = Reg(Vec(64, Vec(4, Vec(nBeats, UInt(dataBits.W)))))
+
+  val offset_reg = Reg(UInt(offsetBits.W))
+  val index_reg = Reg(UInt(indexBits.W))
+  val tag_reg = Reg(UInt(tagBits.W))
   val replace_way_reg = Reg(UInt(2.W))
-  val beat_counter = RegInit(0.U(4.W))
-  val refill_data = Reg(UInt(32.W))
+  val beat_counter = RegInit(0.U(beatIdxBits.W))
+  val refill_data = Reg(UInt(dataBits.W))
 
   // hit detection
   val set = tag_ram(index_reg)
@@ -69,9 +75,9 @@ class ICacheImpl(
   out.ar.valid := false.B
   out.ar.bits := DontCare
   out.ar.bits.id := id.U
-  out.ar.bits.addr := Cat(tag_reg, index_reg, 0.U(6.W))
-  out.ar.bits.len := 15.U
-  out.ar.bits.size := 2.U
+  out.ar.bits.addr := Cat(tag_reg, index_reg, 0.U(offsetBits.W))
+  out.ar.bits.len := (nBeats - 1).U
+  out.ar.bits.size := dataBytesBits.U // 3 = 8 bytes
   out.ar.bits.burst := AXI4Parameters.BURST_INCR
   out.ar.bits.lock := 0.U
   out.ar.bits.cache := 0.U
@@ -94,6 +100,9 @@ class ICacheImpl(
 
   val state_q = RegInit(State.idle)
 
+  // beat index from offset: offset_reg(5, 3) for 8B beats
+  val target_beat = offset_reg(offsetBits - 1, dataBytesBits)
+
   switch(state_q) {
 
     is(State.idle) {
@@ -114,7 +123,7 @@ class ICacheImpl(
       when(hit) {
         state_q := State.idle
         in.done := true.B
-        in.rdata := data_bank_sram(index_reg)(hit_way)(offset_reg(5, 2))
+        in.rdata := data_bank_sram(index_reg)(hit_way)(target_beat)
         tag_ram(index_reg).plru(0) := hit_way(1)
         when(!hit_way(1)) {
           tag_ram(index_reg).plru(1) := hit_way(0)
@@ -139,7 +148,7 @@ class ICacheImpl(
       out.r.ready := true.B
       when(out.r.fire) {
         data_bank_sram(index_reg)(replace_way_reg)(beat_counter) := out.r.bits.data
-        when(beat_counter === offset_reg(5, 2)) {
+        when(beat_counter === target_beat) {
           refill_data := out.r.bits.data
         }
         beat_counter := beat_counter + 1.U
@@ -154,7 +163,7 @@ class ICacheImpl(
           }
           state_q := State.idle
           in.done := true.B
-          in.rdata := Mux(beat_counter === offset_reg(5, 2), out.r.bits.data, refill_data)
+          in.rdata := Mux(beat_counter === target_beat, out.r.bits.data, refill_data)
         }
       }
     }

@@ -63,7 +63,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   List(lxipflash.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
 
   val lmrom = LazyModule(new AXI4MROM(AddressSet.misaligned(SoCConfig.mromBase, SoCConfig.mromSize)))
-  val sramNode = AXI4RAM(AddressSet.misaligned(SoCConfig.sramBase, SoCConfig.sramSize).head, false, true, 4, None, Nil, false)
+  val sramNode = AXI4RAM(AddressSet.misaligned(SoCConfig.sramBase, SoCConfig.sramSize).head, false, true, 8, None, Nil, false)
   List(apbxbar := APBDelayer() := AXI4ToAPB() := AXI4Buffer(), lmrom.node, sramNode).map(_ := xbar2)
 
   val sdramAddressSet = AddressSet.misaligned(SoCConfig.sdramBase, SoCConfig.sdramSize)
@@ -196,7 +196,7 @@ class NPCSoC
   override protected def implicitReset: Reset = io.reset
 
   implicit val config: Parameters = new Config(
-    new Edge32BitConfig ++ new DefaultRV32Config
+    new DefaultConfig
   )
 
   val dut = LazyModule(new ysyxSoCFull)

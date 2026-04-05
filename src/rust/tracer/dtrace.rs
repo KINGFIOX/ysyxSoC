@@ -16,8 +16,8 @@ impl fmt::Display for MemDir {
 
 struct DeviceRegion {
     name: &'static str,
-    base: u32,
-    size: u32,
+    base: u64,
+    size: u64,
 }
 
 const DEVICE_MAP: &[DeviceRegion] = &[
@@ -33,27 +33,27 @@ const DEVICE_MAP: &[DeviceRegion] = &[
     DeviceRegion { name: "SDRAM",    base: 0xa0000000, size: 0x2000000 },
 ];
 
-fn resolve_addr(addr: u32) -> String {
+fn resolve_addr(addr: u64) -> String {
     for dev in DEVICE_MAP {
         if addr.wrapping_sub(dev.base) < dev.size {
             let offset = addr - dev.base;
             return format!("{}+{offset:#x}", dev.name);
         }
     }
-    format!("{addr:#010x}")
+    format!("{addr:#018x}")
 }
 
 pub struct DTraceEntry {
-    pub pc: u32,
+    pub pc: u64,
     pub dir: MemDir,
-    pub addr: u32,
-    pub data: u32,
+    pub addr: u64,
+    pub data: u64,
     pub width: u8,
     pub disasm: String,
 }
 
 impl DTraceEntry {
-    pub fn new(pc: u32, dir: MemDir, addr: u32, data: u32, width: u8, disasm: &str) -> Self {
+    pub fn new(pc: u64, dir: MemDir, addr: u64, data: u64, width: u8, disasm: &str) -> Self {
         Self { pc, dir, addr, data, width, disasm: disasm.to_string() }
     }
 }
@@ -62,7 +62,7 @@ impl fmt::Display for DTraceEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{:#010x}: {} {:14} data={:#010x} width={} ({})",
+            "{:#018x}: {} {:14} data={:#018x} width={} ({})",
             self.pc, self.dir, resolve_addr(self.addr), self.data, self.width, self.disasm
         )
     }

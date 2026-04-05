@@ -15,7 +15,7 @@ object Config {
 
 class ysyxSoCTop extends Module {
   implicit val config: Parameters = new Config(
-    new Edge32BitConfig ++ new DefaultRV32Config
+    new DefaultConfig
   )
 
   val io = IO(new Bundle {})

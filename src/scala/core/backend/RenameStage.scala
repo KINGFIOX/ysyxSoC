@@ -47,7 +47,7 @@ class RenameStage extends NPCModule {
   // Determine if instruction writes a register
   // ============================================================
   // format: off
-  val rd_wen = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.LOAD,
+  val rd_wen = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W, InstType.JALR, InstType.LOAD,
     InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR)
     .map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
   // format: on
@@ -122,7 +122,7 @@ class RenameStage extends NPCModule {
   // Override prs2 readiness for immediate-using instructions
   // ============================================================
   // format: off
-  val use_imm = Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
+  val use_imm = Seq(InstType.I_ALU, InstType.I_ALU_W, InstType.JALR).map(inst_type === _).reduce(_ || _)
   // format: on
   val is_csr = inst_type === InstType.CSR
   val is_load = inst_type === InstType.LOAD

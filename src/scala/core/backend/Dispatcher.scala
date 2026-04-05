@@ -31,7 +31,7 @@ class Dispatcher extends NPCModule {
   val has_except = dec.has_except
 
   // format: off
-  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.JALR, InstType.CSR).map(inst_type === _).reduce(_ || _) && !has_except
+  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W, InstType.JALR, InstType.CSR).map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
   val go_to_agu = Seq(InstType.LOAD, InstType.STORE).map(inst_type === _).reduce(_ || _) && !has_except
   // format: on
@@ -90,7 +90,7 @@ class Dispatcher extends NPCModule {
   // ALU Issue Queue
   // ============================================================
   // format: off
-  val alu_prf_wen = Seq(InstType.R_ALU, InstType.I_ALU).map(inst_type === _).reduce(_ || _) && rd_wen
+  val alu_prf_wen = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W).map(inst_type === _).reduce(_ || _) && rd_wen
   // format: on
   io.alu_iq.bits.prs1.preg := in.prs1
   io.alu_iq.bits.prs1.ready := in.prs1_ready

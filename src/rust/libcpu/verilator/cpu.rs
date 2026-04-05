@@ -105,8 +105,8 @@ impl VerilatorCpu {
         unsafe { vnpcsoc_get_probe_is_mmio(self.top) != 0 }
     }
 
-    pub fn dnpc(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_dnpc(self.top) as u32 }
+    pub fn dnpc(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_dnpc(self.top) as u64 }
     }
 
     pub fn inst(&self) -> u32 {
@@ -148,104 +148,116 @@ impl Drop for VerilatorCpu {
 }
 
 impl AbstractCpu for VerilatorCpu {
-    fn pc(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_pc(self.top) }
+    fn pc(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_pc(self.top) as u64 }
     }
 
-    fn set_pc(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_pc(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_pc"))
     }
 
-    fn gpr(&self, index: usize) -> miette::Result<u32> {
+    fn gpr(&self, index: usize) -> miette::Result<u64> {
         if index >= 32 {
             return Err(miette::Error::msg("invalid register index"));
         }
-        Ok(unsafe { vnpcsoc_get_probe_gpr(self.top, (index as i32).into()) })
+        Ok(unsafe { vnpcsoc_get_probe_gpr(self.top, (index as i32).into()) as u64 })
     }
 
-    fn set_gpr(&mut self, _index: usize, _value: u32) -> miette::Result<()> {
+    fn set_gpr(&mut self, _index: usize, _value: u64) -> miette::Result<()> {
         if _index >= 32 {
             return Err(miette::Error::msg("invalid register index"));
         }
         Err(miette::Error::msg("dut should not call set_gpr"))
     }
 
-    fn mstatus(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_csr_mstatus(self.top) }
+    fn mstatus(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_csr_mstatus(self.top) as u64 }
     }
 
-    fn set_mstatus(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_mstatus(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_mstatus"))
     }
 
-    fn mtvec(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_csr_mtvec(self.top) }
+    fn mtvec(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_csr_mtvec(self.top) as u64 }
     }
 
-    fn set_mtvec(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_mtvec(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_mtvec"))
     }
 
-    fn mepc(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_csr_mepc(self.top) }
+    fn mepc(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_csr_mepc(self.top) as u64 }
     }
 
-    fn set_mepc(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_mepc(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_mepc"))
     }
 
-    fn mcause(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_csr_mcause(self.top) }
+    fn mcause(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_csr_mcause(self.top) as u64 }
     }
 
-    fn set_mcause(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_mcause(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_mcause"))
     }
 
-    fn mtval(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_csr_mtval(self.top) }
+    fn mtval(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_csr_mtval(self.top) as u64 }
     }
 
-    fn set_mtval(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_mtval(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_mtval"))
     }
 
-    fn mvendorid(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_csr_mvendorid(self.top) }
+    fn mvendorid(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_csr_mvendorid(self.top) as u64 }
     }
 
-    fn set_mvendorid(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_mvendorid(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_mvendorid"))
     }
 
-    fn marchid(&self) -> u32 {
-        unsafe { vnpcsoc_get_probe_csr_marchid(self.top) }
+    fn marchid(&self) -> u64 {
+        unsafe { vnpcsoc_get_probe_csr_marchid(self.top) as u64 }
     }
 
-    fn set_marchid(&mut self, _value: u32) -> miette::Result<()> {
+    fn set_marchid(&mut self, _value: u64) -> miette::Result<()> {
         Err(miette::Error::msg("dut should not call set_marchid"))
     }
 
-    fn mem_load(&self, addr: u32, width: u8) -> miette::Result<u32> {
+    fn mem_load(&self, addr: u64, width: u8) -> miette::Result<u64> {
         match width {
-            1 => Ok(self.mem.load_u8(addr)? as u32),
+            1 => Ok(self.mem.load_u8(addr)? as u64),
             2 => {
-                let b0 = self.mem.load_u8(addr)? as u32;
-                let b1 = self.mem.load_u8(addr + 1)? as u32;
+                let b0 = self.mem.load_u8(addr)? as u64;
+                let b1 = self.mem.load_u8(addr + 1)? as u64;
                 Ok(b0 | (b1 << 8))
             }
             4 => {
-                let b0 = self.mem.load_u8(addr)? as u32;
-                let b1 = self.mem.load_u8(addr + 1)? as u32;
-                let b2 = self.mem.load_u8(addr + 2)? as u32;
-                let b3 = self.mem.load_u8(addr + 3)? as u32;
+                let b0 = self.mem.load_u8(addr)? as u64;
+                let b1 = self.mem.load_u8(addr + 1)? as u64;
+                let b2 = self.mem.load_u8(addr + 2)? as u64;
+                let b3 = self.mem.load_u8(addr + 3)? as u64;
                 Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
+            }
+            8 => {
+                let b0 = self.mem.load_u8(addr)? as u64;
+                let b1 = self.mem.load_u8(addr + 1)? as u64;
+                let b2 = self.mem.load_u8(addr + 2)? as u64;
+                let b3 = self.mem.load_u8(addr + 3)? as u64;
+                let b4 = self.mem.load_u8(addr + 4)? as u64;
+                let b5 = self.mem.load_u8(addr + 5)? as u64;
+                let b6 = self.mem.load_u8(addr + 6)? as u64;
+                let b7 = self.mem.load_u8(addr + 7)? as u64;
+                Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+                    | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56))
             }
             _ => Err(miette::miette!("invalid load width: {width}")),
         }
     }
 
-    fn mem_store(&mut self, addr: u32, value: u32, width: u8) -> miette::Result<()> {
+    fn mem_store(&mut self, addr: u64, value: u64, width: u8) -> miette::Result<()> {
         match width {
             1 => self.mem.store_u8(addr, value as u8),
             2 => {
@@ -257,6 +269,16 @@ impl AbstractCpu for VerilatorCpu {
                 self.mem.store_u8(addr + 1, (value >> 8) as u8)?;
                 self.mem.store_u8(addr + 2, (value >> 16) as u8)?;
                 self.mem.store_u8(addr + 3, (value >> 24) as u8)
+            }
+            8 => {
+                self.mem.store_u8(addr, value as u8)?;
+                self.mem.store_u8(addr + 1, (value >> 8) as u8)?;
+                self.mem.store_u8(addr + 2, (value >> 16) as u8)?;
+                self.mem.store_u8(addr + 3, (value >> 24) as u8)?;
+                self.mem.store_u8(addr + 4, (value >> 32) as u8)?;
+                self.mem.store_u8(addr + 5, (value >> 40) as u8)?;
+                self.mem.store_u8(addr + 6, (value >> 48) as u8)?;
+                self.mem.store_u8(addr + 7, (value >> 56) as u8)
             }
             _ => Err(miette::miette!("invalid store width: {width}")),
         }

@@ -18,14 +18,14 @@ object MemUExceptionType extends ChiselEnum {
 }
 
 object SignExt {
-  def apply(data: UInt, width: Int = 32): UInt = {
+  def apply(data: UInt, width: Int = 64): UInt = {
     val signBit = data(data.getWidth - 1)
     Cat(Fill(width - data.getWidth, signBit), data)
   }
 }
 
 object ZeroExt {
-  def apply(data: UInt, width: Int = 32): UInt = {
+  def apply(data: UInt, width: Int = 64): UInt = {
     Cat(0.U((width - data.getWidth).W), data)
   }
 }
@@ -44,23 +44,25 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   val perip = IO(SRAMBundle(sramParams))
 
   val ctrl = late.bits
-  val aligned_addr = Cat(ctrl.addr(addrBits - 1, 2), 0.U(2.W))
+  val aligned_addr = Cat(ctrl.addr(addrBits - 1, dataBytesBits), 0.U(dataBytesBits.W))
 
   // ==========================================================
-  // Store wstrb / wdata formatting (4B aligned for both channels)
+  // Store wstrb / wdata formatting (8B aligned for both channels)
   // ==========================================================
-  val store_wstrb = MuxLookup(ctrl.size, "b1111".U)(
+  val store_wstrb = MuxLookup(ctrl.size, "b11111111".U)(
     Seq(
-      0.U -> (1.U(4.W) << ctrl.addr(1, 0)),
-      1.U -> (3.U(4.W) << (ctrl.addr(1, 0) & "b10".U)),
-      2.U -> "b1111".U(4.W)
+      0.U -> (1.U(dataBytes.W) << ctrl.addr(dataBytesBits - 1, 0)),
+      1.U -> (3.U(dataBytes.W) << Cat(ctrl.addr(dataBytesBits - 1, 1), 0.U(1.W))),
+      2.U -> ("b1111".U(dataBytes.W) << Cat(ctrl.addr(dataBytesBits - 1, 2), 0.U(2.W))),
+      3.U -> "b11111111".U(dataBytes.W)
     )
   )
   val store_wdata = MuxLookup(ctrl.size, ctrl.wdata)(
     Seq(
-      0.U -> Fill(4, ctrl.wdata(7, 0)),
-      1.U -> Fill(2, ctrl.wdata(15, 0)),
-      2.U -> ctrl.wdata
+      0.U -> Fill(dataBytes, ctrl.wdata(7, 0)),
+      1.U -> Fill(dataBytes / 2, ctrl.wdata(15, 0)),
+      2.U -> Fill(dataBytes / 4, ctrl.wdata(31, 0)),
+      3.U -> ctrl.wdata
     )
   )
 
@@ -68,30 +70,19 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   // Load data extraction
   // ==========================================================
 
-  // Cache: full word returned, byte lane selection by addr(1,0)
+  // Cache: full doubleword returned, byte lane selection by addr(2,0)
   val cache_raw = dcache.rdata
-  val cache_byte = MuxLookup(ctrl.addr(1, 0), 0.U)(
-    Seq(
-      0.U -> cache_raw(7, 0),
-      1.U -> cache_raw(15, 8),
-      2.U -> cache_raw(23, 16),
-      3.U -> cache_raw(31, 24)
-    )
-  )
-  val cache_half = Mux(ctrl.addr(1), cache_raw(31, 16), cache_raw(15, 0))
+  val byte_off = ctrl.addr(dataBytesBits - 1, 0)
+  val cache_shifted = cache_raw >> (byte_off << 3)
+  val cache_byte = cache_shifted(7, 0)
+  val cache_half = cache_shifted(15, 0)
+  val cache_word = cache_shifted(31, 0)
   val cache_load_final = MuxLookup(ctrl.size, cache_raw)(
     Seq(
-      0.U -> Mux(
-        ctrl.sign_ext,
-        SignExt(cache_byte, 32),
-        ZeroExt(cache_byte, 32)
-      ),
-      1.U -> Mux(
-        ctrl.sign_ext,
-        SignExt(cache_half, 32),
-        ZeroExt(cache_half, 32)
-      ),
-      2.U -> cache_raw
+      0.U -> Mux(ctrl.sign_ext, SignExt(cache_byte), ZeroExt(cache_byte)),
+      1.U -> Mux(ctrl.sign_ext, SignExt(cache_half), ZeroExt(cache_half)),
+      2.U -> Mux(ctrl.sign_ext, SignExt(cache_word), ZeroExt(cache_word)),
+      3.U -> cache_raw
     )
   )
 
@@ -99,38 +90,31 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   val mmio_raw = perip.rdata
   val mmio_load_final = MuxLookup(ctrl.size, mmio_raw)(
     Seq(
-      0.U -> Mux(
-        ctrl.sign_ext,
-        SignExt(mmio_raw(7, 0), 32),
-        ZeroExt(mmio_raw(7, 0), 32)
-      ),
-      1.U -> Mux(
-        ctrl.sign_ext,
-        SignExt(mmio_raw(15, 0), 32),
-        ZeroExt(mmio_raw(15, 0), 32)
-      ),
-      2.U -> mmio_raw
+      0.U -> Mux(ctrl.sign_ext, SignExt(mmio_raw(7, 0)), ZeroExt(mmio_raw(7, 0))),
+      1.U -> Mux(ctrl.sign_ext, SignExt(mmio_raw(15, 0)), ZeroExt(mmio_raw(15, 0))),
+      2.U -> Mux(ctrl.sign_ext, SignExt(mmio_raw(31, 0)), ZeroExt(mmio_raw(31, 0))),
+      3.U -> mmio_raw
     )
   )
 
   val load_final = Mux(ctrl.is_mmio, mmio_load_final, cache_load_final)
 
   // ==========================================================
-  // dcache defaults — 4B aligned, size=2 (load & store share the port)
+  // dcache defaults — 8B aligned, size=3 (load & store share the port)
   // ==========================================================
   dcache.req := false.B
   dcache.wen := ctrl.w_en
-  dcache.size := 2.U
+  dcache.size := dataBytesBits.U
   dcache.addr := aligned_addr
   dcache.wstrb := store_wstrb
   dcache.wdata := store_wdata
 
   // ==========================================================
-  // perip defaults — load: narrow (raw addr/size); store: 4B aligned
+  // perip defaults — load: narrow (raw addr/size); store: 8B aligned
   // ==========================================================
   perip.req := false.B
   perip.wen := ctrl.w_en
-  perip.size := Mux(ctrl.w_en, 2.U, ctrl.size)
+  perip.size := Mux(ctrl.w_en, dataBytesBits.U, ctrl.size)
   perip.addr := Mux(ctrl.w_en, aligned_addr, ctrl.addr)
   perip.wstrb := Mux(ctrl.w_en, store_wstrb, 0.U)
   perip.wdata := Mux(ctrl.w_en, store_wdata, 0.U)

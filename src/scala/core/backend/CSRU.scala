@@ -40,7 +40,7 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
   late.bits.result := 0.U
 
   // readable && writable register
-  val mstatus = RegInit(0x1800.U(dataBits.W)) // TODO: write any, read legal
+  val mstatus = RegInit(0x1800.U(dataBits.W)) // MPP=0b11 (M-mode)
   val mtvec = RegInit(0.U(dataBits.W))
   val mepc = RegInit(0.U(dataBits.W))
   val mcause = RegInit(0.U(dataBits.W))

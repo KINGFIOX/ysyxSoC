@@ -7,7 +7,7 @@ const FTRACE_CAPACITY: usize = 32;
 
 pub struct FuncTracer {
     pub ring_buf: RingBuf<FTraceEntry>,
-    pub symtab: HashMap<u32, String>,
+    pub symtab: HashMap<u64, String>,
     depth: u32,
 }
 
@@ -19,7 +19,7 @@ impl FuncTracer {
         for sym in obj.symbols() {
             if sym.kind() == SymbolKind::Text && sym.size() > 0 {
                 if let Ok(name) = sym.name() {
-                    symtab.insert(sym.address() as u32, name.to_string());
+                    symtab.insert(sym.address(), name.to_string());
                 }
             }
         }
@@ -30,18 +30,18 @@ impl FuncTracer {
         }
     }
 
-    pub fn push_call(&mut self, pc: u32, dnpc: u32, disasm: &str) {
+    pub fn push_call(&mut self, pc: u64, dnpc: u64, disasm: &str) {
         let func_name = self
             .symtab
             .get(&dnpc)
             .cloned()
-            .unwrap_or_else(|| format!("{dnpc:#010x}"));
+            .unwrap_or_else(|| format!("{dnpc:#018x}"));
         let entry = FTraceEntry::new(pc, dnpc, self.depth, FuncType::Call(func_name), disasm);
         self.ring_buf.push(entry);
         self.depth += 1;
     }
 
-    pub fn push_ret(&mut self, pc: u32, dnpc: u32, disasm: &str) {
+    pub fn push_ret(&mut self, pc: u64, dnpc: u64, disasm: &str) {
         self.depth = self.depth.saturating_sub(1);
         let entry = FTraceEntry::new(pc, dnpc, self.depth, FuncType::Ret, disasm);
         self.ring_buf.push(entry);
@@ -54,15 +54,15 @@ pub enum FuncType {
 }
 
 pub struct FTraceEntry {
-    pub pc: u32,
-    pub dnpc: u32,
+    pub pc: u64,
+    pub dnpc: u64,
     pub depth: u32,
     pub func_type: FuncType,
     pub disasm: String,
 }
 
 impl FTraceEntry {
-    pub fn new(pc: u32, dnpc: u32, depth: u32, func_type: FuncType, disasm: &str) -> Self {
+    pub fn new(pc: u64, dnpc: u64, depth: u32, func_type: FuncType, disasm: &str) -> Self {
         Self {
             pc,
             dnpc,
@@ -80,12 +80,12 @@ impl fmt::Display for FTraceEntry {
             FuncType::Call(name) => {
                 write!(
                     f,
-                    "{:#010x}: {indent}call [{name}@{:#010x}] ({})",
+                    "{:#018x}: {indent}call [{name}@{:#018x}] ({})",
                     self.pc, self.dnpc, self.disasm
                 )
             }
             FuncType::Ret => {
-                write!(f, "{:#010x}: {indent}ret ({})", self.pc, self.disasm)
+                write!(f, "{:#018x}: {indent}ret ({})", self.pc, self.disasm)
             }
         }
     }

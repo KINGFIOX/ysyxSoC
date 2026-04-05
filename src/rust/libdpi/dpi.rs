@@ -6,12 +6,12 @@
 /// All addresses passed from RTL are device-relative offsets (base already stripped).
 use crate::libcpu::abstract_cpu::AbstractCpu;
 use crate::libcpu::spike::SpikeCpu;
-use crate::libdpi::globals::{DPI_FLASH, DPI_MROM, DPI_PSRAM, DPI_SDRAM};
+use crate::libdpi::globals::{DPI_FLASH, DPI_MROM, DPI_SDRAM};
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mrom_read(addr: i32, data: *mut i32) {
+pub extern "C" fn mrom_read(addr: i64, data: *mut i32) {
     DPI_MROM.with(|mrom| {
-        let offset = addr as u32 as usize;
+        let offset = addr as u64 as usize;
         let b0 = mrom[offset] as u32;
         let b1 = mrom[offset + 1] as u32;
         let b2 = mrom[offset + 2] as u32;
@@ -21,30 +21,16 @@ pub extern "C" fn mrom_read(addr: i32, data: *mut i32) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn flash_read(addr: i32, data: *mut i8) {
+pub extern "C" fn flash_read(addr: i64, data: *mut i8) {
     DPI_FLASH.with(|flash| {
-        unsafe { *data = flash[addr as u32 as usize] as i8 };
+        unsafe { *data = flash[addr as u64 as usize] as i8 };
     });
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn psram_read(addr: i32, data: *mut i8) {
-    DPI_PSRAM.with(|psram| {
-        unsafe { *data = psram[addr as u32 as usize] as i8 };
-    });
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn psram_write(addr: i32, data: i8) {
-    DPI_PSRAM.with_mut(|psram| {
-        psram[addr as u32 as usize] = data as u8;
-    });
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn sdram_read(addr: i32, data: *mut i16) {
+pub extern "C" fn sdram_read(addr: i64, data: *mut i16) {
     DPI_SDRAM.with(|sdram| {
-        let offset = addr as u32 as usize;
+        let offset = addr as u64 as usize;
         let lo = sdram[offset] as u16;
         let hi = sdram[offset + 1] as u16;
         unsafe { *data = (lo | (hi << 8)) as i16 };
@@ -55,13 +41,13 @@ pub extern "C" fn sdram_read(addr: i32, data: *mut i16) {
 use log::info;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn sdram_write(addr: i32, data: u8) {
+pub extern "C" fn sdram_write(addr: i64, data: u8) {
     DPI_SDRAM.with_mut(|sdram| {
-        sdram[addr as u32 as usize] = data;
+        sdram[addr as u64 as usize] = data;
     });
 }
 
-// ============ Spike Frontend (UInt(64.W) as WYSIWYG chandle) ============
+// ============ Spike Frontend (DPI chandle) ============
 //
 // RawClockedNonVoidFunctionCall convention: inputs first, output pointer last.
 
@@ -72,34 +58,51 @@ pub extern "C" fn spike_fe_new(out: *mut i64) {
     unsafe { *out = Box::into_raw(Box::new(spike)) as i64 };
 }
 
-/// Returns packed {npc[63:32], inst[31:0]}. All-ones (u64::MAX) on failure.
+/// Fetch instruction at current PC, step spike, return result as a 128-bit packed struct.
+/// Layout (UInt(128.W)): bits[31:0]=ok, bits[63:32]=inst, bits[127:64]=npc
+/// DPI output: svBitVecVal[4] (uint32_t[4]), little-endian word order.
 #[unsafe(no_mangle)]
-pub extern "C" fn spike_fe_fetch_and_step(handle: i64, out: *mut i64) {
+pub extern "C" fn spike_fe_fetch_and_step(handle: i64, out: *mut u32) {
     let spike = unsafe { &mut *(handle as *mut SpikeCpu) };
     let pc = spike.pc();
     let inst = match spike.mem_load(pc, 4) {
-        Ok(v) => v,
+        Ok(v) => v as u32,
         Err(_) => {
-            unsafe { *out = -1 };
+            unsafe {
+                *out = 0; // ok = 0
+                *out.add(1) = 0;
+                *out.add(2) = 0;
+                *out.add(3) = 0;
+            }
             return;
         }
     };
     if spike.step().is_err() {
-        unsafe { *out = -1 };
+        unsafe {
+            *out = 0;
+            *out.add(1) = 0;
+            *out.add(2) = 0;
+            *out.add(3) = 0;
+        }
         return;
     }
     let npc = spike.pc();
-    unsafe { *out = ((npc as u64) << 32 | (inst as u64)) as i64 };
+    unsafe {
+        *out = 1; // ok
+        *out.add(1) = inst;
+        *out.add(2) = npc as u32;
+        *out.add(3) = (npc >> 32) as u32;
+    }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn spike_fe_set_gpr(handle: i64, idx: i32, val: i32) {
+pub extern "C" fn spike_fe_set_gpr(handle: i64, idx: i32, val: i64) {
     let spike = unsafe { &mut *(handle as *mut SpikeCpu) };
-    spike.set_gpr(idx as usize, val as u32).unwrap();
+    spike.set_gpr(idx as usize, val as u64).unwrap();
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn spike_fe_set_pc(handle: i64, pc: i32) {
+pub extern "C" fn spike_fe_set_pc(handle: i64, pc: i64) {
     let spike = unsafe { &mut *(handle as *mut SpikeCpu) };
-    spike.set_pc(pc as u32).unwrap();
+    spike.set_pc(pc as u64).unwrap();
 }

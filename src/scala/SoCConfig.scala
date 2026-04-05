@@ -5,7 +5,7 @@
 package ysyx
 
 object SoCConfig {
-  val resetVector: Long = 0x30000000L
+  val resetVector: Long = 0x80000000L
   val uartBase: Long = 0x10000000L
   val uartSize: Long = 0x1000L
   val gpioBase: Long = 0x10002000L
@@ -18,12 +18,12 @@ object SoCConfig {
   val spiCtrlSize: Long = 0x1000L
   val xipFlashBase: Long = 0x30000000L
   val xipFlashSize: Long = 0x10000000L
-  val psramBase: Long = 0x80000000L
+  val psramBase: Long = 0x40000000L
   val psramSize: Long = 0x400000L
   val mromBase: Long = 0x20000000L
   val mromSize: Long = 0x1000L
   val sramBase: Long = 0x0f000000L
   val sramSize: Long = 0x2000L
-  val sdramBase: Long = 0xa0000000L
-  val sdramSize: Long = 0x2000000L
+  val sdramBase: Long = 0x80000000L
+  val sdramSize: Long = 0x8000000L
 }

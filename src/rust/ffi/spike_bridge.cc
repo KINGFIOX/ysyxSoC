@@ -92,7 +92,15 @@ int mmu_store_u16(mmu_t* mmu, uint64_t addr, uint16_t val) {
     try { mmu->store<uint16_t>(addr, val); return 0; }
     catch (const trap_t&) { return 1; }
 }
+int mmu_load_u64(mmu_t* mmu, uint64_t addr, uint64_t* out) {
+    try { *out = mmu->load<uint64_t>(addr); return 0; }
+    catch (const trap_t&) { return 1; }
+}
 int mmu_store_u32(mmu_t* mmu, uint64_t addr, uint32_t val) {
     try { mmu->store<uint32_t>(addr, val); return 0; }
+    catch (const trap_t&) { return 1; }
+}
+int mmu_store_u64(mmu_t* mmu, uint64_t addr, uint64_t val) {
+    try { mmu->store<uint64_t>(addr, val); return 0; }
     catch (const trap_t&) { return 1; }
 }

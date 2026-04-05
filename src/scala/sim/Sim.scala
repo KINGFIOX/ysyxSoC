@@ -93,7 +93,7 @@ class NPCSoC
   override protected def implicitReset: Reset = io.reset
 
   implicit val config: Parameters = new Config(
-    new Edge32BitConfig ++ new DefaultRV32Config
+    new DefaultConfig
   )
 
   val dut = LazyModule(new ysyxSoCFull)
