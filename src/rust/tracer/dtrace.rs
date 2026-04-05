@@ -21,16 +21,16 @@ struct DeviceRegion {
 }
 
 const DEVICE_MAP: &[DeviceRegion] = &[
+    DeviceRegion { name: "CLINT",    base: 0x02000000, size: 0x10000 },
+    DeviceRegion { name: "PLIC",     base: 0x0c000000, size: 0x400000 },
+    DeviceRegion { name: "SRAM",     base: 0x0f000000, size: 0x2000 },
     DeviceRegion { name: "UART",     base: 0x10000000, size: 0x1000 },
+    DeviceRegion { name: "SPI_CTRL", base: 0x10001000, size: 0x1000 },
     DeviceRegion { name: "GPIO",     base: 0x10002000, size: 0x10 },
     DeviceRegion { name: "KBD",      base: 0x10011000, size: 0x8 },
-    DeviceRegion { name: "SPI_CTRL", base: 0x10001000, size: 0x1000 },
-    DeviceRegion { name: "MROM",     base: 0x20000000, size: 0x1000 },
     DeviceRegion { name: "VGA",      base: 0x21000000, size: 0x200000 },
     DeviceRegion { name: "FLASH",    base: 0x30000000, size: 0x10000000 },
-    DeviceRegion { name: "SRAM",     base: 0x0f000000, size: 0x2000 },
-    DeviceRegion { name: "PSRAM",    base: 0x80000000, size: 0x400000 },
-    DeviceRegion { name: "SDRAM",    base: 0xa0000000, size: 0x2000000 },
+    DeviceRegion { name: "SDRAM",    base: 0x80000000, size: 0x10000000 },
 ];
 
 fn resolve_addr(addr: u64) -> String {

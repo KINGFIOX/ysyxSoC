@@ -6,19 +6,7 @@
 /// All addresses passed from RTL are device-relative offsets (base already stripped).
 use crate::libcpu::abstract_cpu::AbstractCpu;
 use crate::libcpu::spike::SpikeCpu;
-use crate::libdpi::globals::{DPI_FLASH, DPI_MROM, DPI_SDRAM};
-
-#[unsafe(no_mangle)]
-pub extern "C" fn mrom_read(addr: i64, data: *mut i32) {
-    DPI_MROM.with(|mrom| {
-        let offset = addr as u64 as usize;
-        let b0 = mrom[offset] as u32;
-        let b1 = mrom[offset + 1] as u32;
-        let b2 = mrom[offset + 2] as u32;
-        let b3 = mrom[offset + 3] as u32;
-        unsafe { *data = (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) as i32 };
-    });
-}
+use crate::libdpi::globals::{DPI_FLASH, DPI_SDRAM};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn flash_read(addr: i64, data: *mut i8) {
@@ -31,19 +19,37 @@ pub extern "C" fn flash_read(addr: i64, data: *mut i8) {
 pub extern "C" fn sdram_read(addr: i64, data: *mut i16) {
     DPI_SDRAM.with(|sdram| {
         let offset = addr as u64 as usize;
+        if offset + 1 >= sdram.len() {
+            log::warn!(
+                "sdram_read OOB: offset=0x{:x}, abs=0x{:x}",
+                offset,
+                offset as u64 + SDRAM_BASE
+            );
+            unsafe { *data = 0 };
+            return;
+        }
         let lo = sdram[offset] as u16;
         let hi = sdram[offset + 1] as u16;
         unsafe { *data = (lo | (hi << 8)) as i16 };
     });
 }
 
-#[allow(unused)]
-use log::info;
+use crate::libdpi::globals::SDRAM_BASE;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn sdram_write(addr: i64, data: u8) {
     DPI_SDRAM.with_mut(|sdram| {
-        sdram[addr as u64 as usize] = data;
+        let offset = addr as u64 as usize;
+        if offset >= sdram.len() {
+            log::warn!(
+                "sdram_write OOB: offset=0x{:x}, abs=0x{:x}, data=0x{:02x}",
+                offset,
+                offset as u64 + SDRAM_BASE,
+                data
+            );
+            return;
+        }
+        sdram[offset] = data;
     });
 }
 

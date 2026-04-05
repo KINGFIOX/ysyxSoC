@@ -14,7 +14,7 @@ import chisel3.util._
 // format: off
 import ysyx.cpu.CPU
 import ysyx.core.DebugBundle
-import ysyx.device.{ APBUart16550, APBGPIO, APBKeyboard, APBVGA, ExternalPins }
+import ysyx.device.{ APBUart16550, APBGPIO, APBKeyboard, APBVGA, APBCLINT, APBPLIC, ExternalPins }
 import ysyx.sim.AXI4SDRAM
 import ysyx.SoCConfig
 import ysyx.amba._
@@ -30,8 +30,10 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val lkeyboard = LazyModule( new APBKeyboard( AddressSet.misaligned(SoCConfig.keyboardBase, SoCConfig.keyboardSize)))
   val lvga = LazyModule( new APBVGA(AddressSet.misaligned(SoCConfig.vgaBase, SoCConfig.vgaSize)))
   val lflash = LazyModule( new APBFlash(AddressSet.misaligned(SoCConfig.xipFlashBase, SoCConfig.xipFlashSize)) )
+  val lclint = LazyModule( new APBCLINT(AddressSet.misaligned(SoCConfig.clintBase, SoCConfig.clintSize)) )
+  val lplic = LazyModule( new APBPLIC(AddressSet.misaligned(SoCConfig.plicBase, SoCConfig.plicSize)) )
   val lsdram_axi = LazyModule( new AXI4SDRAM(AddressSet.misaligned(SoCConfig.sdramBase, SoCConfig.sdramSize)) )
-  List(luart.node, lgpio.node, lkeyboard.node, lvga.node, lflash.node).map(_ := apbxbar)
+  List(luart.node, lgpio.node, lkeyboard.node, lvga.node, lflash.node, lclint.node, lplic.node).map(_ := apbxbar)
   apbxbar := AXI4ToAPB() := AXI4Buffer() := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := xbar
   lsdram_axi.node := ysyx.amba.AXI4Delayer() := xbar
 

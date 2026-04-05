@@ -18,10 +18,10 @@ object SoCConfig {
   val spiCtrlSize: Long = 0x1000L
   val xipFlashBase: Long = 0x30000000L
   val xipFlashSize: Long = 0x10000000L
-  val psramBase: Long = 0x40000000L
-  val psramSize: Long = 0x400000L
-  val mromBase: Long = 0x20000000L
-  val mromSize: Long = 0x1000L
+  val clintBase: Long = 0x02000000L
+  val clintSize: Long = 0x10000L
+  val plicBase: Long = 0x0c000000L
+  val plicSize: Long = 0x400000L
   val sramBase: Long = 0x0f000000L
   val sramSize: Long = 0x2000L
   val sdramBase: Long = 0x80000000L

@@ -54,15 +54,15 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   spiArbiter.node := apbxbar               // Lower priority (index 1)
 
   val luart = LazyModule(new APBUart16550(AddressSet.misaligned(SoCConfig.uartBase, SoCConfig.uartSize)))
-  val lpsram = LazyModule(new APBPSRAM(AddressSet.misaligned(SoCConfig.psramBase, SoCConfig.psramSize)))
   val lgpio = LazyModule(new APBGPIO(AddressSet.misaligned(SoCConfig.gpioBase, SoCConfig.gpioSize)))
   val lkeyboard = LazyModule(new APBKeyboard(AddressSet.misaligned(SoCConfig.keyboardBase, SoCConfig.keyboardSize)))
   val lvga = LazyModule(new APBVGA(AddressSet.misaligned(SoCConfig.vgaBase, SoCConfig.vgaSize)))
-  List(lxipflash.node, luart.node, lpsram.node, lgpio.node, lkeyboard.node, lvga.node).map(_ := apbxbar)
+  val lclint = LazyModule(new APBCLINT(AddressSet.misaligned(SoCConfig.clintBase, SoCConfig.clintSize)))
+  val lplic = LazyModule(new APBPLIC(AddressSet.misaligned(SoCConfig.plicBase, SoCConfig.plicSize)))
+  List(lxipflash.node, luart.node, lgpio.node, lkeyboard.node, lvga.node, lclint.node, lplic.node).map(_ := apbxbar)
 
-  val lmrom = LazyModule(new AXI4MROM(AddressSet.misaligned(SoCConfig.mromBase, SoCConfig.mromSize)))
   val sramNode = AXI4RAM(AddressSet.misaligned(SoCConfig.sramBase, SoCConfig.sramSize).head, false, true, 8, None, Nil, false)
-  List(apbxbar := APBDelayer() := AXI4ToAPB() := AXI4Buffer(), lmrom.node, sramNode).map(_ := xbar2)
+  List(apbxbar := APBDelayer() := AXI4ToAPB() := AXI4Buffer(), sramNode).map(_ := xbar2)
 
   val sdramAddressSet = AddressSet.misaligned(SoCConfig.sdramBase, SoCConfig.sdramSize)
   val lsdram_axi = LazyModule(new AXI4SDRAM(sdramAddressSet))
@@ -87,7 +87,6 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     val probe = IO(chiselTypeOf(cpu.module.probe))
     val spi = IO(chiselTypeOf(lspi.module.spi_bundle))
     val uart = IO(chiselTypeOf(luart.module.uart))
-    val psram = IO(chiselTypeOf(lpsram.module.qspi_bundle))
     val sdram = IO(chiselTypeOf(sdramBundle))
     val gpio = IO(chiselTypeOf(lgpio.module.gpio_bundle))
     val ps2 = IO(chiselTypeOf(lkeyboard.module.ps2_bundle))
@@ -95,7 +94,6 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     probe <> cpu.module.probe
     uart <> luart.module.uart
     spi <> lspi.module.spi_bundle
-    psram <> lpsram.module.qspi_bundle
     sdram <> sdramBundle
     gpio <> lgpio.module.gpio_bundle
     ps2 <> lkeyboard.module.ps2_bundle
@@ -124,9 +122,6 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     bitrev.io.ss := masic.spi.ss(7)
     masic.spi.miso := List(bitrev.io, flash.io).map(_.miso).reduce(_ && _)
 
-    val psram = Module(new psram)
-    psram.systemReset := reset.asAsyncReset
-    psram.io <> masic.psram
     val sdram = Module(new sdram_mem)
     sdram.io <> masic.sdram
 

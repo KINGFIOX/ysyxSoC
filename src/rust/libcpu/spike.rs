@@ -10,23 +10,25 @@ const ISA: &CStr = c"RV64IMAFDC";
 const RESET_VECTOR: u64 = 0x30000000;
 
 const MEM_BASES: &[u64] = &[
-    0x20000000, // MROM
+    0x02000000, // CLINT
+    0x0c000000, // PLIC
     0x0f000000, // SRAM
-    0x21000000, // VGA
+    0x10000000, // UART
     0x10001000, // SPI_CTRL
+    0x21000000, // VGA
     0x30000000, // XIP_FLASH
     0x80000000, // SDRAM (DRAM, QEMU virt compatible)
-    0x10000000, // uart
 ];
 
 const MEM_SIZES: &[u64] = &[
-    0x1000,     // MROM
+    0x10000,    // CLINT
+    0x400000,   // PLIC
     0x2000,     // SRAM
-    0x200000,   // VGA
+    0x1000,     // UART
     0x1000,     // SPI_CTRL
+    0x200000,   // VGA
     0x10000000, // XIP_FLASH
     0x10000000, // SDRAM (256MB)
-    0x1000,     // uart
 ];
 
 pub struct SpikeCpu {
