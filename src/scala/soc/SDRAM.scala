@@ -837,20 +837,20 @@ class sdram_cmd extends Module {
   io.rdata := RawClockedNonVoidFunctionCall(s"sdram_read", UInt(16.W))(
     clock,
     io.valid && !io.wen,
-    io.addr
+    io.addr.pad(64)
   )
 
   RawClockedVoidFunctionCall(s"sdram_write")(
     clock,
     io.valid && io.wen && !io.dqm_n(0),
-    io.addr,
+    io.addr.pad(64),
     io.wdata(7, 0)
   )
 
   RawClockedVoidFunctionCall(s"sdram_write")(
     clock,
     io.valid && io.wen && !io.dqm_n(1),
-    io.addr + 1.U,
+    (io.addr + 1.U).pad(64),
     io.wdata(15, 8)
   )
 

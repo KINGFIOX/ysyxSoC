@@ -51,12 +51,12 @@ class FlashImpl(apbParams: APBBundleParameters) extends Module {
 
   val readEn = apbSetup && ! io.pwrite
 
-  // DPI requires integer args to be 1/8/16/32/64 bits; paddr may be 30 bits
-  val paddr32 = io.paddr - SoCConfig.xipFlashBase.U(32.W)
-  val word0_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, paddr32)
-  val word1_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, paddr32 + 1.U)
-  val word2_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, paddr32 + 2.U)
-  val word3_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, paddr32 + 3.U)
+  // DPI requires integer args to be 1/8/16/32/64 bits; pad to 64 to match Rust i64
+  val paddr64 = (io.paddr - SoCConfig.xipFlashBase.U(32.W)).pad(64)
+  val word0_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, paddr64)
+  val word1_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, (paddr64 + 1.U).pad(64))
+  val word2_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, (paddr64 + 2.U).pad(64))
+  val word3_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, (paddr64 + 3.U).pad(64))
 
   // io.prdata := Cat( word0_w, word1_w, word2_w, word3_w )
   io.prdata := Cat( word3_w, word2_w, word1_w, word0_w )

@@ -59,7 +59,7 @@ trait HasAXIParameter extends HasCoreParameter {
   val axiParams: AXI4BundleParameters = AXI4BundleParameters(
     addrBits = addrBits,
     dataBits = dataBits,
-    idBits = ChipLinkParam.idBits
+    idBits = 4,
   )
 }
 

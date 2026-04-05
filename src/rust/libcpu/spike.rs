@@ -25,7 +25,7 @@ const MEM_SIZES: &[u64] = &[
     0x200000,   // VGA
     0x1000,     // SPI_CTRL
     0x10000000, // XIP_FLASH
-    0x8000000,  // SDRAM (128MB)
+    0x10000000, // SDRAM (256MB)
     0x1000,     // uart
 ];
 

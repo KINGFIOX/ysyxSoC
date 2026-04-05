@@ -94,7 +94,9 @@ include_cpp! {
     generate!("mmu_load_u8")
     generate!("mmu_load_u16")
     generate!("mmu_load_u32")
+    generate!("mmu_load_u64")
     generate!("mmu_store_u8")
     generate!("mmu_store_u16")
     generate!("mmu_store_u32")
+    generate!("mmu_store_u64")
 }

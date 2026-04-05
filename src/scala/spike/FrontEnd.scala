@@ -36,10 +36,6 @@ class FrontEnd extends NPCModule {
     state === State.sInit && !reset.asBool
   )
 
-  // spike_fe_fetch_and_step(handle) -> 128-bit packed struct:
-  //   bits[31:0]   = ok (non-zero on success)
-  //   bits[63:32]  = inst
-  //   bits[127:64] = npc
   val fetchResult =
     RawClockedNonVoidFunctionCall("spike_fe_fetch_and_step", UInt(128.W))(
       clock,

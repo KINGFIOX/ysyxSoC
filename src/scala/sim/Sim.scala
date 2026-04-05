@@ -14,7 +14,7 @@ import chisel3.util._
 // format: off
 import ysyx.cpu.CPU
 import ysyx.core.DebugBundle
-import ysyx.device.{  ChipLinkParam, APBUart16550, APBGPIO, APBKeyboard, APBVGA, ExternalPins }
+import ysyx.device.{ APBUart16550, APBGPIO, APBKeyboard, APBVGA, ExternalPins }
 import ysyx.sim.AXI4SDRAM
 import ysyx.SoCConfig
 import ysyx.amba._
@@ -24,7 +24,7 @@ import ysyx.amba._
 class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val xbar = AXI4Xbar()
   val apbxbar = LazyModule(new APBFanout).node
-  val cpu = LazyModule(new CPU(idBits = ChipLinkParam.idBits))
+  val cpu = LazyModule(new CPU)
   val luart = LazyModule( new APBUart16550( AddressSet.misaligned(SoCConfig.uartBase, SoCConfig.uartSize)))
   val lgpio = LazyModule( new APBGPIO(AddressSet.misaligned(SoCConfig.gpioBase, SoCConfig.gpioSize)))
   val lkeyboard = LazyModule( new APBKeyboard( AddressSet.misaligned(SoCConfig.keyboardBase, SoCConfig.keyboardSize)))
@@ -39,7 +39,6 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
 
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
-    cpu.module.slave := DontCare
     cpu.module.interrupt := false.B
 
     val probe = IO(chiselTypeOf(cpu.module.probe))

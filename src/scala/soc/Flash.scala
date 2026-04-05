@@ -22,7 +22,7 @@ class flash_cmd extends Module {
   io.data := RawClockedNonVoidFunctionCall(s"flash_read", UInt(32.W))(
     clock,
     io.valid && (io.cmd === "h03".U(8.W)),
-    io.addr
+    io.addr.pad(64)
   )
 
   assert(
@@ -114,13 +114,13 @@ class psram_cmd extends Module {
   io.rdata := RawClockedNonVoidFunctionCall(s"psram_read", UInt(8.W))(
     clock,
     io.valid && (io.cmd === "heb".U(8.W)),
-    io.addr
+    io.addr.pad(64)
   )
 
   RawClockedVoidFunctionCall(s"psram_write")(
     clock,
     io.valid && (io.cmd === "h38".U(8.W)),
-    io.addr,
+    io.addr.pad(64),
     io.wdata
   )
 

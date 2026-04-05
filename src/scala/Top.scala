@@ -9,10 +9,6 @@ import ysyx.core.DebugBundle
 import ysyx.soc.ysyxSoCFull
 import ysyx.device.ExternalPins
 
-object Config {
-  def hasChipLink: Boolean = false
-}
-
 class ysyxSoCTop extends Module {
   implicit val config: Parameters = new Config(
     new DefaultConfig

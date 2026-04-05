@@ -25,5 +25,5 @@ object SoCConfig {
   val sramBase: Long = 0x0f000000L
   val sramSize: Long = 0x2000L
   val sdramBase: Long = 0x80000000L
-  val sdramSize: Long = 0x8000000L
+  val sdramSize: Long = 0x10000000L
 }

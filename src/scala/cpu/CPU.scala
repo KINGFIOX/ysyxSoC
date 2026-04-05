@@ -15,7 +15,7 @@ import ysyx.cpu.cache.{AXI4DCache, AXI4ICache}
 import ysyx.core.common.HasAXIParameter
 import ysyx.core.sram._
 
-class CPU(idBits: Int)(implicit p: Parameters)
+class CPU(implicit p: Parameters)
     extends LazyModule
     with HasAXIParameter {
 
@@ -40,7 +40,6 @@ class CPU(idBits: Int)(implicit p: Parameters)
     val (dcache, _) = dcacheNode.out(0)
     val (perip, _) = peripNode.out(0)
     val interrupt = IO(Input(Bool()))
-    val slave = IO(Flipped(AXI4Bundle(axiParams))) // used for chiplink
 
     // --- modules ---
     val core = Module(new NPCCore)
@@ -52,15 +51,6 @@ class CPU(idBits: Int)(implicit p: Parameters)
     icache <> core.icache
     dcache <> core.dcache
     perip <> core.perip
-
-    // Slave interface is not used by NPCCore, tie off
-    slave.ar.ready := false.B
-    slave.aw.ready := false.B
-    slave.w.ready := false.B
-    slave.r.valid := false.B
-    slave.r.bits := DontCare
-    slave.b.valid := false.B
-    slave.b.bits := DontCare
 
     licache.module.fence_i := core.fence_i
 

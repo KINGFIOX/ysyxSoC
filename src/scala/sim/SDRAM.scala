@@ -56,9 +56,9 @@ class SDRAMImpl(axiParams: AXI4BundleParameters) extends Module {
 
   private val readEn = WireInit(false.B)
   // Rust sdram_read returns 16 bits; must use UInt(16.W) to match DPI signature
-  private val rOffset = rAddr.pad(32)
+  private val rOffset = rAddr.pad(64)
   private val readLo = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, rOffset)
-  private val readHi = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, rOffset + 2.U)
+  private val readHi = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, (rOffset + 2.U).pad(64))
 
   io.ar.ready := rState === RState.rIdle
   io.r.valid := false.B
@@ -125,7 +125,7 @@ class SDRAMImpl(axiParams: AXI4BundleParameters) extends Module {
     RawClockedVoidFunctionCall("sdram_write")(
       clock,
       writeEn && writeStrb(i),
-      writeAddr + i.U,
+      (writeAddr + i.U).pad(64),
       writeData(i * 8 + 7, i * 8)
     )
   }

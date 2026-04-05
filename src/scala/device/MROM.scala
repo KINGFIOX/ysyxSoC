@@ -22,9 +22,9 @@ class MROMHelper
       |  input ren,
       |  output reg [31:0] rdata
       |);
-      |import "DPI-C" function void mrom_read(input int raddr, output int rdata);
+      |import "DPI-C" function void mrom_read(input longint raddr, output int rdata);
       |always @(*) begin
-      |  if (ren) mrom_read(raddr, rdata);
+      |  if (ren) mrom_read({32'b0, raddr}, rdata);
       |  else rdata = 0;
       |end
       |endmodule

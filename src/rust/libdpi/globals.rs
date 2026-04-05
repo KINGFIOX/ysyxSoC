@@ -9,7 +9,7 @@ pub const SRAM_SIZE: u64 = 0x2000;
 pub const FLASH_BASE: u64 = 0x30000000;
 pub const FLASH_SIZE: u64 = 0x10000000;
 pub const SDRAM_BASE: u64 = 0x80000000;
-pub const SDRAM_SIZE: u64 = 0x8000000;
+pub const SDRAM_SIZE: u64 = 0x10000000;
 
 pub static DPI_FLASH: DpiTarget<Vec<u8>> = DpiTarget::new();
 pub static DPI_MROM: DpiTarget<Vec<u8>> = DpiTarget::new();

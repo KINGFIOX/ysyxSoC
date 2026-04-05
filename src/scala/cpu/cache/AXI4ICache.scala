@@ -29,7 +29,8 @@ class ICacheImpl(
 
   private val offsetBits = 6 // 64B cacheline
   private val indexBits = 6 // 64 sets
-  private val tagBits = addrBits - offsetBits - indexBits
+  private val sramAddrBits = sramParams.addrBits // actual addr width from diplomacy
+  private val tagBits = sramAddrBits - offsetBits - indexBits
   private val nBeats = 8 // 8 beats x 8B = 64B
   private val beatIdxBits = log2Ceil(nBeats)
 
@@ -38,7 +39,7 @@ class ICacheImpl(
 
   val offset = in.addr(offsetBits - 1, 0)
   val index = in.addr(offsetBits + indexBits - 1, offsetBits)
-  val tag = in.addr(addrBits - 1, offsetBits + indexBits)
+  val tag = in.addr(sramAddrBits - 1, offsetBits + indexBits)
 
   class CacheSet extends Bundle {
     val tags = Vec(4, UInt(tagBits.W))
