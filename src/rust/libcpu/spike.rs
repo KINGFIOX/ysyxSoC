@@ -7,7 +7,7 @@ use crate::libcpu::abstract_cpu::{
 };
 
 const ISA: &CStr = c"RV64IMAFDC";
-const RESET_VECTOR: u64 = 0x80000000;
+const RESET_VECTOR: u64 = 0x30000000;
 
 const MEM_BASES: &[u64] = &[
     0x20000000, // MROM

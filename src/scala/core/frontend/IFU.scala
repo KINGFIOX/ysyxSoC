@@ -66,7 +66,7 @@ class IFU extends NPCModule {
   icache.req := (state_q === State.addr_req)
   icache.wen := false.B
   icache.size := 2.U
-  icache.addr := pc_q
+  icache.addr := pc_q(busAddrBits - 1, 0)
   icache.wstrb := 0.U
   icache.wdata := 0.U
 

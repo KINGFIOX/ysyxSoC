@@ -12,7 +12,7 @@ import ysyx.SoCConfig
 
 class AXI4SDRAM(address: Seq[AddressSet])(implicit p: Parameters)
     extends LazyModule {
-  val beatBytes = 4
+  val beatBytes = 8
   val node = AXI4SlaveNode(
     Seq(
       AXI4SlavePortParameters(
@@ -55,15 +55,16 @@ class SDRAMImpl(axiParams: AXI4BundleParameters) extends Module {
   private val rLen = Reg(UInt(axiParams.lenBits.W))
 
   private val readEn = WireInit(false.B)
-  // Rust sdram_read returns 16 bits; must use UInt(16.W) to match DPI signature
   private val rOffset = rAddr.pad(64)
-  private val readLo = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, rOffset)
-  private val readHi = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, (rOffset + 2.U).pad(64))
+  private val read0 = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, rOffset)
+  private val read1 = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, (rOffset + 2.U).pad(64))
+  private val read2 = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, (rOffset + 4.U).pad(64))
+  private val read3 = RawClockedNonVoidFunctionCall("sdram_read", UInt(16.W))(clock, readEn, (rOffset + 6.U).pad(64))
 
   io.ar.ready := rState === RState.rIdle
   io.r.valid := false.B
   io.r.bits := DontCare
-  io.r.bits.data := Cat(readHi, readLo)
+  io.r.bits.data := Cat(read3, read2, read1, read0)
   io.r.bits.resp := 0.U
   io.r.bits.id := rId
   io.r.bits.last := rLen === 0.U

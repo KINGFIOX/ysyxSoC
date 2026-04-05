@@ -38,6 +38,7 @@ trait HasCSRParameter {
 trait HasCoreParameter {
   val dataBits: Int = 64
   val addrBits: Int = 64
+  val busAddrBits: Int = 32
   val instBits: Int = 32
   val OpcodeBits: Int = 7
   val dataBytes = dataBits >> 3 // 一个 word 有几个字节  4
@@ -50,14 +51,14 @@ trait HasCoreParameter {
 
 trait HasSRAMParameter extends HasCoreParameter {
   val sramParams: SRAMBundleParameters = SRAMBundleParameters(
-    addrBits = addrBits,
+    addrBits = busAddrBits,
     dataBits = dataBits
   )
 }
 
 trait HasAXIParameter extends HasCoreParameter {
   val axiParams: AXI4BundleParameters = AXI4BundleParameters(
-    addrBits = addrBits,
+    addrBits = busAddrBits,
     dataBits = dataBits,
     idBits = 4,
   )

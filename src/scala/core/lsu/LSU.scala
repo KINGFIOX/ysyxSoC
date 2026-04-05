@@ -105,7 +105,7 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   dcache.req := false.B
   dcache.wen := ctrl.w_en
   dcache.size := dataBytesBits.U
-  dcache.addr := aligned_addr
+  dcache.addr := aligned_addr(busAddrBits - 1, 0)
   dcache.wstrb := store_wstrb
   dcache.wdata := store_wdata
 
@@ -115,7 +115,7 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   perip.req := false.B
   perip.wen := ctrl.w_en
   perip.size := Mux(ctrl.w_en, dataBytesBits.U, ctrl.size)
-  perip.addr := Mux(ctrl.w_en, aligned_addr, ctrl.addr)
+  perip.addr := Mux(ctrl.w_en, aligned_addr, ctrl.addr)(busAddrBits - 1, 0)
   perip.wstrb := Mux(ctrl.w_en, store_wstrb, 0.U)
   perip.wdata := Mux(ctrl.w_en, store_wdata, 0.U)
 

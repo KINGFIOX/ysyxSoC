@@ -101,7 +101,7 @@ class Dispatcher extends NPCModule {
   io.alu_iq.bits.extra.prd := in.prd
   io.alu_iq.bits.extra.prf_wen := alu_prf_wen
   // format: off
-  io.alu_iq.bits.extra.use_imm := Seq(InstType.I_ALU, InstType.JALR).map(inst_type === _).reduce(_ || _)
+  io.alu_iq.bits.extra.use_imm := Seq(InstType.I_ALU, InstType.I_ALU_W, InstType.JALR).map(inst_type === _).reduce(_ || _)
   // format: on
   io.alu_iq.bits.rob_tag := io.rob_tag
 
