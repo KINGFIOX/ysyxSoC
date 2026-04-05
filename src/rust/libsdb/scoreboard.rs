@@ -14,8 +14,8 @@ use crate::tracer::ringbuf::RingBuf;
 
 const TRACE_CAPACITY: usize = 16;
 
-const LOAD_MNEMONICS: &[&str] = &["lb", "lh", "lw", "lbu", "lhu"];
-const STORE_MNEMONICS: &[&str] = &["sb", "sh", "sw"];
+const LOAD_MNEMONICS: &[&str] = &["lb", "lh", "lw", "ld", "lbu", "lhu", "lwu"];
+const STORE_MNEMONICS: &[&str] = &["sb", "sh", "sw", "sd"];
 
 pub enum StepResult {
     Continue,
@@ -56,7 +56,8 @@ fn mem_width(mnemonic: &str) -> u8 {
     match mnemonic {
         "lb" | "lbu" | "sb" => 1,
         "lh" | "lhu" | "sh" => 2,
-        "lw" | "sw" => 4,
+        "lw" | "lwu" | "sw" => 4,
+        "ld" | "sd" => 8,
         _ => 0,
     }
 }
