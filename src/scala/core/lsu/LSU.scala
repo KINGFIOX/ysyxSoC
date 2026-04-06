@@ -31,7 +31,7 @@ object ZeroExt {
 }
 
 // from the view of Rob -> LSU
-class MemLsuInput extends MemInfoBundle {
+class MemLate extends MemInfoBundle {
   val addr = UInt(addrBits.W)
   val wdata = UInt(dataBits.W)
   val is_mmio = Bool()
@@ -39,7 +39,7 @@ class MemLsuInput extends MemInfoBundle {
   val rd_wen = Input(Bool())
 }
 
-class LSU extends LateExecUnit(new MemLsuInput) {
+class LSU extends LateExecUnit(new MemLate) {
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
 

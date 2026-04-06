@@ -12,7 +12,10 @@ class CsrExceptWritePort extends Bundle with HasCoreParameter {
   val xtval = UInt(dataBits.W)
 }
 
-class CsrWriteOnlyPort extends CsrRobEntry {
+class CsrWriteOnlyPort extends NPCBundle {
+  val addr = UInt(NRCSRbits.W)
+  val op = CSROpType()
+  val wdata = UInt(dataBits.W)
   val wen = Bool()
   val result = Input(UInt(dataBits.W))
 }

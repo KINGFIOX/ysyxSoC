@@ -67,9 +67,7 @@ class Dispatcher extends NPCModule {
   enq.prs2 := in.prs2
   enq.imm := dec.imm
   enq.mem := ctrl.mem
-  enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
   enq.csr.op := ctrl.csr_op
-  enq.csr.wdata := 0.U
   enq.rd.arch_rd := Mux(rd_wen, dec.rd_idx, 0.U)
   enq.rd.new_prd := in.prd
   enq.rd.old_prd := in.old_prd

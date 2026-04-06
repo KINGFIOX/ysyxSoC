@@ -9,8 +9,6 @@ import ysyx.core.lsu._
 class MemRobEntry extends MemInfoBundle
 
 class CsrRobEntry extends NPCBundle {
-  val wdata = UInt(dataBits.W)
-  val addr = UInt(NRCSRbits.W)
   val op = CSROpType()
 }
 
@@ -116,13 +114,9 @@ class Rob extends NPCModule {
     val enq_tag = Output(UInt(robEntryBits.W))
     val alu = Flipped(Valid(new WBALUBundle))
     val bru = Flipped(Valid(new WBBRUBundle))
-    val late_prf = new Bundle {
-      val prs1 = Output(UInt(NRPhyRegBits.W))
-      val prs2 = Output(UInt(NRPhyRegBits.W))
-      val rs1_data = Input(UInt(dataBits.W))
-      val rs2_data = Input(UInt(dataBits.W))
-    }
-    val lsu = ReqDone(new MemLsuInput)
+    val late_prs1 = new PRFReadPort
+    val late_prs2 = new PRFReadPort
+    val lsu = ReqDone(new MemLate)
     val csr = ReqDone(new CsrWriteOnlyPort)
     val commit = ReqDone(new CommitBundle)
     val lsu_wb = Valid(new PRFWritePort)
@@ -218,10 +212,10 @@ class Rob extends NPCModule {
   val head_is_csr = head_entry.inst_type === InstType.CSR
 
   // PRF read for late exec (BackEnd connects these to PRF ports 4-5)
-  io.late_prf.prs1 := head_entry.prs1
-  io.late_prf.prs2 := head_entry.prs2
+  io.late_prs1.addr := head_entry.prs1
+  io.late_prs2.addr := head_entry.prs2
 
-  val late_addr = io.late_prf.rs1_data + head_entry.imm
+  val late_addr = io.late_prs1.data + head_entry.imm
 
   // Drive LSU
   io.lsu.bits.addr := late_addr
@@ -229,13 +223,13 @@ class Rob extends NPCModule {
   io.lsu.bits.sign_ext := head_entry.mem.sign_ext
   io.lsu.bits.r_en := head_entry.mem.r_en
   io.lsu.bits.w_en := head_entry.mem.w_en
-  io.lsu.bits.wdata := io.late_prf.rs2_data
+  io.lsu.bits.wdata := io.late_prs2.data
   io.lsu.bits.is_mmio := AddressMap.is_mmio(late_addr)
 
-  // Drive CSRU
-  io.csr.bits.addr := head_entry.csr.addr
+  // Drive CSRU: addr from imm, wdata from PRF(prs1)
+  io.csr.bits.addr := head_entry.imm(NRCSRbits - 1, 0)
   io.csr.bits.op := head_entry.csr.op
-  io.csr.bits.wdata := io.late_prf.rs1_data
+  io.csr.bits.wdata := io.late_prs1.data
 
   io.lsu.req := head_is_late && head_is_mem && !flush
   io.csr.req := head_is_late && head_is_csr && !flush

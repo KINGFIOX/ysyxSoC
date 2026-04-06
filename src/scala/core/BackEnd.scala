@@ -182,10 +182,8 @@ class BackEnd extends NPCModule {
   rob_.io.bru.bits.br_flag := br_flag
 
   // --- ROB late exec PRF read: ports 4, 5 ---
-  prf_.io.read(4).addr := rob_.io.late_prf.prs1
-  prf_.io.read(5).addr := rob_.io.late_prf.prs2
-  rob_.io.late_prf.rs1_data := prf_.io.read(4).data
-  rob_.io.late_prf.rs2_data := prf_.io.read(5).data
+  prf_.io.read(4) <> rob_.io.late_prs1
+  prf_.io.read(5) <> rob_.io.late_prs2
 
   // ==========================================================
   // Dispatch-resolved PRF write (port 1): JAL/JALR/LUI/AUIPC
