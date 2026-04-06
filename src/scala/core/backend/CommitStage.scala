@@ -23,14 +23,12 @@ class DebugCommitBundle extends NPCBundle {
 class CommitStage extends NPCModule {
   // ArchRAT write
   val arch_rat_w = IO(Valid(new ArchRATWritePort))
-  // FreeList: release old_prd
+  // FreeList: release old_prd (also serves as commit_alloc)
   val freelist_free = IO(Valid(UInt(NRPhyRegBits.W)))
-  // FreeList: confirm allocation is now committed
-  val freelist_commit_alloc = IO(Output(Bool()))
   // PRF write for late execution results (load/CSR)
   val prf_write = IO(Valid(new PRFWritePort))
   // Wakeup for late execution results
-  val wakeup = IO(Valid(new BusyTableWakeupPort))
+  val wakeup = IO(Valid(new WakeupPort))
 
   val csr = IO(new Bundle {
     val except = Valid(new CsrExceptWritePort)
@@ -62,7 +60,6 @@ class CommitStage extends NPCModule {
   // FreeList
   freelist_free.valid := false.B
   freelist_free.bits := head_entry.old_prd
-  freelist_commit_alloc := false.B
 
   // PRF write (late exec)
   prf_write.valid := false.B
@@ -114,7 +111,6 @@ class CommitStage extends NPCModule {
       when(head_entry.rd_wen) {
         arch_rat_w.valid := true.B
         freelist_free.valid := true.B
-        freelist_commit_alloc := true.B
       }
       // Late exec PRF write + wakeup (load/CSR results latched in ROB)
       prf_write.valid := head_entry.late_rd_wen

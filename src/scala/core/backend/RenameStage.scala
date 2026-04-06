@@ -32,7 +32,7 @@ class RenameStage extends NPCModule {
     })
     val busy_set = Valid(UInt(NRPhyRegBits.W))
     val freelist_alloc = Flipped(Decoupled(UInt(NRPhyRegBits.W)))
-    val wakeup_fwd = Vec(3, Flipped(Valid(new BusyTableWakeupPort)))
+    val wakeup_fwd = Vec(3, Flipped(Valid(new WakeupPort)))
   })
 
   val dec_out = io.in.bits

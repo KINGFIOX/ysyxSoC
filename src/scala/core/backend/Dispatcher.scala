@@ -17,7 +17,7 @@ class Dispatcher extends NPCModule {
     // dispatch-resolved PRF write
     val prf_write = Valid(new PRFWritePort)
     // dispatch-resolved wakeup
-    val wakeup = Valid(new BusyTableWakeupPort)
+    val wakeup = Valid(new WakeupPort)
   })
 
   val in = io.in.bits

@@ -71,14 +71,15 @@ class BackEnd extends NPCModule {
   bru_iq_.io.flush := flush
   agu_iq_.io.flush := flush
 
-  // FutureRAT flush recovery: copy from ArchRAT
+  // Flush recovery: rebuild from ArchRAT snapshot (with write forwarding)
   futureRat_.io.arch_snapshot := archRat_.io.snapshot
+  freeList_.io.arch_snapshot := archRat_.io.snapshot
 
   // ==========================================================
   // Wakeup buses (3 sources)
   // ==========================================================
   // wakeup0: ALU execution writeback
-  val wakeup_alu = Wire(Valid(new BusyTableWakeupPort))
+  val wakeup_alu = Wire(Valid(new WakeupPort))
   // wakeup1: dispatch-resolved (JAL/JALR/LUI/AUIPC)
   val wakeup_disp = dispatcher_.io.wakeup
   // wakeup2: commit late execution (load/CSR)
@@ -225,9 +226,8 @@ class BackEnd extends NPCModule {
   // --- ArchRAT write ---
   archRat_.io.write := commitStage_.arch_rat_w
 
-  // --- FreeList: free old_prd ---
+  // --- FreeList: free old_prd (also serves as commit_alloc) ---
   freeList_.io.free := commitStage_.freelist_free
-  freeList_.io.commit_alloc := commitStage_.freelist_commit_alloc
 
   // --- Late exec PRF write (port 2): load / CSR results (latched in ROB entry) ---
   prf_.io.write(2) := commitStage_.prf_write

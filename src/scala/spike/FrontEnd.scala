@@ -27,9 +27,6 @@ class FrontEnd extends NPCModule {
   val cur_pc = RegInit(ysyx.SoCConfig.resetVector.U(addrBits.W))
   val saved_dnpc = Reg(UInt(addrBits.W))
 
-  val fetchEn = state === State.sFetch
-  val flushEn = state === State.sFlush
-
   // spike_fe_new() -> handle (u64, WYSIWYG chandle)
   val handle = RawClockedNonVoidFunctionCall("spike_fe_new", UInt(64.W))(
     clock,
@@ -39,13 +36,15 @@ class FrontEnd extends NPCModule {
   val fetchResult =
     RawClockedNonVoidFunctionCall("spike_fe_fetch_and_step", UInt(128.W))(
       clock,
-      fetchEn,
+      state === State.sFetch,
       handle
     )
   val fetchOk = fetchResult(31, 0) =/= 0.U
   val fetchInst = fetchResult(63, 32)
   val fetchNpc = fetchResult(127, 64)
 
+  //
+  val flushEn = state === State.sFlush
   // spike_fe_set_gpr(handle, idx, val) x 32 — val is 64-bit
   for (i <- 0 until NRReg) {
     RawClockedVoidFunctionCall("spike_fe_set_gpr")(
@@ -56,7 +55,6 @@ class FrontEnd extends NPCModule {
       flush_gpr(i).asUInt.pad(64)
     )
   }
-
   // spike_fe_set_pc(handle, pc) — pc is 64-bit
   RawClockedVoidFunctionCall("spike_fe_set_pc")(
     clock,

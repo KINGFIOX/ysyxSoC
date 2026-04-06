@@ -3,7 +3,7 @@ package ysyx.core.common
 import chisel3._
 import chisel3.util._
 import ysyx.core.backend.RenameStageOutput
-import ysyx.core.backend.BusyTableWakeupPort
+import ysyx.core.backend.WakeupPort
 
 object PipelineConnect {
   def apply[T <: Data](
@@ -27,7 +27,7 @@ object PipelineConnect {
       prevOut: DecoupledIO[RenameStageOutput],
       thisIn: DecoupledIO[RenameStageOutput],
       flush: Bool,
-      wakeups: Seq[ValidIO[BusyTableWakeupPort]]
+      wakeups: Seq[ValidIO[WakeupPort]]
   ): Unit = {
     val pipe_valid = RegInit(false.B)
     val pipe_bits = Reg(new RenameStageOutput)

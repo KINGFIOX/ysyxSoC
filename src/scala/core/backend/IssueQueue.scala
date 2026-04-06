@@ -35,15 +35,18 @@ class IQEntry[T <: Data](gen: T) extends NPCBundle {
   val occupied = Bool()
 }
 
-abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numWakeupPorts: Int = 3)
-    extends NPCModule {
+abstract class IssueQueue[T <: Data](
+    gen: T,
+    val entries: Int,
+    val numWakeupPorts: Int = 3
+) extends NPCModule {
   require(isPow2(entries))
   private val idxBits = log2Ceil(entries)
 
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new IQEnqData(gen)))
     val issue = Decoupled(new IQIssueData(gen))
-    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new BusyTableWakeupPort)))
+    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new WakeupPort)))
     val flush = Input(Bool())
   })
 
@@ -92,12 +95,16 @@ abstract class IssueQueue[T <: Data](gen: T, val entries: Int, val numWakeupPort
     val enq_data = io.enq.bits
 
     // Check wakeup match at enqueue time
-    val prs1_wakeup = io.wakeup.map(wk =>
-      wk.valid && !enq_data.prs1.ready && enq_data.prs1.preg === wk.bits.prd
-    ).reduce(_ || _)
-    val prs2_wakeup = io.wakeup.map(wk =>
-      wk.valid && !enq_data.prs2.ready && enq_data.prs2.preg === wk.bits.prd
-    ).reduce(_ || _)
+    val prs1_wakeup = io.wakeup
+      .map(wk =>
+        wk.valid && !enq_data.prs1.ready && enq_data.prs1.preg === wk.bits.prd
+      )
+      .reduce(_ || _)
+    val prs2_wakeup = io.wakeup
+      .map(wk =>
+        wk.valid && !enq_data.prs2.ready && enq_data.prs2.preg === wk.bits.prd
+      )
+      .reduce(_ || _)
 
     ent.prs1.preg := enq_data.prs1.preg
     ent.prs1.ready := enq_data.prs1.ready || prs1_wakeup

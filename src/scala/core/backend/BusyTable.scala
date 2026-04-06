@@ -5,7 +5,7 @@ import chisel3.util._
 
 import ysyx.core.common._
 
-class BusyTableWakeupPort extends NPCBundle {
+class WakeupPort extends NPCBundle {
   val prd = UInt(NRPhyRegBits.W)
 }
 
@@ -14,11 +14,12 @@ class BusyTableReadPort extends NPCBundle {
   val busy = Input(Bool())
 }
 
+// for value ready
 class BusyTable(val numReadPorts: Int = 2, val numWakeupPorts: Int = 3) extends NPCModule {
   val io = IO(new Bundle {
     val set_busy = Flipped(Valid(UInt(NRPhyRegBits.W)))
     val read = Vec(numReadPorts, Flipped(new BusyTableReadPort))
-    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new BusyTableWakeupPort)))
+    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new WakeupPort)))
     val flush = Input(Bool())
   })
 

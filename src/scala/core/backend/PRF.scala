@@ -23,21 +23,23 @@ class PRF(val numReadPorts: Int = 6, val numWritePorts: Int = 3) extends NPCModu
 
   val regfile = Reg(Vec(NRPhyReg, UInt(dataBits.W)))
 
+  // read
   for (i <- 0 until numReadPorts) {
     io.read(i).data := Mux(io.read(i).addr === 0.U, 0.U, regfile(io.read(i).addr))
   }
 
+  // write
   for (i <- 0 until numWritePorts) {
     when(io.write(i).valid && io.write(i).bits.addr =/= 0.U) {
       regfile(io.write(i).bits.addr) := io.write(i).bits.data
     }
   }
 
+  // probe
   val probe = IO(new Bundle {
     val arch_rat = Input(Vec(NRReg, UInt(NRPhyRegBits.W)))
     val gpr = Output(Vec(NRReg, UInt(dataBits.W)))
   })
-
   for (i <- 0 until NRReg) {
     probe.gpr(i) := Mux(i.U === 0.U, 0.U, regfile(probe.arch_rat(i)))
   }

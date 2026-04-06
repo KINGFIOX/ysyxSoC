@@ -54,5 +54,11 @@ class ArchRAT extends NPCModule {
     table(io.write.bits.addr) := io.write.bits.preg
   }
 
+  // Write forwarding: flush consumers (FutureRAT, FreeList) see the
+  // current-cycle commit write so that a mispredicted JALR that both
+  // writes rd and triggers flush is correctly reflected.
   io.snapshot := table
+  when(io.write.valid && io.write.bits.addr =/= 0.U) {
+    io.snapshot(io.write.bits.addr) := io.write.bits.preg
+  }
 }
