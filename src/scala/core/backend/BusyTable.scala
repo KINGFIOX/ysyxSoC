@@ -15,7 +15,7 @@ class BusyTableReadPort extends NPCBundle {
 }
 
 // for value ready
-class BusyTable(val numReadPorts: Int = 6, val numWakeupPorts: Int = 3) extends NPCModule {
+class BusyTable(val numReadPorts: Int = 4, val numWakeupPorts: Int = 3) extends NPCModule {
   val io = IO(new Bundle {
     val set_busy = Flipped(Valid(UInt(NRPhyRegBits.W)))
     val read = Vec(numReadPorts, Flipped(new BusyTableReadPort))

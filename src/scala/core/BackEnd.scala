@@ -36,16 +36,14 @@ class BackEnd extends NPCModule {
 
   val prf_ = Module(new PRF(numReadPorts = 6, numWritePorts = 4))
   val freeList_ = Module(new FreeList)
-  val busyTable_ = Module(new BusyTable(numReadPorts = 6, numWakeupPorts = 3))
+  val busyTable_ = Module(new BusyTable(numReadPorts = 4, numWakeupPorts = 3))
   val futureRat_ = Module(new FutureRAT(numReadPorts = 3))
   val archRat_ = Module(new ArchRAT)
   val rob_ = Module(new Rob)
   val alu_ = Module(new ALU)
   val bru_ = Module(new BRU)
-  val agu_ = Module(new AGU)
   val alu_iq_ = Module(new ALUIssueQueue)
   val bru_iq_ = Module(new BRUIssueQueue)
-  val agu_iq_ = Module(new AGUIssueQueue)
   val lsu_ = Module(new LSU)
   val csru_ = Module(new CSRU)
 
@@ -69,7 +67,6 @@ class BackEnd extends NPCModule {
   futureRat_.io.flush := flush
   alu_iq_.io.flush := flush
   bru_iq_.io.flush := flush
-  agu_iq_.io.flush := flush
 
   // Flush recovery: rebuild from ArchRAT snapshot (with write forwarding)
   futureRat_.io.arch_snapshot := archRat_.io.snapshot
@@ -113,7 +110,6 @@ class BackEnd extends NPCModule {
   dispatcher_.io.rob_tag := rob_.io.enq_tag
   dispatcher_.io.alu_iq <> alu_iq_.io.enq
   dispatcher_.io.bru_iq <> bru_iq_.io.enq
-  dispatcher_.io.agu_iq <> agu_iq_.io.enq
 
   // ==========================================================
   // IQ → BusyTable read ports (readiness checked at issue time)
@@ -122,8 +118,6 @@ class BackEnd extends NPCModule {
   alu_iq_.io.busy_read(1) <> busyTable_.io.read(1)
   bru_iq_.io.busy_read(0) <> busyTable_.io.read(2)
   bru_iq_.io.busy_read(1) <> busyTable_.io.read(3)
-  agu_iq_.io.busy_read(0) <> busyTable_.io.read(4)
-  agu_iq_.io.busy_read(1) <> busyTable_.io.read(5)
 
   // ==========================================================
   // Stage 4 — Issue + Execute + Writeback
@@ -187,23 +181,11 @@ class BackEnd extends NPCModule {
   rob_.io.bru.bits.tag := bru_wb_tag
   rob_.io.bru.bits.br_flag := br_flag
 
-  // --- AGU path ---
-  agu_.io.in.valid := agu_iq_.io.issue.valid
-  agu_iq_.io.issue.ready := agu_.io.in.ready
-  agu_.io.out.ready := true.B
-  // PRF read for AGU: ports 4, 5
-  prf_.io.read(4).addr := agu_iq_.io.issue.bits.prs1
-  prf_.io.read(5).addr := agu_iq_.io.issue.bits.prs2
-  agu_.io.in.bits.base := prf_.io.read(4).data
-  agu_.io.in.bits.offset := agu_iq_.io.issue.bits.extra.offset
-  agu_.io.in.bits.rob_tag := agu_iq_.io.issue.bits.rob_tag
-  agu_.io.in.bits.wdata := prf_.io.read(5).data
-
-  rob_.io.agu.valid := agu_.io.out.fire
-  rob_.io.agu.bits.tag := agu_.io.out.bits.rob_tag
-  rob_.io.agu.bits.addr := agu_.io.out.bits.addr
-  rob_.io.agu.bits.wdata := agu_.io.out.bits.wdata
-  rob_.io.agu.bits.is_mmio := agu_.io.out.bits.is_mmio
+  // --- ROB late exec PRF read: ports 4, 5 ---
+  prf_.io.read(4).addr := rob_.io.late_prf.prs1
+  prf_.io.read(5).addr := rob_.io.late_prf.prs2
+  rob_.io.late_prf.rs1_data := prf_.io.read(4).data
+  rob_.io.late_prf.rs2_data := prf_.io.read(5).data
 
   // ==========================================================
   // Dispatch-resolved PRF write (port 1): JAL/JALR/LUI/AUIPC

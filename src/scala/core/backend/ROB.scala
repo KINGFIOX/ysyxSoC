@@ -6,11 +6,7 @@ import chisel3.util._
 import ysyx.core.common._
 import ysyx.core.lsu._
 
-class MemRobEntry extends MemInfoBundle {
-  val addr_rdy = Bool()
-  val wdata_rdy = Bool()
-  val is_mmio = Bool()
-}
+class MemRobEntry extends MemInfoBundle
 
 class CsrRobEntry extends NPCBundle {
   val wdata = UInt(dataBits.W)
@@ -53,14 +49,18 @@ class RobEntry extends NPCBundle {
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
   val inst_type = InstType()
+  val rd = new RdRobEntry
+  val prs1 = UInt(NRPhyRegBits.W)
+  val prs2 = UInt(NRPhyRegBits.W)
+  val imm = UInt(dataBits.W)
   val mem = new MemRobEntry
   val csr = new CsrRobEntry
-  val rd = new RdRobEntry
   val mret = new MretRobEntry
   val bru = new BruRobEntry
   val jal = new JalRobEntry
   val jalr = new JalrRobEntry
   val except = new ExceptRobEntry
+  val is_mmio = Bool()
   val predict_npc = UInt(addrBits.W)
   val ghr = UInt(ghrBits.W)
   val state = RobState()
@@ -77,9 +77,12 @@ class RobEnqData extends NPCBundle {
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
   val inst_type = InstType()
+  val rd = new RdRobEntry
+  val prs1 = UInt(NRPhyRegBits.W)
+  val prs2 = UInt(NRPhyRegBits.W)
+  val imm = UInt(dataBits.W)
   val mem = new MemInfoBundle
   val csr = new CsrRobEntry
-  val rd = new RdRobEntry
   val mret = new MretRobEntry
   val bru = new BruRobEntry
   val jal = new JalRobEntry
@@ -92,13 +95,6 @@ class RobEnqData extends NPCBundle {
 class WBALUBundle extends NPCBundle {
   val tag = UInt(robEntryBits.W)
   val alu_result = UInt(dataBits.W)
-}
-
-class WBAGUBundle extends NPCBundle {
-  val tag = UInt(robEntryBits.W)
-  val addr = UInt(addrBits.W)
-  val wdata = UInt(dataBits.W)
-  val is_mmio = Bool()
 }
 
 class WBBRUBundle extends NPCBundle {
@@ -119,8 +115,13 @@ class Rob extends NPCModule {
     val enq = Flipped(Decoupled(new RobEnqData))
     val enq_tag = Output(UInt(robEntryBits.W))
     val alu = Flipped(Valid(new WBALUBundle))
-    val agu = Flipped(Valid(new WBAGUBundle))
     val bru = Flipped(Valid(new WBBRUBundle))
+    val late_prf = new Bundle {
+      val prs1 = Output(UInt(NRPhyRegBits.W))
+      val prs2 = Output(UInt(NRPhyRegBits.W))
+      val rs1_data = Input(UInt(dataBits.W))
+      val rs2_data = Input(UInt(dataBits.W))
+    }
     val lsu = ReqDone(new MemLsuInput)
     val csr = ReqDone(new CsrWriteOnlyPort)
     val commit = ReqDone(new CommitBundle)
@@ -156,9 +157,6 @@ class Rob extends NPCModule {
       ent.jalr.dnpc := alu_result
       ent.jalr.dnpc_rdy := true.B
       ent.state := RobState.complete
-    }.elsewhen(inst_type === InstType.CSR) {
-      ent.csr.wdata := alu_result
-      ent.state := RobState.late
     }
     // format: on
   }
@@ -166,15 +164,6 @@ class Rob extends NPCModule {
     val ent = ram(idx(io.bru.bits.tag))
     ent.bru.br_flag := io.bru.bits.br_flag
     ent.state := RobState.complete
-  }
-  when(io.agu.valid && !flush) {
-    val ent = ram(idx(io.agu.bits.tag))
-    ent.mem.addr := io.agu.bits.addr
-    ent.mem.wdata := io.agu.bits.wdata
-    ent.mem.addr_rdy := true.B
-    ent.mem.wdata_rdy := true.B
-    ent.mem.is_mmio := io.agu.bits.is_mmio
-    ent.state := RobState.late
   }
 
   // ============================================================
@@ -190,15 +179,10 @@ class Rob extends NPCModule {
     ent.pc := enq.pc
     ent.inst := enq.inst
     ent.inst_type := enq.inst_type
-    ent.mem.size := enq.mem.size
-    ent.mem.r_en := enq.mem.r_en
-    ent.mem.sign_ext := enq.mem.sign_ext
-    ent.mem.w_en := enq.mem.w_en
-    ent.mem.addr := enq.mem.addr
-    ent.mem.wdata := enq.mem.wdata
-    ent.mem.addr_rdy := false.B
-    ent.mem.wdata_rdy := false.B
-    ent.mem.is_mmio := false.B
+    ent.prs1 := enq.prs1
+    ent.prs2 := enq.prs2
+    ent.imm := enq.imm
+    ent.mem := enq.mem
     ent.csr := enq.csr
     ent.rd.arch_rd := enq.rd.arch_rd
     ent.rd.new_prd := enq.rd.new_prd
@@ -213,32 +197,45 @@ class Rob extends NPCModule {
     ent.predict_npc := enq.predict_npc
     ent.ghr := enq.ghr
     // format: off
-    val go_to_fu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W, InstType.JALR,
-      InstType.CSR, InstType.BRANCH, InstType.LOAD, InstType.STORE)
+    val go_to_iq = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W,
+      InstType.JALR, InstType.BRANCH)
+      .map(enq.inst_type === _).reduce(_ || _) && !enq.except.valid
+    val go_to_late = Seq(InstType.LOAD, InstType.STORE, InstType.CSR)
       .map(enq.inst_type === _).reduce(_ || _) && !enq.except.valid
     // format: on
-    ent.state := Mux(go_to_fu, RobState.inflight, RobState.complete)
+    ent.state := MuxCase(RobState.complete, Seq(
+      go_to_iq -> RobState.inflight,
+      go_to_late -> RobState.late
+    ))
   }
 
   // ============================================================
-  // Late execution at head
+  // Late execution at head — operands read from PRF
   // ============================================================
   val head_entry = ram(head_q)
   val head_is_late = !empty_w && head_entry.state === RobState.late
   val head_is_mem = head_entry.mem.r_en || head_entry.mem.w_en
   val head_is_csr = head_entry.inst_type === InstType.CSR
 
-  io.lsu.bits.addr := head_entry.mem.addr
+  // PRF read for late exec (BackEnd connects these to PRF ports 4-5)
+  io.late_prf.prs1 := head_entry.prs1
+  io.late_prf.prs2 := head_entry.prs2
+
+  val late_addr = io.late_prf.rs1_data + head_entry.imm
+
+  // Drive LSU
+  io.lsu.bits.addr := late_addr
   io.lsu.bits.size := head_entry.mem.size
   io.lsu.bits.sign_ext := head_entry.mem.sign_ext
   io.lsu.bits.r_en := head_entry.mem.r_en
   io.lsu.bits.w_en := head_entry.mem.w_en
-  io.lsu.bits.wdata := head_entry.mem.wdata
-  io.lsu.bits.is_mmio := head_entry.mem.is_mmio
+  io.lsu.bits.wdata := io.late_prf.rs2_data
+  io.lsu.bits.is_mmio := AddressMap.is_mmio(late_addr)
 
+  // Drive CSRU
   io.csr.bits.addr := head_entry.csr.addr
   io.csr.bits.op := head_entry.csr.op
-  io.csr.bits.wdata := head_entry.csr.wdata
+  io.csr.bits.wdata := io.late_prf.rs1_data
 
   io.lsu.req := head_is_late && head_is_mem && !flush
   io.csr.req := head_is_late && head_is_csr && !flush
@@ -256,6 +253,7 @@ class Rob extends NPCModule {
 
   when(head_is_late && head_is_mem && io.lsu.done && !flush) {
     head_entry.state := RobState.complete
+    head_entry.is_mmio := io.lsu.bits.is_mmio
     when(io.lsu.bits.rd_wen) {
       io.lsu_wb.valid := true.B
       io.lsu_wb.bits.data := io.lsu.bits.result

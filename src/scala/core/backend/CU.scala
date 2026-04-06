@@ -42,8 +42,6 @@ class MemInfoBundle extends NPCBundle {
   val r_en = Bool()
   val sign_ext = Bool() // need sign extension ? only used when load
   val w_en = Bool()
-  val addr = UInt(addrBits.W)
-  val wdata = UInt(dataBits.W)
 }
 
 class CUInput extends NPCBundle {
@@ -395,8 +393,6 @@ class CU extends NPCModule {
   io.out.mem.w_en := inst_type === InstType.STORE
   io.out.mem.size := decoded(MemSizeField)
   io.out.mem.sign_ext := decoded(MemSignExtField)
-  io.out.mem.addr := 0.U
-  io.out.mem.wdata := 0.U
 
   io.out.csr_op := CSROpType.safe(decoded(CsrOpField))._1
   io.out.csr_wen := decoded(CsrWenField)

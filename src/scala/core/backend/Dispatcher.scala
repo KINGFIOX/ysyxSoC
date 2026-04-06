@@ -13,7 +13,6 @@ class Dispatcher extends NPCModule {
     val rob_tag = Input(UInt(robEntryBits.W))
     val alu_iq = Decoupled(new IQEnqData(new ALUExtra))
     val bru_iq = Decoupled(new IQEnqData(new BRUExtra))
-    val agu_iq = Decoupled(new IQEnqData(new AGUExtra))
     // dispatch-resolved PRF write
     val prf_write = Valid(new PRFWritePort)
     // dispatch-resolved wakeup, lui, auipc, jal, jalr
@@ -35,13 +34,9 @@ class Dispatcher extends NPCModule {
     InstType.I_ALU,
     InstType.R_ALU_W,
     InstType.I_ALU_W,
-    InstType.JALR,
-    InstType.CSR
+    InstType.JALR
   ).map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
-  val go_to_agu = Seq(InstType.LOAD, InstType.STORE)
-    .map(inst_type === _)
-    .reduce(_ || _) && !has_except
 
   val rd_wen = in.rd_wen
 
@@ -49,11 +44,10 @@ class Dispatcher extends NPCModule {
   // Ready / Valid
   // ============================================================
   val iq_ready = MuxCase(
-    true.B, // identical element
+    true.B,
     Seq(
       go_to_alu -> io.alu_iq.ready,
-      go_to_bru -> io.bru_iq.ready,
-      go_to_agu -> io.agu_iq.ready
+      go_to_bru -> io.bru_iq.ready
     )
   )
 
@@ -61,7 +55,6 @@ class Dispatcher extends NPCModule {
   io.rob_enq.valid := io.in.valid && iq_ready && !io.flush
   io.alu_iq.valid := io.in.valid && io.rob_enq.ready && go_to_alu && !io.flush
   io.bru_iq.valid := io.in.valid && io.rob_enq.ready && go_to_bru && !io.flush
-  io.agu_iq.valid := io.in.valid && io.rob_enq.ready && go_to_agu && !io.flush
 
   // ============================================================
   // ROB Enqueue
@@ -70,6 +63,9 @@ class Dispatcher extends NPCModule {
   enq.pc := dec.pc
   enq.inst := dec.inst_bits
   enq.inst_type := inst_type
+  enq.prs1 := in.prs1
+  enq.prs2 := in.prs2
+  enq.imm := dec.imm
   enq.mem := ctrl.mem
   enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
   enq.csr.op := ctrl.csr_op
@@ -122,14 +118,6 @@ class Dispatcher extends NPCModule {
   io.bru_iq.bits.prs2 := in.prs2
   io.bru_iq.bits.extra.bru_op := ctrl.bru_op
   io.bru_iq.bits.rob_tag := io.rob_tag
-
-  // ============================================================
-  // AGU Issue Queue
-  // ============================================================
-  io.agu_iq.bits.prs1 := in.prs1
-  io.agu_iq.bits.prs2 := in.prs2
-  io.agu_iq.bits.extra.offset := dec.imm
-  io.agu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // Dispatch-resolved PRF write (JAL, JALR, LUI, AUIPC)

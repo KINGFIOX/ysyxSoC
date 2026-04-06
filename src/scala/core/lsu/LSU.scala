@@ -32,11 +32,11 @@ object ZeroExt {
 
 // from the view of Rob -> LSU
 class MemLsuInput extends MemInfoBundle {
+  val addr = UInt(addrBits.W)
+  val wdata = UInt(dataBits.W)
   val is_mmio = Bool()
   val result = Input(UInt(dataBits.W))
-  val rd_wen = Input(Bool()) // for rob entry's rd valid
-  // val mcause = Input(UInt(dataBits.W))
-  // val has_except = Input(Bool())
+  val rd_wen = Input(Bool())
 }
 
 class LSU extends LateExecUnit(new MemLsuInput) {

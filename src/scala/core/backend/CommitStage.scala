@@ -100,7 +100,7 @@ class CommitStage extends NPCModule {
         freelist_free.valid := true.B
       }
 
-      dbg_is_mmio := head_is_mem && head_entry.mem.is_mmio
+      dbg_is_mmio := head_is_mem && head_entry.is_mmio
       redirect.bits.mispredict := is_diff
     }
   }
