@@ -56,9 +56,6 @@ class RobEntry extends NPCBundle {
   val mem = new MemRobEntry
   val csr = new CsrRobEntry
   val rd = new RdRobEntry
-  // latched load/CSR result for PRF write at commit
-  val late_result = UInt(dataBits.W)
-  val late_rd_wen = Bool() // whether late result should be written to PRF
   val mret = new MretRobEntry
   val bru = new BruRobEntry
   val jal = new JalRobEntry
@@ -127,6 +124,8 @@ class Rob extends NPCModule {
     val lsu = ReqDone(new MemLsuInput)
     val csr = ReqDone(new CsrWriteOnlyPort)
     val commit = ReqDone(new CommitBundle)
+    val lsu_wb = Valid(new PRFWritePort)
+    val csr_wb = Valid(new PRFWritePort)
     val flush = Input(Bool())
   })
 
@@ -211,8 +210,6 @@ class Rob extends NPCModule {
     ent.jal := enq.jal
     ent.jalr := enq.jalr
     ent.jalr.dnpc_rdy := false.B
-    ent.late_result := 0.U
-    ent.late_rd_wen := false.B
     ent.predict_npc := enq.predict_npc
     ent.ghr := enq.ghr
     // format: off
@@ -247,18 +244,28 @@ class Rob extends NPCModule {
   io.csr.req := head_is_late && head_is_csr && !flush
   io.csr.bits.wen := head_is_late && head_is_csr && !flush
 
+  // LSU writeback → PRF directly
+  io.lsu_wb.valid := false.B
+  io.lsu_wb.bits.addr := head_entry.rd.new_prd
+  io.lsu_wb.bits.data := 0.U
+
+  // CSR writeback → PRF directly
+  io.csr_wb.valid := false.B
+  io.csr_wb.bits.addr := head_entry.rd.new_prd
+  io.csr_wb.bits.data := 0.U
+
   when(head_is_late && head_is_mem && io.lsu.done && !flush) {
     head_entry.state := RobState.complete
-    when(io.lsu.bits.result_valid) {
-      head_entry.late_result := io.lsu.bits.result
-      head_entry.late_rd_wen := true.B
+    when(io.lsu.bits.rd_wen) {
+      io.lsu_wb.valid := true.B
+      io.lsu_wb.bits.data := io.lsu.bits.result
     }
   }
   when(head_is_late && head_is_csr && io.csr.done && !flush) {
     head_entry.state := RobState.complete
-    head_entry.late_result := io.csr.bits.result
     when(head_entry.rd.rd_wen) {
-      head_entry.late_rd_wen := true.B
+      io.csr_wb.valid := true.B
+      io.csr_wb.bits.data := io.csr.bits.result
     }
   }
 

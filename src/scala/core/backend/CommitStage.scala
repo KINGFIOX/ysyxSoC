@@ -25,10 +25,6 @@ class CommitStage extends NPCModule {
   val arch_rat_w = IO(Valid(new ArchRATWritePort))
   // FreeList: release old_prd (also serves as commit_alloc)
   val freelist_free = IO(Valid(UInt(NRPhyRegBits.W)))
-  // PRF write for late execution results (load/CSR)
-  val prf_write = IO(Valid(new PRFWritePort))
-  // Wakeup for late execution results
-  val wakeup = IO(Valid(new WakeupPort))
 
   val csr = IO(new Bundle {
     val except = Valid(new CsrExceptWritePort)
@@ -60,15 +56,6 @@ class CommitStage extends NPCModule {
   // FreeList
   freelist_free.valid := false.B
   freelist_free.bits := head_entry.rd.old_prd
-
-  // PRF write (late exec)
-  prf_write.valid := false.B
-  prf_write.bits.addr := head_entry.rd.new_prd
-  prf_write.bits.data := 0.U
-
-  // Wakeup (late exec)
-  wakeup.valid := false.B
-  wakeup.bits.prd := head_entry.rd.new_prd
 
   csr.except.valid := false.B
   csr.except.bits.xepc := head_entry.pc
@@ -112,10 +99,6 @@ class CommitStage extends NPCModule {
         arch_rat_w.valid := true.B
         freelist_free.valid := true.B
       }
-      // Late exec PRF write + wakeup (load/CSR results latched in ROB)
-      prf_write.valid := head_entry.late_rd_wen
-      prf_write.bits.data := head_entry.late_result
-      wakeup.valid := head_entry.late_rd_wen
 
       dbg_is_mmio := head_is_mem && head_entry.mem.is_mmio
       redirect.bits.mispredict := is_diff

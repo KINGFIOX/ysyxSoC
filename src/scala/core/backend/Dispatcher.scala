@@ -102,11 +102,8 @@ class Dispatcher extends NPCModule {
     InstType.R_ALU_W,
     InstType.I_ALU_W
   ).map(inst_type === _).reduce(_ || _) && rd_wen
-  io.alu_iq.bits.prs1.preg := in.prs1
-  io.alu_iq.bits.prs1.ready := in.prs1_ready
-  io.alu_iq.bits.prs2.preg := in.prs2
-  io.alu_iq.bits.prs2.ready := in.prs2_ready
-  io.alu_iq.bits.imm := dec.imm
+  io.alu_iq.bits.prs1 := in.prs1
+  io.alu_iq.bits.prs2 := in.prs2
   io.alu_iq.bits.extra.alu_op := ctrl.alu_op
   io.alu_iq.bits.extra.prd := in.prd
   io.alu_iq.bits.extra.prf_wen := alu_prf_wen
@@ -115,27 +112,22 @@ class Dispatcher extends NPCModule {
     InstType.I_ALU_W,
     InstType.JALR
   ).map(inst_type === _).reduce(_ || _)
+  io.alu_iq.bits.extra.imm := dec.imm
   io.alu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // BRU Issue Queue
   // ============================================================
-  io.bru_iq.bits.prs1.preg := in.prs1
-  io.bru_iq.bits.prs1.ready := in.prs1_ready
-  io.bru_iq.bits.prs2.preg := in.prs2
-  io.bru_iq.bits.prs2.ready := in.prs2_ready
-  io.bru_iq.bits.imm := dec.imm
+  io.bru_iq.bits.prs1 := in.prs1
+  io.bru_iq.bits.prs2 := in.prs2
   io.bru_iq.bits.extra.bru_op := ctrl.bru_op
   io.bru_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // AGU Issue Queue
   // ============================================================
-  io.agu_iq.bits.prs1.preg := in.prs1
-  io.agu_iq.bits.prs1.ready := in.prs1_ready
-  io.agu_iq.bits.prs2.preg := in.prs2
-  io.agu_iq.bits.prs2.ready := in.prs2_ready
-  io.agu_iq.bits.imm := dec.imm
+  io.agu_iq.bits.prs1 := in.prs1
+  io.agu_iq.bits.prs2 := in.prs2
   io.agu_iq.bits.extra.offset := dec.imm
   io.agu_iq.bits.rob_tag := io.rob_tag
 

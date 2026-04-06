@@ -34,9 +34,9 @@ class BackEnd extends NPCModule {
   val dispatcher_ = Module(new Dispatcher)
   val commitStage_ = Module(new CommitStage)
 
-  val prf_ = Module(new PRF(numReadPorts = 6, numWritePorts = 3))
+  val prf_ = Module(new PRF(numReadPorts = 6, numWritePorts = 4))
   val freeList_ = Module(new FreeList)
-  val busyTable_ = Module(new BusyTable(numReadPorts = 2, numWakeupPorts = 3))
+  val busyTable_ = Module(new BusyTable(numReadPorts = 6, numWakeupPorts = 3))
   val futureRat_ = Module(new FutureRAT(numReadPorts = 3))
   val archRat_ = Module(new ArchRAT)
   val rob_ = Module(new Rob)
@@ -82,15 +82,10 @@ class BackEnd extends NPCModule {
   val wakeup_alu = Wire(Valid(new WakeupPort))
   // wakeup1: dispatch-resolved (JAL/JALR/LUI/AUIPC)
   val wakeup_disp = dispatcher_.io.wakeup
-  // wakeup2: commit late execution (load/CSR)
-  val wakeup_late = commitStage_.wakeup
+  // wakeup2: late execution writeback (load/CSR, directly from ROB)
+  val wakeup_late = Wire(Valid(new WakeupPort))
 
   val wakeups = Seq(wakeup_alu, wakeup_disp, wakeup_late)
-
-  // Connect wakeup buses to IQs
-  alu_iq_.io.wakeup.zip(wakeups).foreach { case (iq_wk, wk) => iq_wk := wk }
-  bru_iq_.io.wakeup.zip(wakeups).foreach { case (iq_wk, wk) => iq_wk := wk }
-  agu_iq_.io.wakeup.zip(wakeups).foreach { case (iq_wk, wk) => iq_wk := wk }
 
   // Connect wakeup buses to BusyTable
   busyTable_.io.wakeup.zip(wakeups).foreach { case (bt_wk, wk) => bt_wk := wk }
@@ -100,7 +95,7 @@ class BackEnd extends NPCModule {
   // ==========================================================
   PipelineConnect(io.in, decodeStage_.io.in, flush)
   PipelineConnect(decodeStage_.io.out, renameStage_.io.in, flush)
-  PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush, wakeups)
+  PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush)
 
   // --- RenameStage side-band ---
   renameStage_.io.frat(0) <> futureRat_.io.read(0)
@@ -108,15 +103,9 @@ class BackEnd extends NPCModule {
   renameStage_.io.frat(2) <> futureRat_.io.read(2)
   futureRat_.io.write := renameStage_.io.frat_write
 
-  renameStage_.io.busy_read(0) <> busyTable_.io.read(0)
-  renameStage_.io.busy_read(1) <> busyTable_.io.read(1)
   busyTable_.io.set_busy := renameStage_.io.busy_set
 
   renameStage_.io.freelist_alloc <> freeList_.io.alloc
-
-  renameStage_.io.wakeup_fwd.zip(wakeups).foreach { case (dst, src) =>
-    dst := src
-  }
 
   // --- Dispatcher ---
   dispatcher_.io.flush := flush
@@ -125,6 +114,16 @@ class BackEnd extends NPCModule {
   dispatcher_.io.alu_iq <> alu_iq_.io.enq
   dispatcher_.io.bru_iq <> bru_iq_.io.enq
   dispatcher_.io.agu_iq <> agu_iq_.io.enq
+
+  // ==========================================================
+  // IQ → BusyTable read ports (readiness checked at issue time)
+  // ==========================================================
+  alu_iq_.io.busy_read(0) <> busyTable_.io.read(0)
+  alu_iq_.io.busy_read(1) <> busyTable_.io.read(1)
+  bru_iq_.io.busy_read(0) <> busyTable_.io.read(2)
+  bru_iq_.io.busy_read(1) <> busyTable_.io.read(3)
+  agu_iq_.io.busy_read(0) <> busyTable_.io.read(4)
+  agu_iq_.io.busy_read(1) <> busyTable_.io.read(5)
 
   // ==========================================================
   // Stage 4 — Issue + Execute + Writeback
@@ -141,7 +140,7 @@ class BackEnd extends NPCModule {
   alu_.io.in.bits.op1 := prf_.io.read(0).data
   alu_.io.in.bits.op2 := Mux(
     alu_issue.extra.use_imm,
-    alu_issue.imm,
+    alu_issue.extra.imm,
     prf_.io.read(1).data
   )
   alu_.io.in.bits.alu_op := alu_issue.extra.alu_op
@@ -235,8 +234,15 @@ class BackEnd extends NPCModule {
   // --- FreeList: free old_prd (also serves as commit_alloc) ---
   freeList_.io.free := commitStage_.freelist_free
 
-  // --- Late exec PRF write (port 2): load / CSR results (latched in ROB entry) ---
-  prf_.io.write(2) := commitStage_.prf_write
+  // --- LSU PRF write (port 2) ---
+  prf_.io.write(2) := rob_.io.lsu_wb
+
+  // --- CSR PRF write (port 3) ---
+  prf_.io.write(3) := rob_.io.csr_wb
+
+  // --- Late exec wakeup (LSU/CSR mutually exclusive, merge into one) ---
+  wakeup_late.valid := rob_.io.lsu_wb.valid || rob_.io.csr_wb.valid
+  wakeup_late.bits.prd := Mux(rob_.io.lsu_wb.valid, rob_.io.lsu_wb.bits.addr, rob_.io.csr_wb.bits.addr)
 
   // --- fence_i ---
   fence_i := commitStage_.fence_i
@@ -246,7 +252,6 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // GPR: derived from ArchRAT (non-forwarded) + PRF
   prf_.probe.arch_rat := archRat_.io.committed
-
   probe.bits.pc := commitStage_.probe.bits.pc
   probe.bits.dnpc := commitStage_.probe.bits.dnpc
   probe.bits.inst := commitStage_.probe.bits.inst

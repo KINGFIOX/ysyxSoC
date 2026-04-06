@@ -15,7 +15,7 @@ class BusyTableReadPort extends NPCBundle {
 }
 
 // for value ready
-class BusyTable(val numReadPorts: Int = 2, val numWakeupPorts: Int = 3) extends NPCModule {
+class BusyTable(val numReadPorts: Int = 6, val numWakeupPorts: Int = 3) extends NPCModule {
   val io = IO(new Bundle {
     val set_busy = Flipped(Valid(UInt(NRPhyRegBits.W)))
     val read = Vec(numReadPorts, Flipped(new BusyTableReadPort))
@@ -40,8 +40,6 @@ class BusyTable(val numReadPorts: Int = 2, val numWakeupPorts: Int = 3) extends 
 
   for (i <- 0 until numReadPorts) {
     val addr = io.read(i).addr
-    val set_hit = io.set_busy.valid && io.set_busy.bits === addr && addr =/= 0.U
-    val wakeup_hit = io.wakeup.map(wk => wk.valid && wk.bits.prd === addr).reduce(_ || _)
-    io.read(i).busy := Mux(set_hit, true.B, Mux(wakeup_hit, false.B, busy(addr) && addr =/= 0.U))
+    io.read(i).busy := busy(addr) && addr =/= 0.U
   }
 }

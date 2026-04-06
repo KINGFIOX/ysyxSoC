@@ -34,7 +34,7 @@ object ZeroExt {
 class MemLsuInput extends MemInfoBundle {
   val is_mmio = Bool()
   val result = Input(UInt(dataBits.W))
-  val result_valid = Input(Bool()) // for rob entry's rd valid
+  val rd_wen = Input(Bool()) // for rob entry's rd valid
   // val mcause = Input(UInt(dataBits.W))
   // val has_except = Input(Bool())
 }
@@ -124,7 +124,7 @@ class LSU extends LateExecUnit(new MemLsuInput) {
   // ==========================================================
   late.done := false.B
   late.bits.result := load_final
-  late.bits.result_valid := ctrl.r_en
+  late.bits.rd_wen := ctrl.r_en
 
   // ==========================================================
   // Internal state machine
@@ -157,7 +157,7 @@ class LSU extends LateExecUnit(new MemLsuInput) {
       val data_ok = Mux(ctrl.is_mmio, perip.done, dcache.done)
       when(data_ok) {
         late.done := true.B
-        when(ctrl.w_en) { late.bits.result_valid := false.B }
+        when(ctrl.w_en) { late.bits.rd_wen := false.B }
         stateQ := LSUState.idle
       }
     }

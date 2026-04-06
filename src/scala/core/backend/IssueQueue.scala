@@ -5,15 +5,9 @@ import chisel3.util._
 
 import ysyx.core.common._
 
-class IQSrcBundle extends NPCBundle {
-  val preg = UInt(NRPhyRegBits.W)
-  val ready = Bool()
-}
-
 class IQEnqData[T <: Data](gen: T) extends NPCBundle {
-  val prs1 = new IQSrcBundle
-  val prs2 = new IQSrcBundle
-  val imm = UInt(dataBits.W)
+  val prs1 = UInt(NRPhyRegBits.W)
+  val prs2 = UInt(NRPhyRegBits.W)
   val extra = gen.cloneType
   val rob_tag = UInt(robEntryBits.W)
 }
@@ -21,15 +15,13 @@ class IQEnqData[T <: Data](gen: T) extends NPCBundle {
 class IQIssueData[T <: Data](gen: T) extends NPCBundle {
   val prs1 = UInt(NRPhyRegBits.W)
   val prs2 = UInt(NRPhyRegBits.W)
-  val imm = UInt(dataBits.W)
   val extra = gen.cloneType
   val rob_tag = UInt(robEntryBits.W)
 }
 
 class IQEntry[T <: Data](gen: T) extends NPCBundle {
-  val prs1 = new IQSrcBundle
-  val prs2 = new IQSrcBundle
-  val imm = UInt(dataBits.W)
+  val prs1 = UInt(NRPhyRegBits.W)
+  val prs2 = UInt(NRPhyRegBits.W)
   val extra = gen.cloneType
   val rob_tag = UInt(robEntryBits.W)
   val occupied = Bool()
@@ -37,8 +29,7 @@ class IQEntry[T <: Data](gen: T) extends NPCBundle {
 
 abstract class IssueQueue[T <: Data](
     gen: T,
-    val entries: Int,
-    val numWakeupPorts: Int = 3
+    val entries: Int
 ) extends NPCModule {
   require(isPow2(entries))
   private val idxBits = log2Ceil(entries)
@@ -46,7 +37,7 @@ abstract class IssueQueue[T <: Data](
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new IQEnqData(gen)))
     val issue = Decoupled(new IQIssueData(gen))
-    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new WakeupPort)))
+    val busy_read = Vec(2, new BusyTableReadPort)
     val flush = Input(Bool())
   })
 
@@ -58,29 +49,14 @@ abstract class IssueQueue[T <: Data](
   val empty = ptr_match && !maybe_full
   val full = ptr_match && maybe_full
 
-  // Wakeup: set ready for matching physical register tags
-  ram.foreach(ent =>
-    when(ent.occupied && !io.flush) {
-      for (wk <- io.wakeup) {
-        when(wk.valid) {
-          when(!ent.prs1.ready && ent.prs1.preg === wk.bits.prd) {
-            ent.prs1.ready := true.B
-          }
-          when(!ent.prs2.ready && ent.prs2.preg === wk.bits.prd) {
-            ent.prs2.ready := true.B
-          }
-        }
-      }
-    }
-  )
-
-  // Issue from head: in-order, gated by source readiness
+  // Issue from head: check BusyTable for source readiness
   val head_ent = ram(deq_ptr)
-  val all_src_ready = head_ent.prs1.ready && head_ent.prs2.ready
+  io.busy_read(0).addr := head_ent.prs1
+  io.busy_read(1).addr := head_ent.prs2
+  val all_src_ready = !io.busy_read(0).busy && !io.busy_read(1).busy
   io.issue.valid := !empty && all_src_ready && !io.flush
-  io.issue.bits.prs1 := head_ent.prs1.preg
-  io.issue.bits.prs2 := head_ent.prs2.preg
-  io.issue.bits.imm := head_ent.imm
+  io.issue.bits.prs1 := head_ent.prs1
+  io.issue.bits.prs2 := head_ent.prs2
   io.issue.bits.extra := head_ent.extra
   io.issue.bits.rob_tag := head_ent.rob_tag
 
@@ -93,24 +69,8 @@ abstract class IssueQueue[T <: Data](
   when(do_enq) {
     val ent = ram(enq_ptr)
     val enq_data = io.enq.bits
-
-    // Check wakeup match at enqueue time
-    val prs1_wakeup = io.wakeup
-      .map(wk =>
-        wk.valid && !enq_data.prs1.ready && enq_data.prs1.preg === wk.bits.prd
-      )
-      .reduce(_ || _)
-    val prs2_wakeup = io.wakeup
-      .map(wk =>
-        wk.valid && !enq_data.prs2.ready && enq_data.prs2.preg === wk.bits.prd
-      )
-      .reduce(_ || _)
-
-    ent.prs1.preg := enq_data.prs1.preg
-    ent.prs1.ready := enq_data.prs1.ready || prs1_wakeup
-    ent.prs2.preg := enq_data.prs2.preg
-    ent.prs2.ready := enq_data.prs2.ready || prs2_wakeup
-    ent.imm := enq_data.imm
+    ent.prs1 := enq_data.prs1
+    ent.prs2 := enq_data.prs2
     ent.extra := enq_data.extra
     ent.rob_tag := enq_data.rob_tag
     ent.occupied := true.B

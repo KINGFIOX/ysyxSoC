@@ -68,6 +68,7 @@ class ALUExtra extends NPCBundle {
   val prd = UInt(NRPhyRegBits.W)
   val prf_wen = Bool()
   val use_imm = Bool()
+  val imm = UInt(dataBits.W)
 }
 
 class ALUIssueQueue extends IssueQueue(new ALUExtra, entries = 8)

@@ -8,13 +8,15 @@ import ysyx.core.frontend._
 
 class RenameStageOutput extends NPCBundle {
   val dec = new DecodeStageOutput
+  
+  // issuse queue
   val prs1 = UInt(NRPhyRegBits.W)
   val prs2 = UInt(NRPhyRegBits.W)
   val prd = UInt(NRPhyRegBits.W)
   val old_prd = UInt(NRPhyRegBits.W)
-  val prs1_ready = Bool()
-  val prs2_ready = Bool()
   val rd_wen = Bool()
+
+  // dispatch stage could write back to prf
   val disp_rd_val = UInt(dataBits.W)
   val disp_rd_defen = Bool()
   val disp_target_npc = UInt(addrBits.W)
@@ -26,13 +28,8 @@ class RenameStage extends NPCModule {
     val out = Decoupled(new RenameStageOutput)
     val frat = Vec(3, new FutureRATReadPort) // rs1, rs2, rd(old_prd)
     val frat_write = Valid(new FutureRATWritePort)
-    val busy_read = Vec(2, new Bundle {
-      val addr = Output(UInt(NRPhyRegBits.W))
-      val busy = Input(Bool())
-    })
     val busy_set = Valid(UInt(NRPhyRegBits.W))
     val freelist_alloc = Flipped(Decoupled(UInt(NRPhyRegBits.W)))
-    val wakeup_fwd = Vec(3, Flipped(Valid(new WakeupPort)))
   })
 
   val dec_out = io.in.bits
@@ -80,27 +77,10 @@ class RenameStage extends NPCModule {
   io.frat_write.bits.preg := new_prd
 
   // ============================================================
-  // BusyTable: set new_prd as busy, read prs1/prs2
+  // BusyTable: set new_prd as busy
   // ============================================================
   io.busy_set.valid := io.in.fire && rd_wen
   io.busy_set.bits := new_prd
-
-  io.busy_read(0).addr := prs1
-  io.busy_read(1).addr := prs2
-
-  val prs1_busy = io.busy_read(0).busy
-  val prs2_busy = io.busy_read(1).busy
-
-  // Wakeup forwarding: check if prs matches any in-flight wakeup
-  val prs1_wakeup = io.wakeup_fwd.map(wk =>
-    wk.valid && wk.bits.prd === prs1
-  ).reduce(_ || _)
-  val prs2_wakeup = io.wakeup_fwd.map(wk =>
-    wk.valid && wk.bits.prd === prs2
-  ).reduce(_ || _)
-
-  val prs1_ready = !prs1_busy || prs1_wakeup
-  val prs2_ready = !prs2_busy || prs2_wakeup
 
   // ============================================================
   // Dispatch-resolved value (jalr, jal, lui, auipc)
@@ -119,16 +99,14 @@ class RenameStage extends NPCModule {
   )
 
   // ============================================================
-  // Override prs2 readiness for immediate-using instructions
+  // Override prs2 for instructions that don't use rs2 from PRF
   // ============================================================
   // format: off
   val use_imm = Seq(InstType.I_ALU, InstType.I_ALU_W, InstType.JALR).map(inst_type === _).reduce(_ || _)
   // format: on
   val is_csr = inst_type === InstType.CSR
   val is_load = inst_type === InstType.LOAD
-
-  val final_prs2_ready = Mux(use_imm || is_csr || is_load, true.B, prs2_ready)
-  val final_prs2 = Mux(use_imm || is_csr, 0.U, prs2)
+  val final_prs2 = Mux(use_imm || is_csr || is_load, 0.U, prs2)
 
   // ============================================================
   // Backpressure: stall if freelist empty and need alloc
@@ -146,8 +124,6 @@ class RenameStage extends NPCModule {
   out.prs2 := final_prs2
   out.prd := prd
   out.old_prd := Mux(rd_wen, old_prd, 0.U)
-  out.prs1_ready := prs1_ready
-  out.prs2_ready := final_prs2_ready
   out.rd_wen := rd_wen
   out.disp_rd_val := disp_rd_val
   out.disp_rd_defen := disp_rd_defen

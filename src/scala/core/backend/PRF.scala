@@ -15,7 +15,7 @@ class PRFWritePort extends NPCBundle {
   val data = UInt(dataBits.W)
 }
 
-class PRF(val numReadPorts: Int = 6, val numWritePorts: Int = 3) extends NPCModule {
+class PRF(val numReadPorts: Int = 6, val numWritePorts: Int = 4) extends NPCModule {
   val io = IO(new Bundle {
     val read = Vec(numReadPorts, Flipped(new PRFReadPort))
     val write = Vec(numWritePorts, Flipped(Valid(new PRFWritePort)))
