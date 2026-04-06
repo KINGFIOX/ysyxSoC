@@ -44,7 +44,7 @@ trait HasCoreParameter {
   val dataBytes = dataBits >> 3 // 一个 word 有几个字节  4
   val dataBytesBits = log2Ceil(dataBytes) // 一个 word 有几个字节的位宽 2
   val robEntryBits = 6 // 2^6 = 64
-  val ghrBits: Int = 12 // log2Ceil(4096), matches BHT entries
+  val ghrBits: Int = 12 // log2Ceil(4096), matches BHT entries. global history register
   val NRPhyReg: Int = 64
   val NRPhyRegBits: Int = log2Up(NRPhyReg) // = 6
 }

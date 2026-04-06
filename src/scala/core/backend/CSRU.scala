@@ -13,9 +13,9 @@ class CsrExceptWritePort extends Bundle with HasCoreParameter {
 }
 
 class CsrWriteOnlyPort extends NPCBundle {
+  val prs1 = UInt(NRPhyRegBits.W)
   val addr = UInt(NRCSRbits.W)
   val op = CSROpType()
-  val wdata = UInt(dataBits.W)
   val wen = Bool()
   val result = Input(UInt(dataBits.W))
 }
@@ -33,11 +33,14 @@ class CSRUDebugBundle
   val marchid = UInt(dataBits.W)
 }
 
-class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
+class CSRU extends LateExecUnit(new CsrWriteOnlyPort, 1) {
   val probe = IO(new CSRUDebugBundle)
   val except = IO(Flipped(Valid(new CsrExceptWritePort))) // for exception
   val xepc = IO(UInt(dataBits.W)) // for `mret`
   val xtvec = IO(UInt(dataBits.W)) // for `ecall`
+
+  prf(0).addr := late.bits.prs1
+  val wdata = prf(0).data
 
   late.done := late.req
   late.bits.result := 0.U
@@ -81,10 +84,10 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort) {
   // CSRRW: wdata = rs1
   // CSRRS: wdata = csr | rs1
   private val csrWdata = MuxCase(
-    late.bits.wdata,
+    wdata,
     Seq(
-      (late.bits.op === CSROpType.CSR_RW) -> late.bits.wdata,
-      (late.bits.op === CSROpType.CSR_RS) -> (csr_read | late.bits.wdata)
+      (late.bits.op === CSROpType.CSR_RW) -> wdata,
+      (late.bits.op === CSROpType.CSR_RS) -> (csr_read | wdata)
     )
   )
   when(late.bits.wen) {

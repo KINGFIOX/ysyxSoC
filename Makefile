@@ -135,7 +135,7 @@ help:
 	@echo "  clean              — 清理构建目录"
 	@echo "  distclean          — 清理所有生成文件"
 
-.PHONY: verilog verilate build release all
+.PHONY: release all
 .PHONY: run gdb wave
 .PHONY: dev-init bsp idea reformat checkformat
 .PHONY: clean distclean clean-all help

@@ -94,8 +94,11 @@ abstract class IssueQueue[T <: Data](
   }
 }
 
-abstract class ExecUnit[I <: Data, O <: Data](inGen: I, outGen: O)
+abstract class ExecUnit[I <: Data, O <: Data](inGen: I, outGen: O, numReadPorts: Int = 2)
     extends NPCModule {
+  val prs1 = IO(Input(UInt(NRPhyRegBits.W)))
+  val prs2 = IO(Input(UInt(NRPhyRegBits.W)))
+  val prf = IO(Vec(numReadPorts, new PRFReadPort))
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(inGen))
     val out = Decoupled(outGen)

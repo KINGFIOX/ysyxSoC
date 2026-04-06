@@ -32,37 +32,44 @@ object ZeroExt {
 
 // from the view of Rob -> LSU
 class MemLate extends MemInfoBundle {
-  val addr = UInt(addrBits.W)
-  val wdata = UInt(dataBits.W)
-  val is_mmio = Bool()
+  val prs1 = UInt(NRPhyRegBits.W)
+  val prs2 = UInt(NRPhyRegBits.W)
+  val imm = UInt(dataBits.W)
+  val is_mmio = Input(Bool())
   val result = Input(UInt(dataBits.W))
   val rd_wen = Input(Bool())
 }
 
-class LSU extends LateExecUnit(new MemLate) {
+class LSU extends LateExecUnit(new MemLate, 2) {
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
 
+  prf(0).addr := late.bits.prs1
+  prf(1).addr := late.bits.prs2
+  val addr = prf(0).data + late.bits.imm
+  val wdata = prf(1).data
+
   val ctrl = late.bits
-  val aligned_addr = Cat(ctrl.addr(addrBits - 1, dataBytesBits), 0.U(dataBytesBits.W))
+  late.bits.is_mmio := AddressMap.is_mmio(addr)
+  val aligned_addr = Cat(addr(addrBits - 1, dataBytesBits), 0.U(dataBytesBits.W))
 
   // ==========================================================
   // Store wstrb / wdata formatting (8B aligned for both channels)
   // ==========================================================
   val store_wstrb = MuxLookup(ctrl.size, "b11111111".U)(
     Seq(
-      0.U -> (1.U(dataBytes.W) << ctrl.addr(dataBytesBits - 1, 0)),
-      1.U -> (3.U(dataBytes.W) << Cat(ctrl.addr(dataBytesBits - 1, 1), 0.U(1.W))),
-      2.U -> ("b1111".U(dataBytes.W) << Cat(ctrl.addr(dataBytesBits - 1, 2), 0.U(2.W))),
+      0.U -> (1.U(dataBytes.W) << addr(dataBytesBits - 1, 0)),
+      1.U -> (3.U(dataBytes.W) << Cat(addr(dataBytesBits - 1, 1), 0.U(1.W))),
+      2.U -> ("b1111".U(dataBytes.W) << Cat(addr(dataBytesBits - 1, 2), 0.U(2.W))),
       3.U -> "b11111111".U(dataBytes.W)
     )
   )
-  val store_wdata = MuxLookup(ctrl.size, ctrl.wdata)(
+  val store_wdata = MuxLookup(ctrl.size, wdata)(
     Seq(
-      0.U -> Fill(dataBytes, ctrl.wdata(7, 0)),
-      1.U -> Fill(dataBytes / 2, ctrl.wdata(15, 0)),
-      2.U -> Fill(dataBytes / 4, ctrl.wdata(31, 0)),
-      3.U -> ctrl.wdata
+      0.U -> Fill(dataBytes, wdata(7, 0)),
+      1.U -> Fill(dataBytes / 2, wdata(15, 0)),
+      2.U -> Fill(dataBytes / 4, wdata(31, 0)),
+      3.U -> wdata
     )
   )
 
@@ -72,7 +79,7 @@ class LSU extends LateExecUnit(new MemLate) {
 
   // Cache: full doubleword returned, byte lane selection by addr(2,0)
   val cache_raw = dcache.rdata
-  val byte_off = ctrl.addr(dataBytesBits - 1, 0)
+  val byte_off = addr(dataBytesBits - 1, 0)
   val cache_shifted = cache_raw >> (byte_off << 3)
   val cache_byte = cache_shifted(7, 0)
   val cache_half = cache_shifted(15, 0)
@@ -115,7 +122,7 @@ class LSU extends LateExecUnit(new MemLate) {
   perip.req := false.B
   perip.wen := ctrl.w_en
   perip.size := Mux(ctrl.w_en, dataBytesBits.U, ctrl.size)
-  perip.addr := Mux(ctrl.w_en, aligned_addr, ctrl.addr)(busAddrBits - 1, 0)
+  perip.addr := Mux(ctrl.w_en, aligned_addr, addr)(busAddrBits - 1, 0)
   perip.wstrb := Mux(ctrl.w_en, store_wstrb, 0.U)
   perip.wdata := Mux(ctrl.w_en, store_wdata, 0.U)
 

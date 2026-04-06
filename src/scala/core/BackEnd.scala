@@ -34,7 +34,7 @@ class BackEnd extends NPCModule {
   val dispatcher_ = Module(new Dispatcher)
   val commitStage_ = Module(new CommitStage)
 
-  val prf_ = Module(new PRF(numReadPorts = 6, numWritePorts = 4))
+  val prf_ = Module(new PRF(numReadPorts = 7, numWritePorts = 4))
   val freeList_ = Module(new FreeList)
   val busyTable_ = Module(new BusyTable(numReadPorts = 4, numWakeupPorts = 3))
   val futureRat_ = Module(new FutureRAT(numReadPorts = 3))
@@ -80,9 +80,10 @@ class BackEnd extends NPCModule {
   // wakeup1: dispatch-resolved (JAL/JALR/LUI/AUIPC)
   val wakeup_disp = dispatcher_.io.wakeup
   // wakeup2: late execution writeback (load/CSR, directly from ROB)
-  val wakeup_late = Wire(Valid(new WakeupPort))
+  val wakeup_late_lsu = Wire(Valid(new WakeupPort))
+  val wakeup_late_csr = Wire(Valid(new WakeupPort))
 
-  val wakeups = Seq(wakeup_alu, wakeup_disp, wakeup_late)
+  val wakeups = Seq(wakeup_alu, wakeup_disp, wakeup_late_lsu, wakeup_late_csr)
 
   // Connect wakeup buses to BusyTable
   busyTable_.io.wakeup.zip(wakeups).foreach { case (bt_wk, wk) => bt_wk := wk }
@@ -128,19 +129,16 @@ class BackEnd extends NPCModule {
   alu_.io.in.valid := alu_iq_.io.issue.valid
   alu_iq_.io.issue.ready := alu_.io.in.ready
   val alu_issue = alu_iq_.io.issue.bits
-  // PRF read for ALU: ports 0, 1
-  prf_.io.read(0).addr := alu_issue.prs1
-  prf_.io.read(1).addr := alu_issue.prs2
-  alu_.io.in.bits.op1 := prf_.io.read(0).data
-  alu_.io.in.bits.op2 := Mux(
-    alu_issue.extra.use_imm,
-    alu_issue.extra.imm,
-    prf_.io.read(1).data
-  )
+  alu_.prs1 := alu_issue.prs1
+  alu_.prs2 := alu_issue.prs2
+  prf_.io.read(0) <> alu_.prf(0)
+  prf_.io.read(1) <> alu_.prf(1)
   alu_.io.in.bits.alu_op := alu_issue.extra.alu_op
   alu_.io.in.bits.rob_tag := alu_issue.rob_tag
   alu_.io.in.bits.prd := alu_issue.extra.prd
   alu_.io.in.bits.prf_wen := alu_issue.extra.prf_wen
+  alu_.io.in.bits.use_imm := alu_issue.extra.use_imm
+  alu_.io.in.bits.imm := alu_issue.extra.imm
 
   val alu_wb_valid = alu_.io.out.fire
   val alu_wb_tag = alu_.io.out.bits.rob_tag
@@ -165,11 +163,10 @@ class BackEnd extends NPCModule {
   bru_.io.out.ready := true.B
   bru_iq_.io.issue.ready := bru_.io.in.ready
   bru_.io.in.valid := bru_iq_.io.issue.valid
-  // PRF read for BRU: ports 2, 3
-  prf_.io.read(2).addr := bru_iq_.io.issue.bits.prs1
-  prf_.io.read(3).addr := bru_iq_.io.issue.bits.prs2
-  bru_.io.in.bits.rs1_v := prf_.io.read(2).data
-  bru_.io.in.bits.rs2_v := prf_.io.read(3).data
+  bru_.prs1 := bru_iq_.io.issue.bits.prs1
+  bru_.prs2 := bru_iq_.io.issue.bits.prs2
+  prf_.io.read(2) <> bru_.prf(0)
+  prf_.io.read(3) <> bru_.prf(1)
   bru_.io.in.bits.op := bru_iq_.io.issue.bits.extra.bru_op
   bru_.io.in.bits.rob_tag := bru_iq_.io.issue.bits.rob_tag
 
@@ -181,9 +178,10 @@ class BackEnd extends NPCModule {
   rob_.io.bru.bits.tag := bru_wb_tag
   rob_.io.bru.bits.br_flag := br_flag
 
-  // --- ROB late exec PRF read: ports 4, 5 ---
-  prf_.io.read(4) <> rob_.io.late_prs1
-  prf_.io.read(5) <> rob_.io.late_prs2
+  // --- Late exec PRF read: LSU ports 4-5, CSRU port 6 ---
+  prf_.io.read(4) <> lsu_.prf(0)
+  prf_.io.read(5) <> lsu_.prf(1)
+  prf_.io.read(6) <> csru_.prf(0)
 
   // ==========================================================
   // Dispatch-resolved PRF write (port 1): JAL/JALR/LUI/AUIPC
@@ -221,8 +219,10 @@ class BackEnd extends NPCModule {
   prf_.io.write(3) := rob_.io.csr_wb
 
   // --- Late exec wakeup (LSU/CSR mutually exclusive, merge into one) ---
-  wakeup_late.valid := rob_.io.lsu_wb.valid || rob_.io.csr_wb.valid
-  wakeup_late.bits.prd := Mux(rob_.io.lsu_wb.valid, rob_.io.lsu_wb.bits.addr, rob_.io.csr_wb.bits.addr)
+  wakeup_late_lsu.valid := rob_.io.lsu_wb.valid
+  wakeup_late_lsu.bits.prd := rob_.io.lsu_wb.bits.addr
+  wakeup_late_csr.valid := rob_.io.csr_wb.valid
+  wakeup_late_csr.bits.prd := rob_.io.csr_wb.bits.addr
 
   // --- fence_i ---
   fence_i := commitStage_.fence_i

@@ -114,8 +114,6 @@ class Rob extends NPCModule {
     val enq_tag = Output(UInt(robEntryBits.W))
     val alu = Flipped(Valid(new WBALUBundle))
     val bru = Flipped(Valid(new WBBRUBundle))
-    val late_prs1 = new PRFReadPort
-    val late_prs2 = new PRFReadPort
     val lsu = ReqDone(new MemLate)
     val csr = ReqDone(new CsrWriteOnlyPort)
     val commit = ReqDone(new CommitBundle)
@@ -204,32 +202,26 @@ class Rob extends NPCModule {
   }
 
   // ============================================================
-  // Late execution at head — operands read from PRF
+  // Late execution at head — exec units read PRF directly
   // ============================================================
   val head_entry = ram(head_q)
   val head_is_late = !empty_w && head_entry.state === RobState.late
   val head_is_mem = head_entry.mem.r_en || head_entry.mem.w_en
   val head_is_csr = head_entry.inst_type === InstType.CSR
 
-  // PRF read for late exec (BackEnd connects these to PRF ports 4-5)
-  io.late_prs1.addr := head_entry.prs1
-  io.late_prs2.addr := head_entry.prs2
-
-  val late_addr = io.late_prs1.data + head_entry.imm
-
-  // Drive LSU
-  io.lsu.bits.addr := late_addr
+  // Drive LSU: pass prs1/prs2/imm + mem info; LSU computes addr/wdata internally
+  io.lsu.bits.prs1 := head_entry.prs1
+  io.lsu.bits.prs2 := head_entry.prs2
+  io.lsu.bits.imm := head_entry.imm
   io.lsu.bits.size := head_entry.mem.size
   io.lsu.bits.sign_ext := head_entry.mem.sign_ext
   io.lsu.bits.r_en := head_entry.mem.r_en
   io.lsu.bits.w_en := head_entry.mem.w_en
-  io.lsu.bits.wdata := io.late_prs2.data
-  io.lsu.bits.is_mmio := AddressMap.is_mmio(late_addr)
 
-  // Drive CSRU: addr from imm, wdata from PRF(prs1)
+  // Drive CSRU: pass prs1 + csr metadata; CSRU reads PRF internally
+  io.csr.bits.prs1 := head_entry.prs1
   io.csr.bits.addr := head_entry.imm(NRCSRbits - 1, 0)
   io.csr.bits.op := head_entry.csr.op
-  io.csr.bits.wdata := io.late_prs1.data
 
   io.lsu.req := head_is_late && head_is_mem && !flush
   io.csr.req := head_is_late && head_is_csr && !flush
@@ -297,6 +289,7 @@ class Rob extends NPCModule {
   }
 }
 
-abstract class LateExecUnit[T <: Data](gen: => T) extends NPCModule {
+abstract class LateExecUnit[T <: Data](gen: => T, numReadPorts: Int) extends NPCModule {
   val late = IO(Flipped(ReqDone(gen)))
+  val prf = IO(Vec(numReadPorts, new PRFReadPort))
 }

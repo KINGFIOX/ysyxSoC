@@ -12,12 +12,12 @@ object ALUOpType extends ChiselEnum {
 }
 
 class ALUInput extends NPCBundle {
-  val op1 = UInt(dataBits.W)
-  val op2 = UInt(dataBits.W)
   val alu_op = ALUOpType()
   val rob_tag = UInt(robEntryBits.W)
   val prd = UInt(NRPhyRegBits.W)
   val prf_wen = Bool()
+  val use_imm = Bool()
+  val imm = UInt(dataBits.W)
 }
 
 class ALUOutput extends NPCBundle {
@@ -31,8 +31,10 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
   io.in.ready := io.out.ready
   io.out.valid := io.in.valid
 
-  val op1 = io.in.bits.op1
-  val op2 = io.in.bits.op2
+  prf(0).addr := prs1
+  val op1 = prf(0).data
+  prf(1).addr := prs2
+  val op2 = Mux(io.in.bits.use_imm, io.in.bits.imm, prf(1).data)
   val shamt = op2(log2Up(dataBits) - 1, 0)
   val shamtW = op2(4, 0)
   val op1w = op1(31, 0)

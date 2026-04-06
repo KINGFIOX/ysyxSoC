@@ -10,8 +10,6 @@ object BRUOpType extends ChiselEnum {
 }
 
 class BRUInput extends NPCBundle {
-  val rs1_v = UInt(dataBits.W)
-  val rs2_v = UInt(dataBits.W)
   val op = BRUOpType()
   val rob_tag = UInt(robEntryBits.W)
 }
@@ -27,14 +25,19 @@ class BRU extends ExecUnit(new BRUInput, new BRUOutput) {
   io.out.bits.br_flag := false.B
   io.out.bits.rob_tag := io.in.bits.rob_tag
 
+  prf(0).addr := prs1
+  prf(1).addr := prs2
+  val rs1_v = prf(0).data
+  val rs2_v = prf(1).data
+
   // format: off
   switch(io.in.bits.op) {
-    is(BRUOpType.bru_BLT) { when(io.in.bits.rs1_v.asSInt < io.in.bits.rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BLTU) { when(io.in.bits.rs1_v < io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BGE) { when(io.in.bits.rs1_v.asSInt >= io.in.bits.rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BGEU) { when(io.in.bits.rs1_v >= io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BEQ) { when(io.in.bits.rs1_v === io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
-    is(BRUOpType.bru_BNE) { when(io.in.bits.rs1_v =/= io.in.bits.rs2_v) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BLT) { when(rs1_v.asSInt < rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BLTU) { when(rs1_v < rs2_v) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BGE) { when(rs1_v.asSInt >= rs2_v.asSInt) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BGEU) { when(rs1_v >= rs2_v) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BEQ) { when(rs1_v === rs2_v) { io.out.bits.br_flag := true.B } }
+    is(BRUOpType.bru_BNE) { when(rs1_v =/= rs2_v) { io.out.bits.br_flag := true.B } }
   }
   // format: on
 }
