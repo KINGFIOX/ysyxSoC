@@ -17,7 +17,7 @@ object CSROpType extends ChiselEnum {
 }
 
 object InstType extends ChiselEnum {
-  val INVALID, R_ALU, I_ALU, R_ALU_W, I_ALU_W, JALR, LOAD, STORE, BRANCH, JAL,
+  val INVALID, R_ALU, I_ALU, JALR, LOAD, STORE, BRANCH, JAL,
       LUI, AUIPC, ECALL, EBREAK, MRET, CSR = Value
 }
 
@@ -164,8 +164,8 @@ object CU {
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_R       => bp(InstType.R_ALU)
       case OP_I_ALU   => bp(InstType.I_ALU)
-      case OP_R_W     => bp(InstType.R_ALU_W)
-      case OP_I_ALU_W => bp(InstType.I_ALU_W)
+      case OP_R_W     => bp(InstType.R_ALU)
+      case OP_I_ALU_W => bp(InstType.I_ALU)
       case OP_JALR    => bp(InstType.JALR)
       case OP_LOAD    => bp(InstType.LOAD)
       case OP_STORE   => bp(InstType.STORE)

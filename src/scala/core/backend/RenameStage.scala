@@ -8,7 +8,7 @@ import ysyx.core.frontend._
 
 class RenameStageOutput extends NPCBundle {
   val dec = new DecodeStageOutput
-  
+
   // issuse queue
   val prs1 = UInt(NRPhyRegBits.W)
   val prs2 = UInt(NRPhyRegBits.W)
@@ -43,11 +43,17 @@ class RenameStage extends NPCModule {
   // ============================================================
   // Determine if instruction writes a register
   // ============================================================
-  // format: off
-  val rd_wen = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W, InstType.JALR, InstType.LOAD,
-    InstType.JAL, InstType.LUI, InstType.AUIPC, InstType.CSR)
-    .map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
-  // format: on
+  val rd_wen = Seq(
+    InstType.R_ALU,
+    InstType.I_ALU,
+    InstType.JALR,
+    InstType.LOAD,
+    InstType.JAL,
+    InstType.LUI,
+    InstType.AUIPC,
+    InstType.CSR
+  ).map(inst_type === _)
+    .reduce(_ || _) && (rd_idx =/= 0.U)
 
   // ============================================================
   // FutureRAT lookup: rs1, rs2, rd(for old_prd)
@@ -85,10 +91,10 @@ class RenameStage extends NPCModule {
   // ============================================================
   // Dispatch-resolved value (jalr, jal, lui, auipc)
   // ============================================================
-  // format: off
-  val disp_rd_defen = Seq(InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC)
-    .map(inst_type === _).reduce(_ || _) && (rd_idx =/= 0.U)
-  // format: on
+  val disp_rd_defen =
+    Seq(InstType.JALR, InstType.JAL, InstType.LUI, InstType.AUIPC)
+      .map(inst_type === _)
+      .reduce(_ || _) && (rd_idx =/= 0.U)
   val disp_rd_val = MuxLookup(inst_type, 0.U)(
     Seq(
       InstType.JALR -> (pc + 4.U),
@@ -101,9 +107,9 @@ class RenameStage extends NPCModule {
   // ============================================================
   // Override prs2 for instructions that don't use rs2 from PRF
   // ============================================================
-  // format: off
-  val use_imm = Seq(InstType.I_ALU, InstType.I_ALU_W, InstType.JALR).map(inst_type === _).reduce(_ || _)
-  // format: on
+  val use_imm = Seq(InstType.I_ALU, InstType.JALR)
+    .map(inst_type === _)
+    .reduce(_ || _)
   val is_csr = inst_type === InstType.CSR
   val is_load = inst_type === InstType.LOAD
   val final_prs2 = Mux(use_imm || is_csr || is_load, 0.U, prs2)

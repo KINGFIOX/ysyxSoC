@@ -32,8 +32,6 @@ class Dispatcher extends NPCModule {
   val go_to_alu = Seq(
     InstType.R_ALU,
     InstType.I_ALU,
-    InstType.R_ALU_W,
-    InstType.I_ALU_W,
     InstType.JALR
   ).map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
@@ -92,9 +90,7 @@ class Dispatcher extends NPCModule {
   // ============================================================
   val alu_prf_wen = Seq(
     InstType.R_ALU,
-    InstType.I_ALU,
-    InstType.R_ALU_W,
-    InstType.I_ALU_W
+    InstType.I_ALU
   ).map(inst_type === _).reduce(_ || _) && rd_wen
   io.alu_iq.bits.prs1 := in.prs1
   io.alu_iq.bits.prs2 := in.prs2
@@ -103,7 +99,6 @@ class Dispatcher extends NPCModule {
   io.alu_iq.bits.extra.prf_wen := alu_prf_wen
   io.alu_iq.bits.extra.use_imm := Seq(
     InstType.I_ALU,
-    InstType.I_ALU_W,
     InstType.JALR
   ).map(inst_type === _).reduce(_ || _)
   io.alu_iq.bits.extra.imm := dec.imm

@@ -145,7 +145,7 @@ class Rob extends NPCModule {
     val inst_type = ent.inst_type
     val alu_result = io.alu.bits.alu_result
     // format: off
-    when(Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W).map(inst_type === _).reduce(_ || _)) {
+    when(Seq(InstType.R_ALU, InstType.I_ALU).map(inst_type === _).reduce(_ || _)) {
       ent.state := RobState.complete
     }.elsewhen(inst_type === InstType.JALR) {
       ent.jalr.dnpc := alu_result
@@ -191,7 +191,7 @@ class Rob extends NPCModule {
     ent.predict_npc := enq.predict_npc
     ent.ghr := enq.ghr
     // format: off
-    val go_to_iq = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W,
+    val go_to_iq = Seq(InstType.R_ALU, InstType.I_ALU,
       InstType.JALR, InstType.BRANCH)
       .map(enq.inst_type === _).reduce(_ || _) && !enq.except.valid
     val go_to_late = Seq(InstType.LOAD, InstType.STORE, InstType.CSR)

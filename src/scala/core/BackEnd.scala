@@ -231,7 +231,7 @@ class BackEnd extends NPCModule {
   // Debug probe
   // ==========================================================
   // GPR: derived from ArchRAT (non-forwarded) + PRF
-  prf_.probe.arch_rat := archRat_.io.committed
+  prf_.probe.arch_rat := archRat_.io.snapshot
   probe.bits.pc := commitStage_.probe.bits.pc
   probe.bits.dnpc := commitStage_.probe.bits.dnpc
   probe.bits.inst := commitStage_.probe.bits.inst
