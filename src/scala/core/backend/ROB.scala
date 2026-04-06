@@ -55,12 +55,10 @@ class RobEntry extends NPCBundle {
   val inst_type = InstType()
   val mem = new MemRobEntry
   val csr = new CsrRobEntry
-  val arch_rd = UInt(NRRegbits.W)
-  val new_prd = UInt(NRPhyRegBits.W)
-  val old_prd = UInt(NRPhyRegBits.W)
-  val rd_wen = Bool()
-  val late_result = UInt(dataBits.W) // latched load/CSR result for PRF write at commit
-  val late_rd_wen = Bool()           // whether late result should be written to PRF
+  val rd = new RdRobEntry
+  // latched load/CSR result for PRF write at commit
+  val late_result = UInt(dataBits.W)
+  val late_rd_wen = Bool() // whether late result should be written to PRF
   val mret = new MretRobEntry
   val bru = new BruRobEntry
   val jal = new JalRobEntry
@@ -71,16 +69,20 @@ class RobEntry extends NPCBundle {
   val state = RobState()
 }
 
+class RdRobEntry extends NPCBundle {
+  val arch_rd = UInt(NRRegbits.W)
+  val new_prd = UInt(NRPhyRegBits.W)
+  val old_prd = UInt(NRPhyRegBits.W)
+  val rd_wen = Bool()
+}
+
 class RobEnqData extends NPCBundle {
   val pc = UInt(addrBits.W)
   val inst = UInt(instBits.W)
   val inst_type = InstType()
   val mem = new MemInfoBundle
   val csr = new CsrRobEntry
-  val arch_rd = UInt(NRRegbits.W)
-  val new_prd = UInt(NRPhyRegBits.W)
-  val old_prd = UInt(NRPhyRegBits.W)
-  val rd_wen = Bool()
+  val rd = new RdRobEntry
   val mret = new MretRobEntry
   val bru = new BruRobEntry
   val jal = new JalRobEntry
@@ -199,10 +201,10 @@ class Rob extends NPCModule {
     ent.mem.wdata_rdy := false.B
     ent.mem.is_mmio := false.B
     ent.csr := enq.csr
-    ent.arch_rd := enq.arch_rd
-    ent.new_prd := enq.new_prd
-    ent.old_prd := enq.old_prd
-    ent.rd_wen := enq.rd_wen
+    ent.rd.arch_rd := enq.rd.arch_rd
+    ent.rd.new_prd := enq.rd.new_prd
+    ent.rd.old_prd := enq.rd.old_prd
+    ent.rd.rd_wen := enq.rd.rd_wen
     ent.except := enq.except
     ent.mret := enq.mret
     ent.bru := enq.bru
@@ -255,7 +257,7 @@ class Rob extends NPCModule {
   when(head_is_late && head_is_csr && io.csr.done && !flush) {
     head_entry.state := RobState.complete
     head_entry.late_result := io.csr.bits.result
-    when(head_entry.rd_wen) {
+    when(head_entry.rd.rd_wen) {
       head_entry.late_rd_wen := true.B
     }
   }

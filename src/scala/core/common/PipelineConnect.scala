@@ -6,6 +6,7 @@ import ysyx.core.backend.RenameStageOutput
 import ysyx.core.backend.WakeupPort
 
 object PipelineConnect {
+
   def apply[T <: Data](
       prevOut: DecoupledIO[T],
       thisIn: DecoupledIO[T],

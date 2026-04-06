@@ -45,7 +45,10 @@ class ArchRATWritePort extends NPCBundle {
 class ArchRAT extends NPCModule {
   val io = IO(new Bundle {
     val write = Flipped(Valid(new ArchRATWritePort))
+    // Forwarded: flush consumers (FutureRAT, FreeList) see current-cycle write
     val snapshot = Output(Vec(NRReg, UInt(NRPhyRegBits.W)))
+    // Non-forwarded: debug probe reads registered state only
+    val committed = Output(Vec(NRReg, UInt(NRPhyRegBits.W)))
   })
 
   val table = RegInit(VecInit((0 until NRReg).map(_.U(NRPhyRegBits.W))))
@@ -54,11 +57,12 @@ class ArchRAT extends NPCModule {
     table(io.write.bits.addr) := io.write.bits.preg
   }
 
-  // Write forwarding: flush consumers (FutureRAT, FreeList) see the
-  // current-cycle commit write so that a mispredicted JALR that both
-  // writes rd and triggers flush is correctly reflected.
+  // snapshot should be forwared
   io.snapshot := table
   when(io.write.valid && io.write.bits.addr =/= 0.U) {
     io.snapshot(io.write.bits.addr) := io.write.bits.preg
   }
+
+  // commit should not be forwarded
+  io.committed := table
 }

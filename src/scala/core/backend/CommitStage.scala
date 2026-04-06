@@ -54,21 +54,21 @@ class CommitStage extends NPCModule {
 
   // ArchRAT
   arch_rat_w.valid := false.B
-  arch_rat_w.bits.addr := head_entry.arch_rd
-  arch_rat_w.bits.preg := head_entry.new_prd
+  arch_rat_w.bits.addr := head_entry.rd.arch_rd
+  arch_rat_w.bits.preg := head_entry.rd.new_prd
 
   // FreeList
   freelist_free.valid := false.B
-  freelist_free.bits := head_entry.old_prd
+  freelist_free.bits := head_entry.rd.old_prd
 
   // PRF write (late exec)
   prf_write.valid := false.B
-  prf_write.bits.addr := head_entry.new_prd
+  prf_write.bits.addr := head_entry.rd.new_prd
   prf_write.bits.data := 0.U
 
   // Wakeup (late exec)
   wakeup.valid := false.B
-  wakeup.bits.prd := head_entry.new_prd
+  wakeup.bits.prd := head_entry.rd.new_prd
 
   csr.except.valid := false.B
   csr.except.bits.xepc := head_entry.pc
@@ -108,7 +108,7 @@ class CommitStage extends NPCModule {
       // mret: no register write, no PRF change
     }.otherwise {
       // Write ArchRAT and free old_prd
-      when(head_entry.rd_wen) {
+      when(head_entry.rd.rd_wen) {
         arch_rat_w.valid := true.B
         freelist_free.valid := true.B
       }

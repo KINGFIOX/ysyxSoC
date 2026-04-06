@@ -19,10 +19,10 @@ class FreeList extends NPCModule {
 
   val free_vec = ~bitmap.asUInt
   io.alloc.valid := free_vec.orR && !io.flush
-  io.alloc.bits  := PriorityEncoder(free_vec)
+  io.alloc.bits  := PriorityEncoder(free_vec) // one-hot -> index
 
   when(io.flush) {
-    val next = WireDefault(VecInit(Seq.fill(NRPhyReg)(false.B)))
+    val next = (VecInit(Seq.fill(NRPhyReg)(false.B))) // init
     for (i <- 0 until NRReg) {
       next(io.arch_snapshot(i)) := true.B
     }

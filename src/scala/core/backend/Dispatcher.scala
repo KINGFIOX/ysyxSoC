@@ -16,7 +16,7 @@ class Dispatcher extends NPCModule {
     val agu_iq = Decoupled(new IQEnqData(new AGUExtra))
     // dispatch-resolved PRF write
     val prf_write = Valid(new PRFWritePort)
-    // dispatch-resolved wakeup
+    // dispatch-resolved wakeup, lui, auipc, jal, jalr
     val wakeup = Valid(new WakeupPort)
   })
 
@@ -30,11 +30,18 @@ class Dispatcher extends NPCModule {
   // ============================================================
   val has_except = dec.has_except
 
-  // format: off
-  val go_to_alu = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W, InstType.JALR, InstType.CSR).map(inst_type === _).reduce(_ || _) && !has_except
+  val go_to_alu = Seq(
+    InstType.R_ALU,
+    InstType.I_ALU,
+    InstType.R_ALU_W,
+    InstType.I_ALU_W,
+    InstType.JALR,
+    InstType.CSR
+  ).map(inst_type === _).reduce(_ || _) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
-  val go_to_agu = Seq(InstType.LOAD, InstType.STORE).map(inst_type === _).reduce(_ || _) && !has_except
-  // format: on
+  val go_to_agu = Seq(InstType.LOAD, InstType.STORE)
+    .map(inst_type === _)
+    .reduce(_ || _) && !has_except
 
   val rd_wen = in.rd_wen
 
@@ -42,7 +49,7 @@ class Dispatcher extends NPCModule {
   // Ready / Valid
   // ============================================================
   val iq_ready = MuxCase(
-    true.B,
+    true.B, // identical element
     Seq(
       go_to_alu -> io.alu_iq.ready,
       go_to_bru -> io.bru_iq.ready,
@@ -67,10 +74,10 @@ class Dispatcher extends NPCModule {
   enq.csr.addr := dec.imm(NRCSRbits - 1, 0)
   enq.csr.op := ctrl.csr_op
   enq.csr.wdata := 0.U
-  enq.arch_rd := Mux(rd_wen, dec.rd_idx, 0.U)
-  enq.new_prd := in.prd
-  enq.old_prd := in.old_prd
-  enq.rd_wen := rd_wen
+  enq.rd.arch_rd := Mux(rd_wen, dec.rd_idx, 0.U)
+  enq.rd.new_prd := in.prd
+  enq.rd.old_prd := in.old_prd
+  enq.rd.rd_wen := rd_wen
   enq.except.valid := has_except
   enq.except.mcause := dec.mcause
   enq.except.mtval := dec.mtval
@@ -89,9 +96,12 @@ class Dispatcher extends NPCModule {
   // ============================================================
   // ALU Issue Queue
   // ============================================================
-  // format: off
-  val alu_prf_wen = Seq(InstType.R_ALU, InstType.I_ALU, InstType.R_ALU_W, InstType.I_ALU_W).map(inst_type === _).reduce(_ || _) && rd_wen
-  // format: on
+  val alu_prf_wen = Seq(
+    InstType.R_ALU,
+    InstType.I_ALU,
+    InstType.R_ALU_W,
+    InstType.I_ALU_W
+  ).map(inst_type === _).reduce(_ || _) && rd_wen
   io.alu_iq.bits.prs1.preg := in.prs1
   io.alu_iq.bits.prs1.ready := in.prs1_ready
   io.alu_iq.bits.prs2.preg := in.prs2
@@ -100,9 +110,11 @@ class Dispatcher extends NPCModule {
   io.alu_iq.bits.extra.alu_op := ctrl.alu_op
   io.alu_iq.bits.extra.prd := in.prd
   io.alu_iq.bits.extra.prf_wen := alu_prf_wen
-  // format: off
-  io.alu_iq.bits.extra.use_imm := Seq(InstType.I_ALU, InstType.I_ALU_W, InstType.JALR).map(inst_type === _).reduce(_ || _)
-  // format: on
+  io.alu_iq.bits.extra.use_imm := Seq(
+    InstType.I_ALU,
+    InstType.I_ALU_W,
+    InstType.JALR
+  ).map(inst_type === _).reduce(_ || _)
   io.alu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================

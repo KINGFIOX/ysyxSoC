@@ -114,7 +114,9 @@ class BackEnd extends NPCModule {
 
   renameStage_.io.freelist_alloc <> freeList_.io.alloc
 
-  renameStage_.io.wakeup_fwd.zip(wakeups).foreach { case (dst, src) => dst := src }
+  renameStage_.io.wakeup_fwd.zip(wakeups).foreach { case (dst, src) =>
+    dst := src
+  }
 
   // --- Dispatcher ---
   dispatcher_.io.flush := flush
@@ -137,7 +139,11 @@ class BackEnd extends NPCModule {
   prf_.io.read(0).addr := alu_issue.prs1
   prf_.io.read(1).addr := alu_issue.prs2
   alu_.io.in.bits.op1 := prf_.io.read(0).data
-  alu_.io.in.bits.op2 := Mux(alu_issue.extra.use_imm, alu_issue.imm, prf_.io.read(1).data)
+  alu_.io.in.bits.op2 := Mux(
+    alu_issue.extra.use_imm,
+    alu_issue.imm,
+    prf_.io.read(1).data
+  )
   alu_.io.in.bits.alu_op := alu_issue.extra.alu_op
   alu_.io.in.bits.rob_tag := alu_issue.rob_tag
   alu_.io.in.bits.prd := alu_issue.extra.prd
@@ -238,8 +244,8 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Debug probe
   // ==========================================================
-  // GPR: derived from ArchRAT + PRF
-  prf_.probe.arch_rat := archRat_.io.snapshot
+  // GPR: derived from ArchRAT (non-forwarded) + PRF
+  prf_.probe.arch_rat := archRat_.io.committed
 
   probe.bits.pc := commitStage_.probe.bits.pc
   probe.bits.dnpc := commitStage_.probe.bits.dnpc
