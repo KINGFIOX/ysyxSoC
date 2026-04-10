@@ -78,7 +78,11 @@ class CommitStage extends NPCModule {
     Seq(
       (head_entry.inst_type === InstType.JAL) -> head_entry.jal.dnpc,
       (head_entry.inst_type === InstType.JALR) -> head_entry.jalr.dnpc,
-      (head_entry.inst_type === InstType.BRANCH) -> Mux(head_entry.bru.br_flag, head_entry.bru.dnpc, head_entry.bru.snpc),
+      (head_entry.inst_type === InstType.BRANCH) -> Mux(
+        head_entry.bru.br_flag,
+        head_entry.bru.dnpc,
+        head_entry.bru.snpc
+      ),
       (head_entry.inst_type === InstType.MRET) -> csr.xepc,
       (head_entry.except.valid) -> csr.xtvec
     )
@@ -122,8 +126,8 @@ class CommitStage extends NPCModule {
   when(rob.fire) {
     perf_commit_cnt := perf_commit_cnt + 1.U
     val is_cf = head_entry.inst_type === InstType.BRANCH ||
-                head_entry.inst_type === InstType.JAL ||
-                head_entry.inst_type === InstType.JALR
+      head_entry.inst_type === InstType.JAL ||
+      head_entry.inst_type === InstType.JALR
     when(is_cf) {
       perf_branch_cnt := perf_branch_cnt + 1.U
       when(redirect.bits.mispredict) {
