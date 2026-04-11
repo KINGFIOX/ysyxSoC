@@ -1,10 +1,10 @@
 #include "sdb/sdb.h"
 
-#include <cstdlib>
-#include <string>
-
 #include <readline/history.h>
 #include <readline/readline.h>
+
+#include <cstdlib>
+#include <string>
 
 #include "absl/log/log.h"
 #include "absl/strings/numbers.h"
@@ -24,8 +24,7 @@ const std::vector<Sdb::CommandDef>& Sdb::GetCommands() {
       {{"continue", "c"}, "continue execution", &Sdb::cmd_continue},
       {{"step", "si", "s"}, "step N instructions (default 1)", &Sdb::cmd_step},
       {{"info"}, "info r(egisters) / info w(atchpoints)", &Sdb::cmd_info},
-      {{"examine", "x"}, "x N EXPR - examine N words at EXPR",
-       &Sdb::cmd_examine},
+      {{"examine", "x"}, "x N EXPR - examine N words at EXPR", &Sdb::cmd_examine},
       {{"print", "p", "eval"}, "evaluate expression", &Sdb::cmd_print},
       {{"watch", "w"}, "add watchpoint on expression", &Sdb::cmd_watch},
       {{"delete", "d"}, "delete watchpoint by id", &Sdb::cmd_delete},
@@ -78,8 +77,8 @@ absl::Status Sdb::mainloop(VerilatorCpu& dut, bool batch) {
     free(line_raw);
 
     // Trim
-    while (!line.empty() && (line.back() == ' ' || line.back() == '\t' ||
-                              line.back() == '\n')) {
+    while (!line.empty() &&
+           (line.back() == ' ' || line.back() == '\t' || line.back() == '\n')) {
       line.pop_back();
     }
 
@@ -109,8 +108,7 @@ absl::Status Sdb::mainloop(VerilatorCpu& dut, bool batch) {
   }
 }
 
-Sdb::CmdResult Sdb::execute_line(const std::string& input,
-                                   VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::execute_line(const std::string& input, VerilatorCpu& dut) {
   auto cmd = ParseCommand(input);
   if (!cmd.has_value()) return CmdResult::Continue();
 
@@ -160,9 +158,8 @@ Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut) {
           LOG(INFO) << "program exited successfully";
           return CmdResult::Quit();
         }
-        return CmdResult::Fatal(
-            absl::StrFormat("program exited with failure (a0 = 0x%x)",
-                            ebreak_a0));
+        return CmdResult::Fatal(absl::StrFormat(
+            "program exited with failure (a0 = 0x%x)", ebreak_a0));
       case StepResult::kDifftestFail:
         return CmdResult::Fatal("difftest failed");
     }
@@ -199,7 +196,7 @@ void Sdb::lightsss_on_error(const VerilatorCpu& dut) {
 // ========================== Command Handlers ==========================
 
 Sdb::CmdResult Sdb::cmd_help(const std::string& /*args*/,
-                               VerilatorCpu& /*dut*/) {
+                             VerilatorCpu& /*dut*/) {
   std::string buf = "Commands:\n";
   for (const auto& def : GetCommands()) {
     std::string names;
@@ -214,12 +211,12 @@ Sdb::CmdResult Sdb::cmd_help(const std::string& /*args*/,
 }
 
 Sdb::CmdResult Sdb::cmd_quit(const std::string& /*args*/,
-                               VerilatorCpu& /*dut*/) {
+                             VerilatorCpu& /*dut*/) {
   return CmdResult::Quit();
 }
 
 Sdb::CmdResult Sdb::cmd_continue(const std::string& /*args*/,
-                                   VerilatorCpu& dut) {
+                                 VerilatorCpu& dut) {
   return execute_steps(SIZE_MAX, dut);
 }
 
@@ -253,8 +250,7 @@ Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut) {
     } else {
       std::string buf;
       for (size_t i = 0; i < breakpoints_.size(); ++i) {
-        absl::StrAppendFormat(&buf, "  #%d: 0x%016x\n", i + 1,
-                              breakpoints_[i]);
+        absl::StrAppendFormat(&buf, "  #%d: 0x%016x\n", i + 1, breakpoints_[i]);
       }
       LOG(INFO) << buf;
     }
@@ -272,8 +268,7 @@ Sdb::CmdResult Sdb::cmd_examine(const std::string& args, VerilatorCpu& dut) {
   }
   size_t n = 0;
   if (!absl::SimpleAtoi(parts[0], &n)) {
-    return CmdResult::InputError(
-        absl::StrFormat("bad count: %s", parts[0]));
+    return CmdResult::InputError(absl::StrFormat("bad count: %s", parts[0]));
   }
   auto addr = ExprEval(parts[1], dut);
   if (!addr.ok()) {
@@ -327,8 +322,7 @@ Sdb::CmdResult Sdb::cmd_watch(const std::string& args, VerilatorCpu& dut) {
   return CmdResult::Continue();
 }
 
-Sdb::CmdResult Sdb::cmd_delete(const std::string& args,
-                                 VerilatorCpu& /*dut*/) {
+Sdb::CmdResult Sdb::cmd_delete(const std::string& args, VerilatorCpu& /*dut*/) {
   int id = 0;
   if (!absl::SimpleAtoi(absl::StripAsciiWhitespace(args), &id)) {
     return CmdResult::InputError("usage: d N");
@@ -356,8 +350,7 @@ Sdb::CmdResult Sdb::cmd_break(const std::string& args, VerilatorCpu& dut) {
     } else {
       std::string buf;
       for (size_t i = 0; i < breakpoints_.size(); ++i) {
-        absl::StrAppendFormat(&buf, "  #%d: 0x%016x\n", i + 1,
-                              breakpoints_[i]);
+        absl::StrAppendFormat(&buf, "  #%d: 0x%016x\n", i + 1, breakpoints_[i]);
       }
       LOG(INFO) << buf;
     }
@@ -368,15 +361,13 @@ Sdb::CmdResult Sdb::cmd_break(const std::string& args, VerilatorCpu& dut) {
     absl::string_view rest =
         absl::StripLeadingAsciiWhitespace(expr.substr(first_word.size()));
     size_t idx = 0;
-    if (!absl::SimpleAtoi(rest, &idx) || idx < 1 ||
-        idx > breakpoints_.size()) {
+    if (!absl::SimpleAtoi(rest, &idx) || idx < 1 || idx > breakpoints_.size()) {
       return CmdResult::InputError("usage: b rm N");
     }
     uint64_t addr = breakpoints_[idx - 1];
-    breakpoints_.erase(breakpoints_.begin() +
-                       static_cast<ptrdiff_t>(idx - 1));
+    breakpoints_.erase(breakpoints_.begin() + static_cast<ptrdiff_t>(idx - 1));
     LOG(INFO) << absl::StreamFormat("deleted breakpoint #%d at 0x%016x", idx,
-                                     addr);
+                                    addr);
     return CmdResult::Continue();
   }
 
@@ -387,7 +378,7 @@ Sdb::CmdResult Sdb::cmd_break(const std::string& args, VerilatorCpu& dut) {
   }
   breakpoints_.push_back(*addr);
   LOG(INFO) << absl::StreamFormat("breakpoint #%d at 0x%016x",
-                                   breakpoints_.size(), *addr);
+                                  breakpoints_.size(), *addr);
   return CmdResult::Continue();
 }
 

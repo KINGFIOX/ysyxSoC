@@ -101,4 +101,8 @@ absl::Status SpikeCpu::step() {
   return absl::OkStatus();
 }
 
+std::pair<std::string, std::string> SpikeCpu::disasm(uint32_t inst) const {
+  return core_->disasm(inst);
+}
+
 }  // namespace npc

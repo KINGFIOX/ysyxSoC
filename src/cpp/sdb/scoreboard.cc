@@ -1,7 +1,5 @@
 #include "sdb/scoreboard.h"
 
-#include <cstring>
-
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
 #include "cpu/abstract_cpu.h"
@@ -50,42 +48,18 @@ static uint8_t mem_width(const std::string& mnemonic) {
 ScoreBoard::ScoreBoard(absl::Span<const uint8_t> flash_data,
                        std::unique_ptr<FuncTracer> ftrace)
     : golden_(flash_data),
-      cs_handle_(0),
       itrace_(kTraceCapacity),
       dtrace_(kTraceCapacity),
       mtrace_(kTraceCapacity),
-      ftrace_(std::move(ftrace)) {
-  cs_err err = cs_open(CS_ARCH_RISCV, CS_MODE_RISCV64, &cs_handle_);
-  if (err != CS_ERR_OK) {
-    LOG(FATAL) << "Failed to create capstone instance: " << cs_strerror(err);
-  }
-}
+      ftrace_(std::move(ftrace)) {}
 
-ScoreBoard::~ScoreBoard() {
-  if (cs_handle_ != 0) cs_close(&cs_handle_);
-}
-
-std::pair<std::string, std::string> ScoreBoard::disasm(uint32_t inst,
-                                                        uint64_t pc) const {
-  uint8_t bytes[4];
-  std::memcpy(bytes, &inst, 4);
-  cs_insn* insn = nullptr;
-  size_t count = cs_disasm(cs_handle_, bytes, sizeof(bytes), pc, 1, &insn);
-  if (count > 0) {
-    std::string mn = insn[0].mnemonic;
-    std::string full =
-        absl::StrFormat("%s %s", insn[0].mnemonic, insn[0].op_str);
-    cs_free(insn, count);
-    return {mn, full};
-  }
-  return {"", absl::StrFormat("unknown(0x%08x)", inst)};
-}
+ScoreBoard::~ScoreBoard() = default;
 
 StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
                                    uint64_t* ebreak_a0) {
   uint64_t pc = dut.pc();
   uint32_t inst = dut.inst();
-  auto [mnemonic, disasm_str] = disasm(inst, pc);
+  auto [mnemonic, disasm_str] = golden_.disasm(inst);
 
   itrace_.push(ITraceEntry(pc, inst, disasm_str));
 

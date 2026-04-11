@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "disasm.h"
 #include "mmu.h"
 #include "sim.h"
 #include "trap.h"
@@ -43,6 +44,7 @@ struct SpikeCore::Impl {
   processor_t* proc;
   state_t* state;
   mmu_t* mmu;
+  disassembler_t* disasm;
 };
 
 SpikeCore::SpikeCore(const uint8_t* flash_data, size_t flash_size)
@@ -75,6 +77,7 @@ SpikeCore::SpikeCore(const uint8_t* flash_data, size_t flash_size)
   impl_->proc = impl_->sim->get_core(0);
   impl_->state = impl_->proc->get_state();
   impl_->mmu = impl_->proc->get_mmu();
+  impl_->disasm = new disassembler_t(&impl_->proc->get_isa());
 
   impl_->state->pc = kResetVector;
 
@@ -85,6 +88,7 @@ SpikeCore::SpikeCore(const uint8_t* flash_data, size_t flash_size)
 }
 
 SpikeCore::~SpikeCore() {
+  delete impl_->disasm;
   delete impl_->sim;
   delete impl_;
 }
@@ -179,5 +183,13 @@ SpikeResult SpikeCore::step() {
 }
 
 void SpikeCore::reset() { impl_->proc->reset(); }
+
+std::pair<std::string, std::string> SpikeCore::disasm(uint32_t inst) const {
+  insn_t insn(inst);
+  const disasm_insn_t* match = impl_->disasm->lookup(insn);
+  std::string mnemonic = (match != nullptr) ? match->get_name() : "";
+  std::string full = impl_->disasm->disassemble(insn);
+  return {mnemonic, full};
+}
 
 }  // namespace npc

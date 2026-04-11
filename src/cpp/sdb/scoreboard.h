@@ -6,8 +6,6 @@
 #include <string>
 #include <utility>
 
-#include <capstone/capstone.h>
-
 #include "cpu/spike_cpu.h"
 #include "cpu/verilator_cpu.h"
 #include "tracer/dtrace.h"
@@ -42,7 +40,6 @@ class ScoreBoard {
   SpikeCpu& golden() { return golden_; }
 
  private:
-  std::pair<std::string, std::string> disasm(uint32_t inst, uint64_t pc) const;
   void handle_mmio(const VerilatorCpu& dut, uint64_t pc, uint32_t inst,
                    const std::string& mnemonic, const std::string& disasm_str);
   bool check_regs(const VerilatorCpu& dut) const;
@@ -50,7 +47,6 @@ class ScoreBoard {
                        const std::string& mnemonic) const;
 
   SpikeCpu golden_;
-  csh cs_handle_;
   RingBuf<ITraceEntry> itrace_;
   RingBuf<DTraceEntry> dtrace_;
   RingBuf<MTraceEntry> mtrace_;

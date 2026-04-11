@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "absl/types/span.h"
 #include "cpu/abstract_cpu.h"
@@ -42,6 +44,9 @@ class SpikeCpu final : public AbstractCpu {
                          uint8_t width) override;
   void reset() override;
   absl::Status step() override;
+
+  // Returns (mnemonic, full_disassembly).
+  std::pair<std::string, std::string> disasm(uint32_t inst) const;
 
  private:
   std::unique_ptr<SpikeCore> core_;

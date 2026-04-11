@@ -150,15 +150,6 @@ target_link_libraries(npc PRIVATE
 )
 target_compile_options(npc PRIVATE "-isystem${ABSL_INCLUDE_DIR}")
 
-# ========================== capstone ==========================
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(CAPSTONE REQUIRED capstone)
-find_path(CAPSTONE_INCLUDE_DIR capstone/capstone.h REQUIRED)
-target_compile_options(npc PRIVATE "-isystem${CAPSTONE_INCLUDE_DIR}")
-target_link_libraries(npc PRIVATE ${CAPSTONE_LIBRARIES})
-target_link_directories(npc PRIVATE ${CAPSTONE_LIBRARY_DIRS})
-
 # ========================== ELFIO (header-only) ==========================
 
 find_path(ELFIO_INCLUDE_DIR elfio/elfio.hpp REQUIRED)

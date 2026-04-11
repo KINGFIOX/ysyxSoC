@@ -33,7 +33,7 @@ class Sdb {
     Action action;
     std::string error_msg;
 
-    static CmdResult Continue() { return {true, Action::kContinue, ""}; }
+    static CmdResult Continue() { return {.ok=true, .action=Action::kContinue, .error_msg=""}; }
     static CmdResult Quit() { return {true, Action::kQuit, ""}; }
     static CmdResult InputError(std::string msg) {
       return {false, Action::kContinue, std::move(msg)};

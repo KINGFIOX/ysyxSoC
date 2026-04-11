@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
   float hit_rate =
       branch_cnt > 0
           ? static_cast<float>(branch_cnt - mispredict_cnt) / branch_cnt
-          : 0.0f;
+          : 0.0F;
   LOG(INFO) << "commit: " << dut.perf_commit_cnt();
   LOG(INFO) << "branch: " << branch_cnt;
   LOG(INFO) << "mispredict: " << mispredict_cnt;

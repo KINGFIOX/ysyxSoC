@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace npc {
 
@@ -40,6 +41,9 @@ class SpikeCore {
 
   SpikeResult step();
   void reset();
+
+  // Returns (mnemonic, full_disassembly).
+  std::pair<std::string, std::string> disasm(uint32_t inst) const;
 
  private:
   struct Impl;
