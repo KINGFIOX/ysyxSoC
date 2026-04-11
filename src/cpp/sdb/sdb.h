@@ -16,13 +16,13 @@ namespace npc {
 
 class Sdb {
  public:
-  Sdb(ScoreBoard& scoreboard, bool enable_fork);
+  explicit Sdb(bool enable_fork);
   ~Sdb() = default;
 
   Sdb(const Sdb&) = delete;
-  Sdb& operator=(const Sdb&) = delete;
+  auto operator=(const Sdb&) -> Sdb& = delete;
 
-  absl::Status mainloop(VerilatorCpu& dut, bool batch);
+  auto mainloop(ScoreBoard& scrbrd, VerilatorCpu& dut, bool batch) -> absl::Status;
   void lightsss_on_error(const VerilatorCpu& dut);
 
  private:
@@ -33,18 +33,27 @@ class Sdb {
     Action action;
     std::string error_msg;
 
-    static CmdResult Continue() { return {.ok=true, .action=Action::kContinue, .error_msg=""}; }
-    static CmdResult Quit() { return {true, Action::kQuit, ""}; }
-    static CmdResult InputError(std::string msg) {
-      return {false, Action::kContinue, std::move(msg)};
+    static auto Continue() -> CmdResult {
+      return {.ok = true, .action = Action::kContinue, .error_msg = ""};
     }
-    static CmdResult Fatal(std::string msg) {
-      return {false, Action::kQuit, std::move(msg)};
+    static auto Quit() -> CmdResult {
+      return {.ok = true, .action = Action::kQuit, .error_msg = ""};
     }
-    bool is_fatal() const { return !ok && action == Action::kQuit; }
+    static auto InputError(std::string msg) -> CmdResult {
+      return {.ok = false,
+              .action = Action::kContinue,
+              .error_msg = std::move(msg)};
+    }
+    static auto Fatal(std::string msg) -> CmdResult {
+      return {
+          .ok = false, .action = Action::kQuit, .error_msg = std::move(msg)};
+    }
+
+    [[nodiscard]] auto is_fatal() const -> bool { return !ok && action == Action::kQuit; }
+
   };
 
-  using CmdHandler = CmdResult (Sdb::*)(const std::string&, VerilatorCpu&);
+  using CmdHandler = CmdResult (Sdb::*)(const std::string&, VerilatorCpu&, ScoreBoard&);
 
   struct CommandDef {
     std::vector<std::string> names;
@@ -52,24 +61,23 @@ class Sdb {
     CmdHandler handler;
   };
 
-  static const std::vector<CommandDef>& GetCommands();
+  static auto GetCommands() -> const std::vector<CommandDef>&;
 
-  CmdResult execute_line(const std::string& input, VerilatorCpu& dut);
-  CmdResult execute_steps(size_t n, VerilatorCpu& dut);
-  bool check_breakpoints(const VerilatorCpu& dut) const;
+  auto execute_line(const std::string& input, VerilatorCpu& dut, ScoreBoard & scrbrd) -> CmdResult;
+  auto execute_steps(size_t n, VerilatorCpu& dut, ScoreBoard & scrbrd) -> CmdResult;
+  [[nodiscard]] auto check_breakpoints(const VerilatorCpu& dut) const -> bool;
 
-  CmdResult cmd_help(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_quit(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_continue(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_step(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_info(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_examine(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_print(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_watch(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_delete(const std::string& args, VerilatorCpu& dut);
-  CmdResult cmd_break(const std::string& args, VerilatorCpu& dut);
+  auto cmd_help(const std::string& args, VerilatorCpu& dut    , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_quit(const std::string& args, VerilatorCpu& dut    , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_continue(const std::string& args, VerilatorCpu& dut, ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_step(const std::string& args, VerilatorCpu& dut    , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_info(const std::string& args, VerilatorCpu& dut    , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_examine(const std::string& args, VerilatorCpu& dut , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_print(const std::string& args, VerilatorCpu& dut   , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_watch(const std::string& args, VerilatorCpu& dut   , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_delete(const std::string& args, VerilatorCpu& dut  , ScoreBoard& scrbrd) -> CmdResult;
+  auto cmd_break(const std::string& args, VerilatorCpu& dut   , ScoreBoard& scrbrd) -> CmdResult;
 
-  ScoreBoard& scoreboard_;
   std::vector<uint64_t> breakpoints_;
   WatchpointPool watchpoints_;
   std::optional<std::string> last_cmd_;

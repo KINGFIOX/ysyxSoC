@@ -44,7 +44,6 @@ CMAKE_ARGS = \
 	-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 	-DNPC_HOME=$(NPC_HOME) \
 	-DRTL_DIR=$(abspath $(RTL_DIR)) \
-	-DSPIKE_HOME=$$SPIKE_HOME \
 	-DNVBOARD_HOME=$$NVBOARD_HOME
 
 # =============================== Step 2: make verilate ===============================

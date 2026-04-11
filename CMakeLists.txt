@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ========================== Environment paths ==========================
 
-foreach(VAR NPC_HOME SPIKE_HOME NVBOARD_HOME)
+foreach(VAR NPC_HOME)
   if(NOT DEFINED ${VAR} AND DEFINED ENV{${VAR}})
     set(${VAR} "$ENV{${VAR}}")
   endif()
@@ -21,6 +21,11 @@ set(VERILATOR_MDIR "${NPC_HOME}/build/obj-verilator")
 set(SRC "${NPC_HOME}/src/cpp")
 
 # ========================== Verilator model ==========================
+
+# CMake >= 4.0 no longer auto-propagates compilers to try_compile() projects.
+# Verilator's config needs them for compiler-flag checks.
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
+  CMAKE_CXX_COMPILER CMAKE_C_COMPILER)
 
 find_package(verilator REQUIRED HINTS $ENV{VERILATOR_ROOT})
 
@@ -76,7 +81,6 @@ add_executable(npc
   ${SRC}/cpu/abstract_cpu.cc
   ${SRC}/cpu/verilator_cpu.cc
   ${SRC}/cpu/spike_cpu.cc
-  ${SRC}/cpu/spike_core.cc
   ${SRC}/dpi/memory.cc
   ${SRC}/dpi/dpi.cc
   ${SRC}/sdb/sdb.cc
@@ -94,10 +98,6 @@ target_include_directories(npc PRIVATE
   "${SRC}"
   "${EXPR_GEN_DIR}"
   "${VERILATOR_MDIR}"
-  # Spike headers
-  "${SPIKE_HOME}/include"
-  "${SPIKE_HOME}/include/riscv"
-  "${SPIKE_HOME}/include/softfloat"
 )
 
 target_compile_options(npc PRIVATE -Wall -Wextra -Wno-unused-parameter)
@@ -110,22 +110,12 @@ target_link_libraries(npc PRIVATE z)
 
 # ========================== Spike ==========================
 
-target_link_directories(npc PRIVATE "${SPIKE_HOME}/lib")
-if(APPLE)
-  target_link_libraries(npc PRIVATE
-    -Wl,-force_load,"${SPIKE_HOME}/lib/libriscv.a"
-    fesvr disasm fdt softfloat
-  )
-else()
-  target_link_libraries(npc PRIVATE
-    -Wl,--whole-archive "${SPIKE_HOME}/lib/libriscv.a" -Wl,--no-whole-archive
-    fesvr disasm fdt softfloat
-  )
-endif()
+find_package(spike REQUIRED)
+target_link_libraries(npc PRIVATE spike::riscv)
 
 # ========================== NVBoard + SDL2 ==========================
 
-find_package(nvboard REQUIRED HINTS "${NVBOARD_HOME}/lib/cmake/nvboard")
+find_package(nvboard REQUIRED)
 target_link_libraries(npc PRIVATE nvboard::nvboard)
 
 # ========================== absl ==========================

@@ -2,21 +2,27 @@
 #define NPC_CPU_SPIKE_CPU_H_
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <utility>
 
 #include "absl/types/span.h"
 #include "cpu/abstract_cpu.h"
 
-namespace npc {
+class sim_t;
+class processor_t;
+struct state_t;
+class mmu_t;
+class disassembler_t;
 
-class SpikeCore;
+namespace npc {
 
 class SpikeCpu final : public AbstractCpu {
  public:
   explicit SpikeCpu(absl::Span<const uint8_t> flash_data);
   ~SpikeCpu() override;
+
+  SpikeCpu(const SpikeCpu&) = delete;
+  SpikeCpu& operator=(const SpikeCpu&) = delete;
 
   uint64_t pc() const override;
   absl::Status set_pc(uint64_t value) override;
@@ -45,11 +51,14 @@ class SpikeCpu final : public AbstractCpu {
   void reset() override;
   absl::Status step() override;
 
-  // Returns (mnemonic, full_disassembly).
   std::pair<std::string, std::string> disasm(uint32_t inst) const;
 
  private:
-  std::unique_ptr<SpikeCore> core_;
+  sim_t* sim_;
+  processor_t* proc_;
+  state_t* state_;
+  mmu_t* mmu_;
+  disassembler_t* disasm_;
 };
 
 }  // namespace npc

@@ -14,11 +14,12 @@
 #include "cpu/abstract_cpu.h"
 #include "sdb/command.h"
 #include "sdb/expr.h"
+#include "sdb/scoreboard.h"
 
 namespace npc {
 
-const std::vector<Sdb::CommandDef>& Sdb::GetCommands() {
-  static const auto* commands = new std::vector<CommandDef>{
+auto Sdb::GetCommands() -> const std::vector<Sdb::CommandDef>& {
+  static const auto* commands = new std::vector<CommandDef> {
       {{"help", "h"}, "show this help message", &Sdb::cmd_help},
       {{"quit", "q"}, "quit the debugger", &Sdb::cmd_quit},
       {{"continue", "c"}, "continue execution", &Sdb::cmd_continue},
@@ -33,14 +34,14 @@ const std::vector<Sdb::CommandDef>& Sdb::GetCommands() {
   return *commands;
 }
 
-Sdb::Sdb(ScoreBoard& scoreboard, bool enable_fork) : scoreboard_(scoreboard) {
+Sdb::Sdb(bool enable_fork) {
   if (enable_fork) {
     LOG(INFO) << "[lightsss] enabled";
     lightsss_.emplace();
   }
 }
 
-absl::Status Sdb::mainloop(VerilatorCpu& dut, bool batch) {
+auto Sdb::mainloop(ScoreBoard & scrbrd , VerilatorCpu& dut, bool batch) -> absl::Status {
   if (lightsss_.has_value()) {
     auto result = lightsss_->do_fork();
     if (result.is_child) {
@@ -59,7 +60,7 @@ absl::Status Sdb::mainloop(VerilatorCpu& dut, bool batch) {
   }
 
   if (batch) {
-    auto r = execute_steps(SIZE_MAX, dut);
+    auto r = execute_steps(SIZE_MAX, dut, scrbrd);
     if (r.is_fatal()) {
       return absl::InternalError(r.error_msg);
     }
@@ -95,7 +96,7 @@ absl::Status Sdb::mainloop(VerilatorCpu& dut, bool batch) {
       input = line;
     }
 
-    auto r = execute_line(input, dut);
+    auto r = execute_line(input, dut, scrbrd);
     if (r.is_fatal()) {
       return absl::InternalError(r.error_msg);
     }
@@ -108,14 +109,14 @@ absl::Status Sdb::mainloop(VerilatorCpu& dut, bool batch) {
   }
 }
 
-Sdb::CmdResult Sdb::execute_line(const std::string& input, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::execute_line(const std::string& input, VerilatorCpu& dut, ScoreBoard& scrbrd) {
   auto cmd = ParseCommand(input);
   if (!cmd.has_value()) return CmdResult::Continue();
 
   for (const auto& def : GetCommands()) {
     for (const auto& name : def.names) {
       if (cmd->name == name) {
-        return (this->*def.handler)(cmd->args, dut);
+        return (this->*def.handler)(cmd->args, dut, scrbrd);
       }
     }
   }
@@ -124,7 +125,7 @@ Sdb::CmdResult Sdb::execute_line(const std::string& input, VerilatorCpu& dut) {
       absl::StrFormat("unknown command: %s", cmd->name));
 }
 
-Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut, ScoreBoard & scrbrd) {
   for (size_t i = 0; i < n; ++i) {
     if (lightsss_.has_value() && lightsss_->should_fork()) {
       auto result = lightsss_->do_fork();
@@ -149,7 +150,7 @@ Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut) {
     }
 
     uint64_t ebreak_a0 = 0;
-    auto step_result = scoreboard_.scoreboard(dut, &ebreak_a0);
+    auto step_result = scrbrd.scoreboard(dut, &ebreak_a0);
     switch (step_result) {
       case StepResult::kContinue:
         break;
@@ -195,8 +196,8 @@ void Sdb::lightsss_on_error(const VerilatorCpu& dut) {
 
 // ========================== Command Handlers ==========================
 
-Sdb::CmdResult Sdb::cmd_help(const std::string& /*args*/,
-                             VerilatorCpu& /*dut*/) {
+auto Sdb::cmd_help(const std::string& /*args*/, VerilatorCpu& /*dut*/, ScoreBoard&)
+    -> Sdb::CmdResult {
   std::string buf = "Commands:\n";
   for (const auto& def : GetCommands()) {
     std::string names;
@@ -211,26 +212,26 @@ Sdb::CmdResult Sdb::cmd_help(const std::string& /*args*/,
 }
 
 Sdb::CmdResult Sdb::cmd_quit(const std::string& /*args*/,
-                             VerilatorCpu& /*dut*/) {
+                             VerilatorCpu& /*dut*/, ScoreBoard&) {
   return CmdResult::Quit();
 }
 
 Sdb::CmdResult Sdb::cmd_continue(const std::string& /*args*/,
-                                 VerilatorCpu& dut) {
-  return execute_steps(SIZE_MAX, dut);
+                                 VerilatorCpu& dut, ScoreBoard& scrbrd) {
+  return execute_steps(SIZE_MAX, dut, scrbrd);
 }
 
-Sdb::CmdResult Sdb::cmd_step(const std::string& args, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::cmd_step(const std::string& args, VerilatorCpu& dut, ScoreBoard& scrbrd) {
   size_t n = 1;
   if (!args.empty()) {
     if (!absl::SimpleAtoi(args, &n)) {
       return CmdResult::InputError("usage: step [N]");
     }
   }
-  return execute_steps(n, dut);
+  return execute_steps(n, dut, scrbrd);
 }
 
-Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut,  ScoreBoard& ) {
   absl::string_view sub = absl::StripAsciiWhitespace(args);
   if (sub == "r" || sub == "registers" || sub == "reg") {
     std::string buf = absl::StrFormat("pc  = 0x%016x\n", dut.pc());
@@ -260,7 +261,7 @@ Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut) {
   return CmdResult::Continue();
 }
 
-Sdb::CmdResult Sdb::cmd_examine(const std::string& args, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::cmd_examine(const std::string& args, VerilatorCpu& dut,   ScoreBoard&) {
   std::vector<absl::string_view> parts =
       absl::StrSplit(args, absl::MaxSplits(' ', 1), absl::SkipEmpty());
   if (parts.size() < 2) {
@@ -294,7 +295,7 @@ Sdb::CmdResult Sdb::cmd_examine(const std::string& args, VerilatorCpu& dut) {
   return CmdResult::Continue();
 }
 
-Sdb::CmdResult Sdb::cmd_print(const std::string& args, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::cmd_print(const std::string& args, VerilatorCpu& dut, ScoreBoard&) {
   absl::string_view expr = absl::StripAsciiWhitespace(args);
   if (expr.empty()) {
     return CmdResult::InputError("usage: p EXPR");
@@ -308,7 +309,7 @@ Sdb::CmdResult Sdb::cmd_print(const std::string& args, VerilatorCpu& dut) {
   return CmdResult::Continue();
 }
 
-Sdb::CmdResult Sdb::cmd_watch(const std::string& args, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::cmd_watch(const std::string& args, VerilatorCpu& dut, ScoreBoard&) {
   absl::string_view expr = absl::StripAsciiWhitespace(args);
   if (expr.empty()) {
     return CmdResult::InputError("usage: w EXPR");
@@ -322,7 +323,7 @@ Sdb::CmdResult Sdb::cmd_watch(const std::string& args, VerilatorCpu& dut) {
   return CmdResult::Continue();
 }
 
-Sdb::CmdResult Sdb::cmd_delete(const std::string& args, VerilatorCpu& /*dut*/) {
+Sdb::CmdResult Sdb::cmd_delete(const std::string& args, VerilatorCpu& /*dut*/, ScoreBoard&) {
   int id = 0;
   if (!absl::SimpleAtoi(absl::StripAsciiWhitespace(args), &id)) {
     return CmdResult::InputError("usage: d N");
@@ -336,7 +337,7 @@ Sdb::CmdResult Sdb::cmd_delete(const std::string& args, VerilatorCpu& /*dut*/) {
   return CmdResult::Continue();
 }
 
-Sdb::CmdResult Sdb::cmd_break(const std::string& args, VerilatorCpu& dut) {
+Sdb::CmdResult Sdb::cmd_break(const std::string& args, VerilatorCpu& dut, ScoreBoard&) {
   absl::string_view expr = absl::StripAsciiWhitespace(args);
   if (expr.empty()) {
     return CmdResult::InputError("usage: b ADDR");

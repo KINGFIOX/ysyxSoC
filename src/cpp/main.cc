@@ -51,23 +51,23 @@ int main(int argc, char* argv[]) {
   ifs.close();
 
   npc::VerilatorCpu dut(flash_data, absl::GetFlag(FLAGS_nvboard));
-  npc::ScoreBoard scoreboard(flash_data, std::move(ftrace));
-  npc::Sdb sdb(scoreboard, absl::GetFlag(FLAGS_enable_fork));
+  npc::ScoreBoard scrbrd(flash_data, std::move(ftrace));
+  npc::Sdb sdb(absl::GetFlag(FLAGS_enable_fork));
 
-  auto status = sdb.mainloop(dut, absl::GetFlag(FLAGS_batch));
+  auto status = sdb.mainloop(scrbrd, dut, absl::GetFlag(FLAGS_batch));
   if (!status.ok()) {
     sdb.lightsss_on_error(dut);
-    scoreboard.dump_traces(dut);
+    scrbrd.dump_traces(dut);
     LOG(ERROR) << status;
     return 1;
   }
 
   uint32_t branch_cnt = dut.perf_branch_cnt();
   uint32_t mispredict_cnt = dut.perf_branch_mispredict_cnt();
-  float hit_rate =
-      branch_cnt > 0
-          ? static_cast<float>(branch_cnt - mispredict_cnt) / branch_cnt
-          : 0.0F;
+  float hit_rate = branch_cnt > 0
+                       ? static_cast<float>(branch_cnt - mispredict_cnt) /
+                             static_cast<float>(branch_cnt)
+                       : 0.0F;
   LOG(INFO) << "commit: " << dut.perf_commit_cnt();
   LOG(INFO) << "branch: " << branch_cnt;
   LOG(INFO) << "mispredict: " << mispredict_cnt;
