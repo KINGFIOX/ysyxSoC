@@ -1,10 +1,10 @@
 #***************************************************************************************
-# ysyxSoC Makefile — thin wrapper around cargo + mill
+# ysyxSoC Makefile — thin wrapper around CMake + mill
 #
 # 三步构建流程:
 #   make verilog    — Chisel → SystemVerilog
-#   make verilate   — SystemVerilog → Verilator C++ 库
-#   make build      — Rust + C++ FFI → 仿真可执行文件 (cargo)
+#   make verilate   — SystemVerilog → Verilator C++ 库 (via CMake)
+#   make build      — 仿真可执行文件 (verilator model + C++20, CMake + Ninja)
 #
 # 也可以一步到位:
 #   make run IMG=<bin>
@@ -30,56 +30,54 @@ $(V_SIM): $(SCALA_FILES)
 
 verilog: $(V_SIM)
 
-# =============================== Step 2: make verilate ===============================
-# SystemVerilog → Verilator C++ 静态库 (CMake + Ninja)
-
-VERILATOR_TOP       := NPCSoC
-VERILATOR_MDIR      := $(BUILD_DIR)/obj-verilator
-VERILATOR_LIB       := $(VERILATOR_MDIR)/V$(VERILATOR_TOP)__ALL.a
-VERILATOR_CMAKE_BUILD := $(VERILATOR_MDIR)/cmake-build
-
-VERILATOR_RTL_SRCS   := $(shell find $(RTL_DIR) -name "*.sv" 2>/dev/null)
-VERILATOR_PERIP_SRCS := $(shell find src/verilog -name "*.v" 2>/dev/null)
-
-$(VERILATOR_LIB): $(VERILATOR_RTL_SRCS) $(VERILATOR_PERIP_SRCS)
-	@echo "=== Verilating + Building (CMake+Ninja) ==="
-	@mkdir -p $(VERILATOR_MDIR)
-	@cmake -G Ninja \
-		-S $(NPC_HOME)/scripts/verilator-build \
-		-B $(VERILATOR_CMAKE_BUILD) \
-		-DNPC_HOME=$(abspath $(NPC_HOME)) \
-		-DRTL_DIR=$(abspath $(RTL_DIR)) \
-		-DOUTPUT_DIR=$(abspath $(VERILATOR_MDIR))
-	@cmake --build $(VERILATOR_CMAKE_BUILD)
-
-verilate: $(VERILATOR_LIB)
-
-# =============================== Step 3: make build ===============================
-# Rust + C++ FFI → 仿真可执行文件 (cargo build)
+# =============================== CMake 公共参数 ===============================
 
 RELEASE ?= 1
-BINARY := $(if $(findstring 1,$(RELEASE)),target/release/npc,target/debug/npc)
+CMAKE_BUILD_TYPE := $(if $(findstring 1,$(RELEASE)),Release,Debug)
+NPC_BUILD_DIR    := $(BUILD_DIR)/npc-build
+BINARY           := $(NPC_BUILD_DIR)/npc
+
+CMAKE_ARGS = \
+	-G Ninja \
+	-S $(NPC_HOME) \
+	-B $(NPC_BUILD_DIR) \
+	-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
+	-DNPC_HOME=$(NPC_HOME) \
+	-DRTL_DIR=$(abspath $(RTL_DIR)) \
+	-DSPIKE_HOME=$$SPIKE_HOME \
+	-DNVBOARD_HOME=$$NVBOARD_HOME
+
+# =============================== Step 2: make verilate ===============================
+# 仅构建 Verilator model（不编译 NPC 可执行文件）
+
+verilate:
+	@cmake $(CMAKE_ARGS)
+	@cmake --build $(NPC_BUILD_DIR) --target verilator_model
+
+# =============================== Step 3: make build ===============================
+# 完整构建：verilator model + C++20 仿真可执行文件
 
 build:
-	unset CC CXX && cargo build $(if $(findstring 1,$(RELEASE)),--release,)
+	@cmake $(CMAKE_ARGS)
+	@cmake --build $(NPC_BUILD_DIR)
 
 release: verilate
 	$(MAKE) build RELEASE=1
 
 # =============================== make all ===============================
-# 完整流程: verilog → verilate → build
+# 完整流程: verilog → build
 
-all: verilate build
+all: verilog build
 
 # =============================== 运行 & 调试 ===============================
 
 override ARGS ?= --log=$(BUILD_DIR)/npc-log.txt
 IMG ?=
 
-NPC_EXEC = $(BINARY) $(ARGS) --image $(IMG)
+NPC_EXEC = $(BINARY) $(ARGS) --image=$(IMG)
 
-run: all
-	RUST_LOG=info $(NPC_EXEC)
+run:
+	$(NPC_EXEC)
 
 gdb: all
 	gdb -s $(BINARY) --args $(NPC_EXEC)
@@ -117,25 +115,25 @@ clean-all: distclean
 # =============================== 帮助 ===============================
 
 help:
-	@echo "ysyxSoC Makefile (cargo backend)"
+	@echo "ysyxSoC Makefile (CMake backend)"
 	@echo ""
 	@echo "三步构建:"
 	@echo "  verilog            — Step 1: Chisel → SystemVerilog"
-	@echo "  verilate           — Step 2: SystemVerilog → Verilator C++ 库"
-	@echo "  build              — Step 3: Rust + C++ FFI → 仿真可执行文件 (cargo, debug)"
+	@echo "  verilate           — Step 2: 仅构建 Verilator C++ 模型"
+	@echo "  build              — Step 3: verilator model + C++20 → 仿真可执行文件"
 	@echo "  release            — verilate + build (release 模式，性能更优)"
-	@echo "  all                — 执行 Step 1-3"
+	@echo "  all                — 执行 verilog + build"
 	@echo ""
 	@echo "运行与调试:"
-	@echo "  run IMG=<bin>      — 全流程编译 + 运行仿真"
-	@echo "  gdb IMG=<bin>      — 全流程编译 + GDB 调试"
+	@echo "  run IMG=<bin>      — 运行仿真"
+	@echo "  gdb IMG=<bin>      — GDB 调试"
 	@echo "  wave               — 查看波形"
 	@echo ""
 	@echo "清理:"
 	@echo "  clean              — 清理构建目录"
 	@echo "  distclean          — 清理所有生成文件"
 
-.PHONY: release all
-.PHONY: run gdb wave
+.PHONY: verilog verilate release all
+.PHONY: run gdb wave build
 .PHONY: dev-init bsp idea reformat checkformat
 .PHONY: clean distclean clean-all help

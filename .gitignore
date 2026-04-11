@@ -13,9 +13,6 @@
 !.mill-version
 !Makefile
 !build.sc
-!Cargo.toml
-!Cargo.lock
-!scripts/**
 !LICENSE
 
 # =============================================================================
@@ -33,7 +30,6 @@
 !*.md
 !*.pdf
 !*.patch
-!*.rs
 
 # =============================================================================
 # 不跟踪
@@ -55,8 +51,4 @@ out/
 
 !report/*
 
-
-# Added by cargo
-
-/target
-.cargo
+!CMakeLists.txt
