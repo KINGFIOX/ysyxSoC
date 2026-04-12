@@ -240,7 +240,11 @@ class Rob extends NPCModule {
   when(head_is_late && head_is_mem && io.lsu.done && !flush) {
     head_entry.state := RobState.complete
     head_entry.is_mmio := io.lsu.bits.is_mmio
-    when(io.lsu.bits.rd_wen) {
+    when(io.lsu.bits.page_fault) {
+      head_entry.except.valid := true.B
+      head_entry.except.mcause := io.lsu.bits.page_fault_cause
+      head_entry.except.mtval := io.lsu.bits.page_fault_addr
+    }.elsewhen(io.lsu.bits.rd_wen) {
       io.lsu_wb.valid := true.B
       io.lsu_wb.bits.data := io.lsu.bits.result
     }

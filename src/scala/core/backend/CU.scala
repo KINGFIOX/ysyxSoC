@@ -13,12 +13,13 @@ object ALUSel2 extends ChiselEnum {
 
 /** CSR 操作类型 */
 object CSROpType extends ChiselEnum {
-  val CSR_RW, CSR_RS = Value // NOP, Read-Write, Read-Set
+  val CSR_RW, CSR_RS, CSR_RC = Value
 }
 
 object InstType extends ChiselEnum {
   val INVALID, R_ALU, I_ALU, JALR, LOAD, STORE, BRANCH, JAL,
-      LUI, AUIPC, ECALL, EBREAK, MRET, CSR = Value
+      LUI, AUIPC, ECALL, EBREAK, MRET, SRET, SFENCE_VMA, CSR,
+      FENCE, FENCE_I = Value
 }
 
 class CUOutputBase extends NPCBundle {
@@ -80,6 +81,7 @@ object CU {
   private val OP_LUI     = "0110111" // LUI                         -> dispatch_resolved
   private val OP_AUIPC   = "0010111" // AUIPC                       -> dispatch_resolved
   private val OP_SYSTEM  = "1110011" // ECALL / EBREAK / MRET / CSR -> 
+  private val OP_MISC_MEM = "0001111" // FENCE / FENCE.I
   // format: on
 
   // ==================== 指令表 (纯编码信息) ====================
@@ -118,6 +120,21 @@ object CU {
     InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b001"), opcode = BitPat("b0111011")), // SLLW
     InstPattern( func7 = BitPat("b0000000"), func3 = BitPat("b101"), opcode = BitPat("b0111011")), // SRLW
     InstPattern( func7 = BitPat("b0100000"), func3 = BitPat("b101"), opcode = BitPat("b0111011")), // SRAW
+    // RV64M (func7=0000001 + func3 + opcode=0110011)
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b000"), opcode = BitPat("b0110011")), // MUL
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b001"), opcode = BitPat("b0110011")), // MULH
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b010"), opcode = BitPat("b0110011")), // MULHSU
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b011"), opcode = BitPat("b0110011")), // MULHU
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b100"), opcode = BitPat("b0110011")), // DIV
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b101"), opcode = BitPat("b0110011")), // DIVU
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b110"), opcode = BitPat("b0110011")), // REM
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b111"), opcode = BitPat("b0110011")), // REMU
+    // RV64M *W (func7=0000001 + func3 + opcode=0111011)
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b000"), opcode = BitPat("b0111011")), // MULW
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b100"), opcode = BitPat("b0111011")), // DIVW
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b101"), opcode = BitPat("b0111011")), // DIVUW
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b110"), opcode = BitPat("b0111011")), // REMW
+    InstPattern( func7 = BitPat("b0000001"), func3 = BitPat("b111"), opcode = BitPat("b0111011")), // REMUW
     // Load (func3 + opcode)
     InstPattern(func3 = BitPat("b000"), opcode = BitPat("b0000011")), // LB
     InstPattern(func3 = BitPat("b001"), opcode = BitPat("b0000011")), // LH
@@ -149,9 +166,15 @@ object CU {
     InstPattern( func7 = BitPat("b0000000"), rs2 = BitPat("b00000"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // ECALL
     InstPattern( func7 = BitPat("b0000000"), rs2 = BitPat("b00001"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // EBREAK
     InstPattern( func7 = BitPat("b0011000"), rs2 = BitPat("b00010"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // MRET
+    InstPattern( func7 = BitPat("b0001000"), rs2 = BitPat("b00010"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // SRET
+    InstPattern( func7 = BitPat("b0001001"),                         func3 = BitPat("b000"), opcode = BitPat("b1110011")), // SFENCE.VMA
     // CSR (func3 + opcode)
     InstPattern(func3 = BitPat("b001"), opcode = BitPat("b1110011")), // CSRRW
-    InstPattern(func3 = BitPat("b010"), opcode = BitPat("b1110011")) // CSRRS
+    InstPattern(func3 = BitPat("b010"), opcode = BitPat("b1110011")), // CSRRS
+    InstPattern(func3 = BitPat("b011"), opcode = BitPat("b1110011")), // CSRRC
+    // FENCE / FENCE.I (func3 + opcode)
+    InstPattern(func3 = BitPat("b000"), opcode = BitPat("b0001111")), // FENCE
+    InstPattern(func3 = BitPat("b001"), opcode = BitPat("b0001111"))  // FENCE.I
   )
   // format: on
 
@@ -178,8 +201,15 @@ object CU {
           case ("0000000", "00000", "000") => bp(InstType.ECALL)
           case ("0000000", "00001", "000") => bp(InstType.EBREAK)
           case ("0011000", "00010", "000") => bp(InstType.MRET)
+          case ("0001000", "00010", "000") => bp(InstType.SRET)
+          case ("0001001", _,      "000") => bp(InstType.SFENCE_VMA)
           case ("???????", "?????", "001") => bp(InstType.CSR)
           case ("???????", "?????", "010") => bp(InstType.CSR)
+          case ("???????", "?????", "011") => bp(InstType.CSR)
+        }
+      case OP_MISC_MEM => op.func3.rawString match {
+          case "000" => bp(InstType.FENCE)
+          case "001" => bp(InstType.FENCE_I)
         }
       case _ => bp(InstType.INVALID)
     }
@@ -202,6 +232,14 @@ object CU {
           case ("0100000", "101") => bp(ALUOpType.alu_SRA)
           case ("0000000", "010") => bp(ALUOpType.alu_SLT)
           case ("0000000", "011") => bp(ALUOpType.alu_SLTU)
+          case ("0000001", "000") => bp(ALUOpType.alu_MUL)
+          case ("0000001", "001") => bp(ALUOpType.alu_MULH)
+          case ("0000001", "010") => bp(ALUOpType.alu_MULHSU)
+          case ("0000001", "011") => bp(ALUOpType.alu_MULHU)
+          case ("0000001", "100") => bp(ALUOpType.alu_DIV)
+          case ("0000001", "101") => bp(ALUOpType.alu_DIVU)
+          case ("0000001", "110") => bp(ALUOpType.alu_REM)
+          case ("0000001", "111") => bp(ALUOpType.alu_REMU)
           case _                  => dc
         }
       case OP_I_ALU => (op.func7.rawString, op.func3.rawString) match {
@@ -222,6 +260,11 @@ object CU {
           case ("0000000", "001") => bp(ALUOpType.alu_SLLW)
           case ("0000000", "101") => bp(ALUOpType.alu_SRLW)
           case ("0100000", "101") => bp(ALUOpType.alu_SRAW)
+          case ("0000001", "000") => bp(ALUOpType.alu_MULW)
+          case ("0000001", "100") => bp(ALUOpType.alu_DIVW)
+          case ("0000001", "101") => bp(ALUOpType.alu_DIVUW)
+          case ("0000001", "110") => bp(ALUOpType.alu_REMW)
+          case ("0000001", "111") => bp(ALUOpType.alu_REMUW)
           case _                  => dc
         }
       case OP_I_ALU_W => (op.func7.rawString, op.func3.rawString) match {
@@ -233,7 +276,7 @@ object CU {
         }
       case OP_JALR => bp(ALUOpType.alu_ADD)
       case OP_SYSTEM => op.func3.rawString match {
-        case "001" | "010" => bp(ALUOpType.alu_ADD)
+        case "001" | "010" | "011" => bp(ALUOpType.alu_ADD)
         case _ => dc
       }
       case _ => dc
@@ -335,6 +378,7 @@ object CU {
         op.func3.rawString match {
           case "001" => bp(CSROpType.CSR_RW)
           case "010" => bp(CSROpType.CSR_RS)
+          case "011" => bp(CSROpType.CSR_RC)
           case _     => dc
         }
       case _ => dc
@@ -348,8 +392,8 @@ object CU {
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_SYSTEM =>
         op.func3.rawString match {
-          case "001" | "010" => y // CSRRW, CSRRS
-          case _             => n
+          case "001" | "010" | "011" => y // CSRRW, CSRRS, CSRRC
+          case _                     => n
         }
       case _ => n
     }
@@ -397,13 +441,12 @@ class CU extends NPCModule {
   io.out.csr_op := CSROpType.safe(decoded(CsrOpField))._1
   io.out.csr_wen := decoded(CsrWenField)
 
-  // mcause:
-  // 2. illegal instruction
-  // 3. breakpoint
-  // 11. ecall from M-mode
+  // mcause: placeholder — ECALL cause is determined at commit time based on priv level
+  // 0 = ECALL marker (will be rewritten by CommitStage as 8/9/11 depending on U/S/M)
+  // 2 = illegal instruction, 3 = breakpoint
   io.out.mcause := MuxLookup(inst_type, 0.U)(
     Seq(
-      InstType.ECALL -> 11.U,
+      InstType.ECALL -> 0.U,
       InstType.EBREAK -> 3.U,
       InstType.INVALID -> 2.U
     )

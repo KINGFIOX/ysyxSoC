@@ -22,8 +22,13 @@ class BackEnd extends NPCModule {
 
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
-  val interrupt = IO(Input(Bool()))
+  val ptw_port = IO(SRAMBundle(sramParams))
+  val ext_irq = IO(Input(Bool()))
+  val mtime_in = IO(Input(UInt(64.W)))
   val fence_i = IO(Output(Bool()))
+  val sfence_vma = IO(Output(Bool()))
+  val satp_out = IO(Output(UInt(dataBits.W)))
+  val priv_out = IO(Output(UInt(2.W)))
   val probe = IO(Valid(new DebugBundle))
 
   // ==========================================================
@@ -52,6 +57,7 @@ class BackEnd extends NPCModule {
   // ==========================================================
   lsu_.dcache <> dcache
   lsu_.perip <> perip
+  lsu_.ptw_port <> ptw_port
 
   // ==========================================================
   // Flush / redirect wiring
@@ -75,17 +81,12 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Wakeup buses (3 sources)
   // ==========================================================
-  // wakeup0: ALU execution writeback
   val wakeup_alu = Wire(Valid(new WakeupPort))
-  // wakeup1: dispatch-resolved (JAL/JALR/LUI/AUIPC)
   val wakeup_disp = dispatcher_.io.wakeup
-  // wakeup2: late execution writeback (load/CSR, directly from ROB)
   val wakeup_late_lsu = Wire(Valid(new WakeupPort))
   val wakeup_late_csr = Wire(Valid(new WakeupPort))
 
   val wakeups = Seq(wakeup_alu, wakeup_disp, wakeup_late_lsu, wakeup_late_csr)
-
-  // Connect wakeup buses to BusyTable
   busyTable_.io.wakeup.zip(wakeups).foreach { case (bt_wk, wk) => bt_wk := wk }
 
   // ==========================================================
@@ -95,17 +96,14 @@ class BackEnd extends NPCModule {
   PipelineConnect(decodeStage_.io.out, renameStage_.io.in, flush)
   PipelineConnect(renameStage_.io.out, dispatcher_.io.in, flush)
 
-  // --- RenameStage side-band ---
   renameStage_.io.frat(0) <> futureRat_.io.read(0)
   renameStage_.io.frat(1) <> futureRat_.io.read(1)
   renameStage_.io.frat(2) <> futureRat_.io.read(2)
   futureRat_.io.write := renameStage_.io.frat_write
 
   busyTable_.io.set_busy := renameStage_.io.busy_set
-
   renameStage_.io.freelist_alloc <> freeList_.io.alloc
 
-  // --- Dispatcher ---
   dispatcher_.io.flush := flush
   dispatcher_.io.rob_enq <> rob_.io.enq
   dispatcher_.io.rob_tag := rob_.io.enq_tag
@@ -113,7 +111,7 @@ class BackEnd extends NPCModule {
   dispatcher_.io.bru_iq <> bru_iq_.io.enq
 
   // ==========================================================
-  // IQ → BusyTable read ports (readiness checked at issue time)
+  // IQ -> BusyTable read ports
   // ==========================================================
   alu_iq_.io.busy_read(0) <> busyTable_.io.read(0)
   alu_iq_.io.busy_read(1) <> busyTable_.io.read(1)
@@ -150,12 +148,10 @@ class BackEnd extends NPCModule {
   rob_.io.alu.bits.tag := alu_wb_tag
   rob_.io.alu.bits.alu_result := alu_result
 
-  // ALU PRF write (port 0): for R_ALU / I_ALU
   prf_.io.write(0).valid := alu_wb_valid && alu_wb_prf_wen && !flush
   prf_.io.write(0).bits.addr := alu_wb_prd
   prf_.io.write(0).bits.data := alu_result
 
-  // ALU wakeup
   wakeup_alu.valid := alu_wb_valid && alu_wb_prf_wen && !flush
   wakeup_alu.bits.prd := alu_wb_prd
 
@@ -192,24 +188,36 @@ class BackEnd extends NPCModule {
   // Stage 5 — Commit (CommitStage module)
   // ==========================================================
 
-  // --- ROB commit ---
   commitStage_.rob <> rob_.io.commit
 
-  // --- LSU late execution (driven by ROB) ---
   lsu_.late <> rob_.io.lsu
-
-  // --- CSR late execution (driven by ROB) ---
+  lsu_.satp_in := csru_.satp_out
+  lsu_.priv_in := csru_.priv_out
+  lsu_.sfence_vma := csru_.sfence_vma_out
   csru_.late <> rob_.io.csr
 
-  // --- CSR exception (driven by CommitStage) ---
-  csru_.except := commitStage_.csr.except
-  commitStage_.csr.xepc := csru_.xepc
-  commitStage_.csr.xtvec := csru_.xtvec
+  // --- CSR trap/event wiring (CommitStage <-> CSRU) ---
+  csru_.trap := commitStage_.csr.trap
+  csru_.mret_event := commitStage_.csr.mret_event
+  csru_.sret_event := commitStage_.csr.sret_event
+  csru_.sfence_vma := commitStage_.csr.sfence_vma
+
+  commitStage_.csr.mepc := csru_.mepc_out
+  commitStage_.csr.sepc := csru_.sepc_out
+  commitStage_.csr.trap_target := csru_.trap_target
+  commitStage_.csr.priv := csru_.priv_out
+  commitStage_.csr.interrupt_pending := csru_.interrupt_pending
+  commitStage_.csr.interrupt_cause := csru_.interrupt_cause
+  commitStage_.csr.interrupt_target := csru_.interrupt_target
+
+  // --- External interrupt + mtime ---
+  csru_.ext_irq := ext_irq
+  csru_.mtime_in := mtime_in
 
   // --- ArchRAT write ---
   archRat_.io.write := commitStage_.arch_rat_w
 
-  // --- FreeList: free old_prd (also serves as commit_alloc) ---
+  // --- FreeList: free old_prd ---
   freeList_.io.free := commitStage_.freelist_free
 
   // --- LSU PRF write (port 2) ---
@@ -218,7 +226,7 @@ class BackEnd extends NPCModule {
   // --- CSR PRF write (port 3) ---
   prf_.io.write(3) := rob_.io.csr_wb
 
-  // --- Late exec wakeup (LSU/CSR mutually exclusive, merge into one) ---
+  // --- Late exec wakeup ---
   wakeup_late_lsu.valid := rob_.io.lsu_wb.valid
   wakeup_late_lsu.bits.prd := rob_.io.lsu_wb.bits.addr
   wakeup_late_csr.valid := rob_.io.csr_wb.valid
@@ -227,10 +235,16 @@ class BackEnd extends NPCModule {
   // --- fence_i ---
   fence_i := commitStage_.fence_i
 
+  // --- sfence.vma output ---
+  sfence_vma := csru_.sfence_vma_out
+
+  // --- satp / priv output ---
+  satp_out := csru_.satp_out
+  priv_out := csru_.priv_out
+
   // ==========================================================
   // Debug probe
   // ==========================================================
-  // GPR: derived from ArchRAT (non-forwarded) + PRF
   prf_.probe.arch_rat := archRat_.io.snapshot
   probe.bits.pc := commitStage_.probe.bits.pc
   probe.bits.dnpc := commitStage_.probe.bits.dnpc

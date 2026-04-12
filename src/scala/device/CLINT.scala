@@ -17,6 +17,7 @@ class clint_top_apb extends Module {
       new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32))
     )
     val timer_irq = Output(Bool())
+    val mtime_out = Output(UInt(64.W))
   })
 
   private val mtime = RegInit(0.U(64.W))
@@ -26,6 +27,7 @@ class clint_top_apb extends Module {
   private val msip = RegInit(0.U(32.W))
 
   io.timer_irq := mtime >= mtimecmp
+  io.mtime_out := mtime
 
   object State extends ChiselEnum {
     val idle, access = Value
@@ -96,9 +98,11 @@ class APBCLINT(address: Seq[AddressSet])(implicit p: Parameters)
   class Impl extends LazyModuleImp(this) {
     val (in, _) = node.in(0)
     val timer_irq = IO(Output(Bool()))
+    val mtime_out = IO(Output(UInt(64.W)))
 
     val mclint = Module(new clint_top_apb)
     mclint.io.in <> in
     timer_irq := mclint.io.timer_irq
+    mtime_out := mclint.io.mtime_out
   }
 }

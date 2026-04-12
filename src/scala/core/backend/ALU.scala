@@ -8,7 +8,10 @@ import ysyx.core.common._
 object ALUOpType extends ChiselEnum {
   val alu_X, alu_ADD, alu_SUB, alu_AND, alu_OR, alu_XOR, alu_SLL, alu_SRL,
       alu_SRA, alu_SLT, alu_SLTU, alu_ADDW, alu_SUBW, alu_SLLW, alu_SRLW,
-      alu_SRAW = Value
+      alu_SRAW,
+      alu_MUL, alu_MULH, alu_MULHSU, alu_MULHU, alu_DIV, alu_DIVU,
+      alu_REM, alu_REMU, alu_MULW, alu_DIVW, alu_DIVUW, alu_REMW,
+      alu_REMUW = Value
 }
 
 class ALUInput extends NPCBundle {
@@ -46,6 +49,10 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
 
   import ysyx.core.lsu.SignExt
 
+  // M-extension helpers
+  val mul_result = (op1.asSInt * op2.asSInt).asUInt
+  val op2w = op2(31, 0)
+
   switch(io.in.bits.alu_op) {
     is(ALUOpType.alu_ADD) { io.out.bits.result := op1 + op2 }
     is(ALUOpType.alu_SUB) { io.out.bits.result := op1 - op2 }
@@ -62,6 +69,45 @@ class ALU extends ExecUnit(new ALUInput, new ALUOutput) {
     is(ALUOpType.alu_SLLW) { io.out.bits.result := SignExt((op1w << shamtW)(31, 0)) }
     is(ALUOpType.alu_SRLW) { io.out.bits.result := SignExt((op1w >> shamtW)(31, 0)) }
     is(ALUOpType.alu_SRAW) { io.out.bits.result := SignExt((op1w.asSInt >> shamtW).asUInt(31, 0)) }
+    // RV64M
+    is(ALUOpType.alu_MUL)    { io.out.bits.result := mul_result(63, 0) }
+    is(ALUOpType.alu_MULH)   { io.out.bits.result := mul_result(127, 64) }
+    is(ALUOpType.alu_MULHSU) { io.out.bits.result := (op1.asSInt * op2.zext).asUInt(127, 64) }
+    is(ALUOpType.alu_MULHU)  { io.out.bits.result := (op1 * op2)(127, 64) }
+    is(ALUOpType.alu_DIV) {
+      io.out.bits.result := Mux(op2 === 0.U, ~0.U(dataBits.W),
+        (op1.asSInt / op2.asSInt).asUInt)
+    }
+    is(ALUOpType.alu_DIVU) {
+      io.out.bits.result := Mux(op2 === 0.U, ~0.U(dataBits.W), op1 / op2)
+    }
+    is(ALUOpType.alu_REM) {
+      io.out.bits.result := Mux(op2 === 0.U, op1,
+        (op1.asSInt % op2.asSInt).asUInt)
+    }
+    is(ALUOpType.alu_REMU) {
+      io.out.bits.result := Mux(op2 === 0.U, op1, op1 % op2)
+    }
+    // RV64M *W
+    is(ALUOpType.alu_MULW) {
+      io.out.bits.result := SignExt((op1w.asSInt * op2w.asSInt).asUInt(31, 0))
+    }
+    is(ALUOpType.alu_DIVW) {
+      io.out.bits.result := Mux(op2w === 0.U, ~0.U(dataBits.W),
+        SignExt((op1w.asSInt / op2w.asSInt).asUInt(31, 0)))
+    }
+    is(ALUOpType.alu_DIVUW) {
+      io.out.bits.result := Mux(op2w === 0.U, ~0.U(dataBits.W),
+        SignExt((op1w / op2w)(31, 0)))
+    }
+    is(ALUOpType.alu_REMW) {
+      io.out.bits.result := Mux(op2w === 0.U, SignExt(op1w),
+        SignExt((op1w.asSInt % op2w.asSInt).asUInt(31, 0)))
+    }
+    is(ALUOpType.alu_REMUW) {
+      io.out.bits.result := Mux(op2w === 0.U, SignExt(op1w),
+        SignExt((op1w % op2w)(31, 0)))
+    }
   }
 }
 
