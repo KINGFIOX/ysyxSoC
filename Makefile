@@ -1,10 +1,9 @@
 #***************************************************************************************
 # ysyxSoC Makefile — thin wrapper around CMake + mill
 #
-# 三步构建流程:
+# 两步构建流程:
 #   make verilog    — Chisel → SystemVerilog
-#   make verilate   — SystemVerilog → Verilator C++ 库 (via CMake)
-#   make build      — 仿真可执行文件 (verilator model + C++20, CMake + Ninja)
+#   make build      — Verilator model + C++20 仿真可执行文件 (CMake + Ninja)
 #
 # 也可以一步到位:
 #   make run IMG=<bin>
@@ -45,21 +44,14 @@ CMAKE_ARGS = \
 	-DNPC_HOME=$(NPC_HOME) \
 	-DRTL_DIR=$(abspath $(RTL_DIR))
 
-# =============================== Step 2: make verilate ===============================
-# 仅构建 Verilator model（不编译 NPC 可执行文件）
-
-verilate:
-	@cmake $(CMAKE_ARGS)
-	@cmake --build $(NPC_BUILD_DIR) --target verilator_model
-
-# =============================== Step 3: make build ===============================
-# 完整构建：verilator model + C++20 仿真可执行文件
+# =============================== Step 2: make build ===============================
+# Verilator model + C++20 仿真可执行文件
 
 build:
 	@cmake $(CMAKE_ARGS)
 	@cmake --build $(NPC_BUILD_DIR)
 
-release: verilate
+release:
 	$(MAKE) build RELEASE=1
 
 # =============================== make all ===============================
@@ -83,7 +75,7 @@ gdb: all
 # =============================== 开发工具 ===============================
 
 wave:
-	@gtkwave $(BUILD_DIR)/npc_core.fst
+	@gtkwave $(BUILD_DIR)/npc_core.vcd
 
 dev-init:
 	git submodule update --init --recursive
@@ -115,11 +107,10 @@ clean-all: distclean
 help:
 	@echo "ysyxSoC Makefile (CMake backend)"
 	@echo ""
-	@echo "三步构建:"
-	@echo "  verilog            — Step 1: Chisel → SystemVerilog"
-	@echo "  verilate           — Step 2: 仅构建 Verilator C++ 模型"
-	@echo "  build              — Step 3: verilator model + C++20 → 仿真可执行文件"
-	@echo "  release            — verilate + build (release 模式，性能更优)"
+	@echo "构建:"
+	@echo "  verilog            — Chisel → SystemVerilog"
+	@echo "  build              — Verilator model + C++20 → 仿真可执行文件"
+	@echo "  release            — build (release 模式，性能更优)"
 	@echo "  all                — 执行 verilog + build"
 	@echo ""
 	@echo "运行与调试:"
@@ -131,7 +122,7 @@ help:
 	@echo "  clean              — 清理构建目录"
 	@echo "  distclean          — 清理所有生成文件"
 
-.PHONY: verilog verilate release all
+.PHONY: verilog release all
 .PHONY: run gdb wave build
 .PHONY: dev-init bsp idea reformat checkformat
 .PHONY: clean distclean clean-all help
