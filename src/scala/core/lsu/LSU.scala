@@ -237,10 +237,28 @@ class LSU extends LateExecUnit(new MemLate, 2) {
     is(LSUState.lsu_req) {
       when(ctrl.is_mmio) {
         perip.req := true.B
-        when(perip.ack) { stateQ := LSUState.lsu_wait }
+        when(perip.ack) {
+          when(perip.done) {
+            late.done := true.B
+            when(ctrl.w_en) { late.bits.rd_wen := false.B }
+            stateQ := LSUState.idle
+            is_translated := false.B
+          }.otherwise {
+            stateQ := LSUState.lsu_wait
+          }
+        }
       }.otherwise {
         dcache.req := true.B
-        when(dcache.ack) { stateQ := LSUState.lsu_wait }
+        when(dcache.ack) {
+          when(dcache.done) {
+            late.done := true.B
+            when(ctrl.w_en) { late.bits.rd_wen := false.B }
+            stateQ := LSUState.idle
+            is_translated := false.B
+          }.otherwise {
+            stateQ := LSUState.lsu_wait
+          }
+        }
       }
     }
     is(LSUState.lsu_wait) {

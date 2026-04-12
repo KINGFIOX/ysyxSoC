@@ -22,8 +22,6 @@ object SoCConfig {
   val clintSize: Long = 0x10000L
   val plicBase: Long = 0x0c000000L
   val plicSize: Long = 0x400000L
-  val sramBase: Long = 0x0f000000L
-  val sramSize: Long = 0x2000L
   val sdramBase: Long = 0x80000000L
   val sdramSize: Long = 0x10000000L
 }

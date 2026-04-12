@@ -50,7 +50,7 @@ class SDRAMImpl(axiParams: AXI4BundleParameters) extends Module {
     val rIdle, rWait, rValid = Value
   }
   private val rState = RegInit(RState.rIdle)
-  private val rAddr = Reg(UInt(32.W))
+  private val rAddr = Reg(UInt(axiParams.addrBits.W))
   private val rId = Reg(UInt(axiParams.idBits.W))
   private val rLen = Reg(UInt(axiParams.lenBits.W))
 

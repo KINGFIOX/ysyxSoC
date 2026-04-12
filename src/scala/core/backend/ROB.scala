@@ -232,7 +232,6 @@ class Rob extends NPCModule {
   io.csr.req := head_is_late && head_is_csr && !flush
   io.csr.bits.wen := head_is_late && head_is_csr && !flush
 
-
   // LSU writeback → PRF directly
   io.lsu_wb.valid := false.B
   io.lsu_wb.bits.addr := head_entry.rd.new_prd

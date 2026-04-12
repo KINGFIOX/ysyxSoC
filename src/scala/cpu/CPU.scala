@@ -29,9 +29,10 @@ class CPU(implicit p: Parameters)
 
   val masterNode = AXI4Xbar()
   val licache = LazyModule(new AXI4ICache)
+  val ldcache = LazyModule(new AXI4DCache)
 
   masterNode := licache.node := icacheNode // 0
-  masterNode := SRAMToAXI4(1) := dcacheNode
+  masterNode := ldcache.node := dcacheNode // 1
   masterNode := SRAMToAXI4(2) := peripNode
   masterNode := SRAMToAXI4(3) := iptwNode
   masterNode := SRAMToAXI4(4) := dptwNode
@@ -61,6 +62,8 @@ class CPU(implicit p: Parameters)
     dptw <> core.dptw_port
 
     licache.module.fence_i := core.fence_i
+    ldcache.module.fence_i := core.fence_i
+    ldcache.module.sfence_vma := core.sfence_vma
 
     core.ext_irq := ext_irq
     core.mtime_in := mtime_in

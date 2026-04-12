@@ -137,7 +137,7 @@ class IFU extends NPCModule {
           page_fault_reg := true.B
           state_q := State.output_wait
         }.otherwise {
-          pa_reg := tlb_pa(busAddrBits - 1, 0)
+          pa_reg := tlb_pa.pad(busAddrBits)
           state_q := State.addr_req
         }
       }.otherwise {
@@ -170,7 +170,9 @@ class IFU extends NPCModule {
     is(State.addr_req) {
       icache.req := true.B
       icache.addr := pa_reg
-      when(icache.ack) {
+      when(icache.ack && icache.done) {
+        state_q := State.output_wait
+      }.elsewhen(icache.ack) {
         state_q := State.data_wait
       }
     }

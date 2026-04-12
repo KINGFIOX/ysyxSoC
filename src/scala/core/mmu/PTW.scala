@@ -72,7 +72,7 @@ class PTW extends NPCModule {
 
     is(State.level2_req) {
       io.mem.req := true.B
-      io.mem.addr := level2_addr(busAddrBits - 1, 0)
+      io.mem.addr := level2_addr.pad(busAddrBits)
       when(io.mem.ack) {
         state := State.level2_wait
       }
@@ -91,7 +91,7 @@ class PTW extends NPCModule {
 
     is(State.level1_req) {
       io.mem.req := true.B
-      io.mem.addr := level1_addr(busAddrBits - 1, 0)
+      io.mem.addr := level1_addr.pad(busAddrBits)
       when(io.mem.ack) {
         state := State.level1_wait
       }
@@ -110,7 +110,7 @@ class PTW extends NPCModule {
 
     is(State.level0_req) {
       io.mem.req := true.B
-      io.mem.addr := level0_addr(busAddrBits - 1, 0)
+      io.mem.addr := level0_addr.pad(busAddrBits)
       when(io.mem.ack) {
         state := State.level0_wait
       }

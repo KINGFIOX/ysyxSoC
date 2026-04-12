@@ -10,8 +10,6 @@
 
 namespace npc {
 
-inline constexpr uint64_t kSramBase = 0x0f000000;
-inline constexpr uint64_t kSramSize = 0x2000;
 inline constexpr uint64_t kFlashBase = 0x30000000;
 inline constexpr uint64_t kFlashSize = 0x10000000;
 inline constexpr uint64_t kSdramBase = 0x80000000;
@@ -34,7 +32,6 @@ class Memory {
 
  private:
   std::vector<uint8_t> flash_;
-  std::vector<uint8_t> sram_;
   std::vector<uint8_t> sdram_;
 };
 

@@ -30,6 +30,7 @@ class NPCCore extends NPCModule {
   val ext_irq = IO(Input(Bool()))
   val mtime_in = IO(Input(UInt(64.W)))
   val fence_i = IO(Output(Bool()))
+  val sfence_vma = IO(Output(Bool()))
 
   // modules
   val fe = Module(new FrontEnd)
@@ -52,6 +53,7 @@ class NPCCore extends NPCModule {
 
   // fence
   fence_i := be.fence_i
+  sfence_vma := be.sfence_vma
 
   // MMU signals: BackEnd -> FrontEnd
   fe.io.satp := be.satp_out

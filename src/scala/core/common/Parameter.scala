@@ -97,7 +97,7 @@ trait HasCSRParameter {
 trait HasCoreParameter {
   val dataBits: Int = 64
   val addrBits: Int = 64
-  val busAddrBits: Int = 32
+  val busAddrBits: Int = 64
   val instBits: Int = 32
   val OpcodeBits: Int = 7
   val dataBytes = dataBits >> 3 // 一个 word 有几个字节  4
@@ -134,10 +134,9 @@ abstract class NPCModule
 // format: off
 object AddressMap {
   def is_mmio(addr: UInt): Bool = {
-    val inSRAM = addr >= SoCConfig.sramBase.U && addr < (SoCConfig.sramBase + SoCConfig.sramSize).U
     val inSDRAM = addr >= SoCConfig.sdramBase.U && addr < (SoCConfig.sdramBase + SoCConfig.sdramSize).U
     val inFlash = addr >= SoCConfig.xipFlashBase.U && addr < (SoCConfig.xipFlashBase + SoCConfig.xipFlashSize).U
-    !(inSRAM || inSDRAM || inFlash)
+    !(inSDRAM || inFlash)
   }
 }
 // format: on
