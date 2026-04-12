@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "common/lightsss.h"
 #include "cpu/verilator_cpu.h"
 #include "sdb/scoreboard.h"
 #include "sdb/watchpoint.h"
@@ -16,14 +15,13 @@ namespace npc {
 
 class Sdb {
  public:
-  explicit Sdb(bool enable_fork);
+  Sdb() = default;
   ~Sdb() = default;
 
   Sdb(const Sdb&) = delete;
   auto operator=(const Sdb&) -> Sdb& = delete;
 
   auto mainloop(ScoreBoard& scrbrd, VerilatorCpu& dut, bool batch) -> absl::Status;
-  void lightsss_on_error(const VerilatorCpu& dut);
 
  private:
   enum class Action { kContinue, kQuit };
@@ -81,7 +79,6 @@ class Sdb {
   std::vector<uint64_t> breakpoints_;
   WatchpointPool watchpoints_;
   std::optional<std::string> last_cmd_;
-  std::optional<LightSSS> lightsss_;
 };
 
 }  // namespace npc

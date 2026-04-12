@@ -20,7 +20,8 @@
 ABSL_FLAG(bool, batch, false, "Run in batch mode (no interactive debugger)");
 ABSL_FLAG(bool, nvboard, false, "Enable NVBoard visualization");
 ABSL_FLAG(bool, wave, false, "Enable waveform dumping");
-ABSL_FLAG(bool, enable_fork, true, "Enable LightSSS fork-based snapshots");
+ABSL_FLAG(uint64_t, wave_tail, 100000,
+          "Keep last N cycles in waveform (0 = unlimited)");
 ABSL_FLAG(std::string, image, "", "Path to binary image file");
 ABSL_FLAG(std::string, log, "", "Path to log file (unused currently)");
 
@@ -52,15 +53,13 @@ int main(int argc, char* argv[]) {
 
   npc::VerilatorCpu dut(flash_data, absl::GetFlag(FLAGS_nvboard));
   if (absl::GetFlag(FLAGS_wave)) {
-    dut.enable_wave();
+    dut.enable_wave(absl::GetFlag(FLAGS_wave_tail));
   }
   npc::ScoreBoard scrbrd(flash_data, std::move(ftrace));
-  bool use_fork = absl::GetFlag(FLAGS_enable_fork) && !absl::GetFlag(FLAGS_wave);
-  npc::Sdb sdb(use_fork);
+  npc::Sdb sdb;
 
   auto status = sdb.mainloop(scrbrd, dut, absl::GetFlag(FLAGS_batch));
   if (!status.ok()) {
-    sdb.lightsss_on_error(dut);
     scrbrd.dump_traces(dut);
     LOG(ERROR) << status;
     return 1;
