@@ -51,8 +51,12 @@ int main(int argc, char* argv[]) {
   ifs.close();
 
   npc::VerilatorCpu dut(flash_data, absl::GetFlag(FLAGS_nvboard));
+  if (absl::GetFlag(FLAGS_wave)) {
+    dut.enable_wave();
+  }
   npc::ScoreBoard scrbrd(flash_data, std::move(ftrace));
-  npc::Sdb sdb(absl::GetFlag(FLAGS_enable_fork));
+  bool use_fork = absl::GetFlag(FLAGS_enable_fork) && !absl::GetFlag(FLAGS_wave);
+  npc::Sdb sdb(use_fork);
 
   auto status = sdb.mainloop(scrbrd, dut, absl::GetFlag(FLAGS_batch));
   if (!status.ok()) {

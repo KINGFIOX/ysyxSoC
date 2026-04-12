@@ -62,7 +62,7 @@ class SRAMToAXI4Impl(
 
   // AR channel defaults
   out.ar.valid := false.B
-  out.ar.bits.id := id.U
+  out.ar.bits.id := 0.U
   out.ar.bits.addr := in.addr
   out.ar.bits.len := 0.U
   out.ar.bits.size := in.size
@@ -74,7 +74,7 @@ class SRAMToAXI4Impl(
 
   // AW channel defaults
   out.aw.valid := false.B
-  out.aw.bits.id := id.U
+  out.aw.bits.id := 0.U
   out.aw.bits.addr := in.addr
   out.aw.bits.len := 0.U
   out.aw.bits.size := in.size
