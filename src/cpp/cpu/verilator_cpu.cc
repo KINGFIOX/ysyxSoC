@@ -10,7 +10,7 @@
 #include "nvboard/nvboard.h"
 #include "nvboard/nvboard_bind.h"
 #include "verilated.h"
-#include "verilated_fst_c.h"
+#include "verilated_vcd_c.h"
 
 // Override Verilator's $stop handler to throw instead of abort.
 struct VlStopException : std::runtime_error {
@@ -80,7 +80,7 @@ void UartTxDecoder::Tick(bool tx, nvboard::Board* board) {
   prev_tx_ = tx;
 }
 
-static constexpr const char* kFstPath = "build/npc_core.fst";
+static constexpr const char* kVcdPath = "build/npc_core.vcd";
 
 VerilatorCpu::VerilatorCpu(absl::Span<const uint8_t> flash_data, bool nvboard)
     : ctx_(std::make_unique<VerilatedContext>()),
@@ -133,6 +133,16 @@ absl::Status VerilatorCpu::tick() {
     nvboard_->Update();
     uart_decoder_.Tick(top_->externalPins_uart_tx != 0, nvboard_.get());
   }
+
+  if (tfp_ != nullptr && wave_tail_ > 0) {
+    ++wave_cycle_;
+    if (wave_cycle_ >= wave_tail_) {
+      tfp_->close();
+      tfp_->open(kVcdPath);
+      wave_cycle_ = 0;
+    }
+  }
+
   return absl::OkStatus();
 }
 
@@ -144,19 +154,13 @@ absl::Status VerilatorCpu::run_until(uint64_t target_sim_time) {
   return absl::OkStatus();
 }
 
-void VerilatorCpu::enable_wave() {
+void VerilatorCpu::enable_wave(uint64_t tail) {
   if (tfp_ != nullptr) return;
-  tfp_ = new VerilatedFstC;
+  wave_tail_ = tail;
+  wave_cycle_ = 0;
+  tfp_ = new VerilatedVcdC;
   top_->trace(tfp_, 99);
-  tfp_->open(kFstPath);
-}
-
-void VerilatorCpu::flush_wave() {
-  if (tfp_ == nullptr) return;
-  tfp_->flush();
-  tfp_->close();
-  delete tfp_;
-  tfp_ = nullptr;
+  tfp_->open(kVcdPath);
 }
 
 // ========================== Probe signals ==========================

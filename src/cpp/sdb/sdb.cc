@@ -3,7 +3,6 @@
 #include <readline/history.h>
 #include <readline/readline.h>
 
-#include <cstdlib>
 #include <string>
 
 #include "absl/log/log.h"
@@ -34,31 +33,7 @@ auto Sdb::GetCommands() -> const std::vector<Sdb::CommandDef>& {
   return *commands;
 }
 
-Sdb::Sdb(bool enable_fork) {
-  if (enable_fork) {
-    LOG(INFO) << "[lightsss] enabled";
-    lightsss_.emplace();
-  }
-}
-
 auto Sdb::mainloop(ScoreBoard & scrbrd , VerilatorCpu& dut, bool batch) -> absl::Status {
-  if (lightsss_.has_value()) {
-    auto result = lightsss_->do_fork();
-    if (result.is_child) {
-      dut.enable_wave();
-      LOG(INFO) << absl::StreamFormat(
-          "[lightsss] child dumping wave from %lu to %lu...", dut.sim_time(),
-          result.end_cycles);
-      auto s = dut.run_until(result.end_cycles);
-      if (!s.ok()) {
-        LOG(INFO) << "[lightsss] child replay stopped early: " << s;
-      }
-      dut.flush_wave();
-      LOG(INFO) << "[lightsss] child wave dump finished, exiting";
-      std::exit(0);
-    }
-  }
-
   if (batch) {
     auto r = execute_steps(SIZE_MAX, dut, scrbrd);
     if (r.is_fatal()) {
@@ -127,23 +102,6 @@ Sdb::CmdResult Sdb::execute_line(const std::string& input, VerilatorCpu& dut, Sc
 
 Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut, ScoreBoard & scrbrd) {
   for (size_t i = 0; i < n; ++i) {
-    if (lightsss_.has_value() && lightsss_->should_fork()) {
-      auto result = lightsss_->do_fork();
-      if (result.is_child) {
-        dut.enable_wave();
-        LOG(INFO) << absl::StreamFormat(
-            "[lightsss] child dumping wave from %lu to %lu...", dut.sim_time(),
-            result.end_cycles);
-        auto s = dut.run_until(result.end_cycles);
-        if (!s.ok()) {
-          LOG(INFO) << "[lightsss] child replay stopped early: " << s;
-        }
-        dut.flush_wave();
-        LOG(INFO) << "[lightsss] child wave dump finished, exiting";
-        std::exit(0);
-      }
-    }
-
     auto s = dut.step();
     if (!s.ok()) {
       return CmdResult::Fatal(std::string(s.message()));
@@ -186,12 +144,6 @@ bool Sdb::check_breakpoints(const VerilatorCpu& dut) const {
     }
   }
   return false;
-}
-
-void Sdb::lightsss_on_error(const VerilatorCpu& dut) {
-  if (lightsss_.has_value() && !lightsss_->is_child()) {
-    lightsss_->wakeup_child(dut.sim_time());
-  }
 }
 
 // ========================== Command Handlers ==========================

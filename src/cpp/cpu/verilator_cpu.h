@@ -10,7 +10,7 @@
 #include "dpi/memory.h"
 
 class VerilatedContext;
-class VerilatedFstC;
+class VerilatedVcdC;
 class VNPCSoC;
 
 namespace nvboard {
@@ -50,8 +50,7 @@ class VerilatorCpu final : public AbstractCpu {
   // Simulation control
   uint64_t sim_time() const { return sim_time_; }
   absl::Status run_until(uint64_t target_sim_time);
-  void enable_wave();
-  void flush_wave();
+  void enable_wave(uint64_t tail = 0);
 
   // Probe signals from RTL
   bool is_mmio() const;
@@ -97,9 +96,11 @@ class VerilatorCpu final : public AbstractCpu {
 
   std::unique_ptr<VerilatedContext> ctx_;
   VNPCSoC* top_;  // owned, but deleted manually via top_->final() + delete
-  VerilatedFstC* tfp_ = nullptr;
+  VerilatedVcdC* tfp_ = nullptr;
   Memory mem_;
   uint64_t sim_time_ = 0;
+  uint64_t wave_tail_ = 0;
+  uint64_t wave_cycle_ = 0;
   std::unique_ptr<nvboard::Board> nvboard_;
   UartTxDecoder uart_decoder_;
 };

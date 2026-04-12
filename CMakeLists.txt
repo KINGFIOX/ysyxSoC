@@ -40,7 +40,7 @@ verilate(verilator_model
   SOURCES ${RTL_SRCS} ${PERIP_SRCS}
   TOP_MODULE ${TOP_MODULE}
   PREFIX V${TOP_MODULE}
-  TRACE_FST
+  TRACE
   DIRECTORY "${VERILATOR_MDIR}"
   VERILATOR_ARGS
     --no-timing
@@ -77,7 +77,6 @@ add_flex_bison_dependency(ExprLexer ExprParser)
 
 add_executable(npc
   ${SRC}/main.cc
-  ${SRC}/common/lightsss.cc
   ${SRC}/cpu/abstract_cpu.cc
   ${SRC}/cpu/verilator_cpu.cc
   ${SRC}/cpu/spike_cpu.cc
