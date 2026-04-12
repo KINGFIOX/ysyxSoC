@@ -113,6 +113,7 @@ class Rob extends NPCModule {
     val enq = Flipped(Decoupled(new RobEnqData))
     val enq_tag = Output(UInt(robEntryBits.W))
     val alu = Flipped(Valid(new WBALUBundle))
+    val mdu = Flipped(Valid(new WBALUBundle))
     val bru = Flipped(Valid(new WBBRUBundle))
     val lsu = ReqDone(new MemLate)
     val csr = ReqDone(new CsrWriteOnlyPort)
@@ -152,6 +153,10 @@ class Rob extends NPCModule {
     }
     // format: on
   }
+  when(io.mdu.valid && !flush) {
+    val ent = ram(idx(io.mdu.bits.tag))
+    ent.state := RobState.complete
+  }
   when(io.bru.valid && !flush) {
     val ent = ram(idx(io.bru.bits.tag))
     ent.bru.br_flag := io.bru.bits.br_flag
@@ -190,7 +195,7 @@ class Rob extends NPCModule {
     ent.ghr := enq.ghr
     // format: off
     val go_to_iq = Seq(InstType.R_ALU, InstType.I_ALU,
-      InstType.JALR, InstType.BRANCH)
+      InstType.JALR, InstType.BRANCH, InstType.R_MUL)
       .map(enq.inst_type === _).reduce(_ || _) && !enq.except.valid
     val go_to_late = Seq(InstType.LOAD, InstType.STORE, InstType.CSR)
       .map(enq.inst_type === _).reduce(_ || _) && !enq.except.valid

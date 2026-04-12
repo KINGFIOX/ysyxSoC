@@ -19,12 +19,19 @@ object CSROpType extends ChiselEnum {
 object InstType extends ChiselEnum {
   val INVALID, R_ALU, I_ALU, JALR, LOAD, STORE, BRANCH, JAL,
       LUI, AUIPC, ECALL, EBREAK, MRET, SRET, SFENCE_VMA, CSR,
-      FENCE, FENCE_I = Value
+      FENCE, FENCE_I, R_MUL = Value
+}
+
+object MDUOpType extends ChiselEnum {
+  val mdu_X, mdu_MUL, mdu_MULH, mdu_MULHSU, mdu_MULHU,
+      mdu_DIV, mdu_DIVU, mdu_REM, mdu_REMU,
+      mdu_MULW, mdu_DIVW, mdu_DIVUW, mdu_REMW, mdu_REMUW = Value
 }
 
 class CUOutputBase extends NPCBundle {
   val inst_type = InstType()
   val alu_op = ALUOpType() // ALU 控制
+  val mdu_op = MDUOpType() // MDU 控制
   val imm_type = ImmType()
   val bru_op = BRUOpType() // bru
   val mem = new MemInfoBundle // mem
@@ -185,9 +192,15 @@ object CU {
     def chiselType = UInt(log2Ceil(InstType.all.length).W)
     private def bp(v: InstType.Type): BitPat = litBP(v.litValue, width)
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
-      case OP_R       => bp(InstType.R_ALU)
+      case OP_R => op.func7.rawString match {
+          case "0000001" => bp(InstType.R_MUL)
+          case _         => bp(InstType.R_ALU)
+        }
       case OP_I_ALU   => bp(InstType.I_ALU)
-      case OP_R_W     => bp(InstType.R_ALU)
+      case OP_R_W => op.func7.rawString match {
+          case "0000001" => bp(InstType.R_MUL)
+          case _         => bp(InstType.R_ALU)
+        }
       case OP_I_ALU_W => bp(InstType.I_ALU)
       case OP_JALR    => bp(InstType.JALR)
       case OP_LOAD    => bp(InstType.LOAD)
@@ -232,14 +245,6 @@ object CU {
           case ("0100000", "101") => bp(ALUOpType.alu_SRA)
           case ("0000000", "010") => bp(ALUOpType.alu_SLT)
           case ("0000000", "011") => bp(ALUOpType.alu_SLTU)
-          case ("0000001", "000") => bp(ALUOpType.alu_MUL)
-          case ("0000001", "001") => bp(ALUOpType.alu_MULH)
-          case ("0000001", "010") => bp(ALUOpType.alu_MULHSU)
-          case ("0000001", "011") => bp(ALUOpType.alu_MULHU)
-          case ("0000001", "100") => bp(ALUOpType.alu_DIV)
-          case ("0000001", "101") => bp(ALUOpType.alu_DIVU)
-          case ("0000001", "110") => bp(ALUOpType.alu_REM)
-          case ("0000001", "111") => bp(ALUOpType.alu_REMU)
           case _                  => dc
         }
       case OP_I_ALU => (op.func7.rawString, op.func3.rawString) match {
@@ -260,11 +265,6 @@ object CU {
           case ("0000000", "001") => bp(ALUOpType.alu_SLLW)
           case ("0000000", "101") => bp(ALUOpType.alu_SRLW)
           case ("0100000", "101") => bp(ALUOpType.alu_SRAW)
-          case ("0000001", "000") => bp(ALUOpType.alu_MULW)
-          case ("0000001", "100") => bp(ALUOpType.alu_DIVW)
-          case ("0000001", "101") => bp(ALUOpType.alu_DIVUW)
-          case ("0000001", "110") => bp(ALUOpType.alu_REMW)
-          case ("0000001", "111") => bp(ALUOpType.alu_REMUW)
           case _                  => dc
         }
       case OP_I_ALU_W => (op.func7.rawString, op.func3.rawString) match {
@@ -400,11 +400,43 @@ object CU {
   }
   // format: on
 
+  // format: off
+  object MduOpField extends DecodeField[InstPattern, UInt] {
+    def name = "mdu_op"
+    def chiselType = UInt(log2Ceil(MDUOpType.all.length).W)
+    override def default: BitPat = litBP(MDUOpType.mdu_X.litValue, width)
+    private def bp(v: MDUOpType.Type): BitPat = litBP(v.litValue, width)
+    def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
+      case OP_R => (op.func7.rawString, op.func3.rawString) match {
+          case ("0000001", "000") => bp(MDUOpType.mdu_MUL)
+          case ("0000001", "001") => bp(MDUOpType.mdu_MULH)
+          case ("0000001", "010") => bp(MDUOpType.mdu_MULHSU)
+          case ("0000001", "011") => bp(MDUOpType.mdu_MULHU)
+          case ("0000001", "100") => bp(MDUOpType.mdu_DIV)
+          case ("0000001", "101") => bp(MDUOpType.mdu_DIVU)
+          case ("0000001", "110") => bp(MDUOpType.mdu_REM)
+          case ("0000001", "111") => bp(MDUOpType.mdu_REMU)
+          case _                  => bp(MDUOpType.mdu_X)
+        }
+      case OP_R_W => (op.func7.rawString, op.func3.rawString) match {
+          case ("0000001", "000") => bp(MDUOpType.mdu_MULW)
+          case ("0000001", "100") => bp(MDUOpType.mdu_DIVW)
+          case ("0000001", "101") => bp(MDUOpType.mdu_DIVUW)
+          case ("0000001", "110") => bp(MDUOpType.mdu_REMW)
+          case ("0000001", "111") => bp(MDUOpType.mdu_REMUW)
+          case _                  => bp(MDUOpType.mdu_X)
+        }
+      case _ => bp(MDUOpType.mdu_X)
+    }
+  }
+  // format: on
+
   // ==================== DecodeTable ====================
 
   val allFields: Seq[DecodeField[InstPattern, _ <: Data]] = Seq(
     InstTypeField,
     AluOpField,
+    MduOpField,
     ImmTypeField,
     BruOpField,
     MemSizeField,
@@ -431,6 +463,7 @@ class CU extends NPCModule {
 
   io.out.inst_type := inst_type
   io.out.alu_op := ALUOpType.safe(decoded(AluOpField))._1
+  io.out.mdu_op := MDUOpType.safe(decoded(MduOpField))._1
   io.out.imm_type := ImmType.safe(decoded(ImmTypeField))._1
   io.out.bru_op := BRUOpType.safe(decoded(BruOpField))._1
   io.out.mem.r_en := inst_type === InstType.LOAD
