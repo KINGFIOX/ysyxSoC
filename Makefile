@@ -43,8 +43,7 @@ CMAKE_ARGS = \
 	-B $(NPC_BUILD_DIR) \
 	-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 	-DNPC_HOME=$(NPC_HOME) \
-	-DRTL_DIR=$(abspath $(RTL_DIR)) \
-	-DNVBOARD_HOME=$$NVBOARD_HOME
+	-DRTL_DIR=$(abspath $(RTL_DIR))
 
 # =============================== Step 2: make verilate ===============================
 # 仅构建 Verilator model（不编译 NPC 可执行文件）

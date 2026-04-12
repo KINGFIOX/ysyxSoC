@@ -41,7 +41,13 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
 
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
-    cpu.module.interrupt := false.B
+    // Wire UART interrupt -> PLIC source 10
+    lplic.module.sources.foreach(_ := false.B)
+    lplic.module.sources(10) := luart.module.interrupt
+
+    // Wire PLIC ext_irq + CLINT mtime -> CPU
+    cpu.module.ext_irq := lplic.module.ext_irq
+    cpu.module.mtime_in := lclint.module.mtime_out
 
     val probe = IO(chiselTypeOf(cpu.module.probe))
     val uart = IO(chiselTypeOf(luart.module.uart))

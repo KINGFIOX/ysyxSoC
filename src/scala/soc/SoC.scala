@@ -73,17 +73,18 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
 
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) with DontTouch {
-    // generate delayed reset for cpu, since chiplink should finish reset
-    // to initialize some async modules before accept any requests from cpu
     cpu.module.reset := SynchronizerShiftReg(reset.asBool, 10) || reset.asBool
 
-    // connect interrupt signal to cpu
-    val intr_from_chipSlave = IO(Input(Bool()))
-    cpu.module.interrupt := intr_from_chipSlave
+    // Wire UART interrupt -> PLIC source 10
+    lplic.module.sources.foreach(_ := false.B)
+    lplic.module.sources(10) := luart.module.interrupt
+
+    // Wire PLIC ext_irq + CLINT mtime -> CPU
+    cpu.module.ext_irq := lplic.module.ext_irq
+    cpu.module.mtime_in := lclint.module.mtime_out
 
     val sdramBundle = lsdram_axi.module.sdram_bundle
 
-    // expose slave I/O interface as ports
     val probe = IO(chiselTypeOf(cpu.module.probe))
     val spi = IO(chiselTypeOf(lspi.module.spi_bundle))
     val uart = IO(chiselTypeOf(luart.module.uart))
@@ -109,9 +110,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
 
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) with DontTouch {
-    val masic = asic.module // module asic
-
-    masic.intr_from_chipSlave := false.B
+    val masic = asic.module
 
     val flash = Module(new flash)
     flash.io <> masic.spi
