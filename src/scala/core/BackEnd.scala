@@ -283,7 +283,7 @@ class BackEnd extends NPCModule {
   // ==========================================================
   // Debug probe
   // ==========================================================
-  prf_.probe.arch_rat := archRat_.io.snapshot
+  prf_.probe.arch_rat := archRat_.io.committed
   probe.bits.pc := commitStage_.probe.bits.pc
   probe.bits.dnpc := commitStage_.probe.bits.dnpc
   probe.bits.inst := commitStage_.probe.bits.inst
