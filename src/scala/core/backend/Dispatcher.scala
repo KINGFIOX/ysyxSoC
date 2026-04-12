@@ -12,6 +12,7 @@ class Dispatcher extends NPCModule {
     val rob_enq = Decoupled(new RobEnqData)
     val rob_tag = Input(UInt(robEntryBits.W))
     val alu_iq = Decoupled(new IQEnqData(new ALUExtra))
+    val mdu_iq = Decoupled(new IQEnqData(new MDUExtra))
     val bru_iq = Decoupled(new IQEnqData(new BRUExtra))
     // dispatch-resolved PRF write
     val prf_write = Valid(new PRFWritePort)
@@ -34,6 +35,7 @@ class Dispatcher extends NPCModule {
     InstType.I_ALU,
     InstType.JALR
   ).map(inst_type === _).reduce(_ || _) && !has_except
+  val go_to_mdu = (inst_type === InstType.R_MUL) && !has_except
   val go_to_bru = (inst_type === InstType.BRANCH) && !has_except
 
   val rd_wen = in.rd_wen
@@ -45,6 +47,7 @@ class Dispatcher extends NPCModule {
     true.B,
     Seq(
       go_to_alu -> io.alu_iq.ready,
+      go_to_mdu -> io.mdu_iq.ready,
       go_to_bru -> io.bru_iq.ready
     )
   )
@@ -52,6 +55,7 @@ class Dispatcher extends NPCModule {
   io.in.ready := io.rob_enq.ready && iq_ready && !io.flush
   io.rob_enq.valid := io.in.valid && iq_ready && !io.flush
   io.alu_iq.valid := io.in.valid && io.rob_enq.ready && go_to_alu && !io.flush
+  io.mdu_iq.valid := io.in.valid && io.rob_enq.ready && go_to_mdu && !io.flush
   io.bru_iq.valid := io.in.valid && io.rob_enq.ready && go_to_bru && !io.flush
 
   // ============================================================
@@ -103,6 +107,16 @@ class Dispatcher extends NPCModule {
   ).map(inst_type === _).reduce(_ || _)
   io.alu_iq.bits.extra.imm := dec.imm
   io.alu_iq.bits.rob_tag := io.rob_tag
+
+  // ============================================================
+  // MDU Issue Queue
+  // ============================================================
+  io.mdu_iq.bits.prs1 := in.prs1
+  io.mdu_iq.bits.prs2 := in.prs2
+  io.mdu_iq.bits.extra.mdu_op := ctrl.mdu_op
+  io.mdu_iq.bits.extra.prd := in.prd
+  io.mdu_iq.bits.extra.prf_wen := (inst_type === InstType.R_MUL) && rd_wen
+  io.mdu_iq.bits.rob_tag := io.rob_tag
 
   // ============================================================
   // BRU Issue Queue

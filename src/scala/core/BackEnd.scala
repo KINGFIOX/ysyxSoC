@@ -38,15 +38,17 @@ class BackEnd extends NPCModule {
   val dispatcher_ = Module(new Dispatcher)
   val commitStage_ = Module(new CommitStage)
 
-  val prf_ = Module(new PRF(numReadPorts = 7, numWritePorts = 4))
+  val prf_ = Module(new PRF(numReadPorts = 9, numWritePorts = 5))
   val freeList_ = Module(new FreeList)
-  val busyTable_ = Module(new BusyTable(numReadPorts = 4, numWakeupPorts = 3))
+  val busyTable_ = Module(new BusyTable(numReadPorts = 6, numWakeupPorts = 5))
   val futureRat_ = Module(new FutureRAT(numReadPorts = 3))
   val archRat_ = Module(new ArchRAT)
   val rob_ = Module(new Rob)
   val alu_ = Module(new ALU)
+  val mdu_ = Module(new MDU)
   val bru_ = Module(new BRU)
   val alu_iq_ = Module(new ALUIssueQueue)
+  val mdu_iq_ = Module(new MDUIssueQueue)
   val bru_iq_ = Module(new BRUIssueQueue)
   val lsu_ = Module(new LSU)
   val csru_ = Module(new CSRU)
@@ -70,6 +72,7 @@ class BackEnd extends NPCModule {
   busyTable_.io.flush := flush
   futureRat_.io.flush := flush
   alu_iq_.io.flush := flush
+  mdu_iq_.io.flush := flush
   bru_iq_.io.flush := flush
 
   // Flush recovery: rebuild from ArchRAT snapshot (with write forwarding)
@@ -77,14 +80,15 @@ class BackEnd extends NPCModule {
   freeList_.io.arch_snapshot := archRat_.io.snapshot
 
   // ==========================================================
-  // Wakeup buses (3 sources)
+  // Wakeup buses (5 sources)
   // ==========================================================
   val wakeup_alu = Wire(Valid(new WakeupPort))
+  val wakeup_mdu = Wire(Valid(new WakeupPort))
   val wakeup_disp = dispatcher_.io.wakeup
   val wakeup_late_lsu = Wire(Valid(new WakeupPort))
   val wakeup_late_csr = Wire(Valid(new WakeupPort))
 
-  val wakeups = Seq(wakeup_alu, wakeup_disp, wakeup_late_lsu, wakeup_late_csr)
+  val wakeups = Seq(wakeup_alu, wakeup_mdu, wakeup_disp, wakeup_late_lsu, wakeup_late_csr)
   busyTable_.io.wakeup.zip(wakeups).foreach { case (bt_wk, wk) => bt_wk := wk }
 
   // ==========================================================
@@ -106,6 +110,7 @@ class BackEnd extends NPCModule {
   dispatcher_.io.rob_enq <> rob_.io.enq
   dispatcher_.io.rob_tag := rob_.io.enq_tag
   dispatcher_.io.alu_iq <> alu_iq_.io.enq
+  dispatcher_.io.mdu_iq <> mdu_iq_.io.enq
   dispatcher_.io.bru_iq <> bru_iq_.io.enq
 
   // ==========================================================
@@ -113,8 +118,10 @@ class BackEnd extends NPCModule {
   // ==========================================================
   alu_iq_.io.busy_read(0) <> busyTable_.io.read(0)
   alu_iq_.io.busy_read(1) <> busyTable_.io.read(1)
-  bru_iq_.io.busy_read(0) <> busyTable_.io.read(2)
-  bru_iq_.io.busy_read(1) <> busyTable_.io.read(3)
+  mdu_iq_.io.busy_read(0) <> busyTable_.io.read(2)
+  mdu_iq_.io.busy_read(1) <> busyTable_.io.read(3)
+  bru_iq_.io.busy_read(0) <> busyTable_.io.read(4)
+  bru_iq_.io.busy_read(1) <> busyTable_.io.read(5)
 
   // ==========================================================
   // Stage 4 — Issue + Execute + Writeback
@@ -172,10 +179,41 @@ class BackEnd extends NPCModule {
   rob_.io.bru.bits.tag := bru_wb_tag
   rob_.io.bru.bits.br_flag := br_flag
 
-  // --- Late exec PRF read: LSU ports 4-5, CSRU port 6 ---
-  prf_.io.read(4) <> lsu_.prf(0)
-  prf_.io.read(5) <> lsu_.prf(1)
-  prf_.io.read(6) <> csru_.prf(0)
+  // --- MDU path ---
+  mdu_.io.out.ready := true.B
+  mdu_.io.in.valid := mdu_iq_.io.issue.valid
+  mdu_iq_.io.issue.ready := mdu_.io.in.ready
+  val mdu_issue = mdu_iq_.io.issue.bits
+  mdu_.prs1 := mdu_issue.prs1
+  mdu_.prs2 := mdu_issue.prs2
+  prf_.io.read(4) <> mdu_.prf(0)
+  prf_.io.read(5) <> mdu_.prf(1)
+  mdu_.io.in.bits.mdu_op := mdu_issue.extra.mdu_op
+  mdu_.io.in.bits.rob_tag := mdu_issue.rob_tag
+  mdu_.io.in.bits.prd := mdu_issue.extra.prd
+  mdu_.io.in.bits.prf_wen := mdu_issue.extra.prf_wen
+
+  val mdu_wb_valid = mdu_.io.out.fire
+  val mdu_wb_tag = mdu_.io.out.bits.rob_tag
+  val mdu_wb_prd = mdu_.io.out.bits.prd
+  val mdu_wb_prf_wen = mdu_.io.out.bits.prf_wen
+  val mdu_result = mdu_.io.out.bits.result
+
+  rob_.io.mdu.valid := mdu_wb_valid
+  rob_.io.mdu.bits.tag := mdu_wb_tag
+  rob_.io.mdu.bits.alu_result := mdu_result
+
+  prf_.io.write(4).valid := mdu_wb_valid && mdu_wb_prf_wen && !flush
+  prf_.io.write(4).bits.addr := mdu_wb_prd
+  prf_.io.write(4).bits.data := mdu_result
+
+  wakeup_mdu.valid := mdu_wb_valid && mdu_wb_prf_wen && !flush
+  wakeup_mdu.bits.prd := mdu_wb_prd
+
+  // --- Late exec PRF read: LSU ports 6-7, CSRU port 8 ---
+  prf_.io.read(6) <> lsu_.prf(0)
+  prf_.io.read(7) <> lsu_.prf(1)
+  prf_.io.read(8) <> csru_.prf(0)
 
   // ==========================================================
   // Dispatch-resolved PRF write (port 1): JAL/JALR/LUI/AUIPC
