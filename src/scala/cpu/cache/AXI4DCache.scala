@@ -303,7 +303,7 @@ class DCacheImpl(
 
 class AXI4DCache(id: Int)(implicit p: Parameters) extends LazyModule {
 
-  val node = SRAMToAXI4Node()
+  val node = SRAMToAXI4Node(endId = id + 1)
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {

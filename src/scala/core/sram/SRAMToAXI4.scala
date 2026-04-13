@@ -7,14 +7,14 @@ import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.diplomacy._
 
-case class SRAMToAXI4Node()(implicit valName: ValName)
+case class SRAMToAXI4Node(endId: Int = 1)(implicit valName: ValName)
     extends MixedAdapterNode(SRAMImp, AXI4Imp)(
       dFn = { mp =>
         AXI4MasterPortParameters(
           masters = mp.masters.map { m =>
             AXI4MasterParameters(
               name = m.name,
-              id = IdRange(0, 1),
+              id = IdRange(0, endId),
               nodePath = m.nodePath
             )
           }
@@ -143,7 +143,7 @@ class SRAMToAXI4Impl(
 }
 
 class SRAMToAXI4(id: Int)(implicit p: Parameters) extends LazyModule {
-  val node = SRAMToAXI4Node()
+  val node = SRAMToAXI4Node(id + 1)
   lazy val module = new LazyModuleImp(this) {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val sramParams = edgeIn.bundle
