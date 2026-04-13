@@ -22,6 +22,7 @@ class BackEnd extends NPCModule {
 
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
+  val ptw_port = IO(SRAMBundle(sramParams))
   val ext_irq = IO(Input(Bool()))
   val mtime_in = IO(Input(UInt(64.W)))
   val fence_i = IO(Output(Bool()))
@@ -58,6 +59,7 @@ class BackEnd extends NPCModule {
   // ==========================================================
   lsu_.dcache <> dcache
   lsu_.perip <> perip
+  lsu_.ptw_port <> ptw_port
 
   // ==========================================================
   // Flush / redirect wiring

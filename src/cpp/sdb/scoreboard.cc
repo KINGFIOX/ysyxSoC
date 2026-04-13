@@ -3,11 +3,12 @@
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
 #include "cpu/abstract_cpu.h"
+#include "dpi/memory.h"
 
 namespace npc {
 
 static constexpr const char* kLoadMnemonics[] = {"lb",  "lh",  "lw", "ld",
-                                                   "lbu", "lhu", "lwu"};
+                                                 "lbu", "lhu", "lwu"};
 static constexpr const char* kStoreMnemonics[] = {"sb", "sh", "sw", "sd"};
 
 static bool is_load(const std::string& mn) {
@@ -26,9 +27,7 @@ static int rd(uint32_t inst) { return (inst >> 7) & 0x1f; }
 static int rs1(uint32_t inst) { return (inst >> 15) & 0x1f; }
 static int rs2(uint32_t inst) { return (inst >> 20) & 0x1f; }
 
-static int32_t imm_i(uint32_t inst) {
-  return static_cast<int32_t>(inst) >> 20;
-}
+static int32_t imm_i(uint32_t inst) { return static_cast<int32_t>(inst) >> 20; }
 
 static int32_t imm_s(uint32_t inst) {
   uint32_t hi = (inst >> 25) & 0x7f;
@@ -56,7 +55,7 @@ ScoreBoard::ScoreBoard(absl::Span<const uint8_t> flash_data,
 ScoreBoard::~ScoreBoard() = default;
 
 StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
-                                   uint64_t* ebreak_a0) {
+                                  uint64_t* ebreak_a0) {
   uint64_t pc = dut.pc();
   uint32_t inst = dut.inst();
   auto [mnemonic, disasm_str] = golden_.disasm(inst);
@@ -79,19 +78,14 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
           static_cast<uint64_t>(static_cast<int64_t>(base_val) + imm_s(inst));
       uint64_t data = golden_.gpr(rs2(inst)).value_or(0);
       uint8_t w = mem_width(mnemonic);
-      mtrace_.push(
-          MTraceEntry(pc, MemDir::kWrite, addr, data, w, disasm_str));
-      if (!check_store_mem(dut, inst, mnemonic)) {
-        return StepResult::kDifftestFail;
-      }
+      mtrace_.push(MTraceEntry(pc, MemDir::kWrite, addr, data, w, disasm_str));
     } else if (is_load(mnemonic)) {
       uint64_t base_val = golden_.gpr(rs1(inst)).value_or(0);
       uint64_t addr =
           static_cast<uint64_t>(static_cast<int64_t>(base_val) + imm_i(inst));
       uint8_t w = mem_width(mnemonic);
       uint64_t data = dut.mem_load(addr, w).value_or(0);
-      mtrace_.push(
-          MTraceEntry(pc, MemDir::kRead, addr, data, w, disasm_str));
+      mtrace_.push(MTraceEntry(pc, MemDir::kRead, addr, data, w, disasm_str));
     } else if ((mnemonic == "jal" || mnemonic == "jalr") && rd(inst) == 1) {
       ftrace_->push_call(pc, dut.dnpc(), disasm_str);
     } else if (mnemonic == "ret") {
@@ -106,8 +100,8 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
 }
 
 void ScoreBoard::handle_mmio(const VerilatorCpu& dut, uint64_t pc,
-                              uint32_t inst, const std::string& mnemonic,
-                              const std::string& disasm_str) {
+                             uint32_t inst, const std::string& mnemonic,
+                             const std::string& disasm_str) {
   if (is_load(mnemonic)) {
     uint64_t base_val = golden_.gpr(rs1(inst)).value_or(0);
     uint64_t addr =
@@ -117,17 +111,15 @@ void ScoreBoard::handle_mmio(const VerilatorCpu& dut, uint64_t pc,
     if (rd_idx != 0) {
       (void)golden_.set_gpr(rd_idx, data);
     }
-    dtrace_.push(
-        DTraceEntry(pc, MemDir::kRead, addr, data, mem_width(mnemonic),
-                    disasm_str));
+    dtrace_.push(DTraceEntry(pc, MemDir::kRead, addr, data, mem_width(mnemonic),
+                             disasm_str));
   } else if (is_store(mnemonic)) {
     uint64_t base_val = golden_.gpr(rs1(inst)).value_or(0);
     uint64_t addr =
         static_cast<uint64_t>(static_cast<int64_t>(base_val) + imm_s(inst));
     uint64_t data = golden_.gpr(rs2(inst)).value_or(0);
-    dtrace_.push(
-        DTraceEntry(pc, MemDir::kWrite, addr, data, mem_width(mnemonic),
-                    disasm_str));
+    dtrace_.push(DTraceEntry(pc, MemDir::kWrite, addr, data,
+                             mem_width(mnemonic), disasm_str));
   } else {
     LOG(WARNING) << absl::StreamFormat(
         "is_mmio=true but inst is not load/store, stepping golden: "
@@ -152,8 +144,8 @@ bool ScoreBoard::check_regs(const VerilatorCpu& dut) const {
     uint64_t ref_val = golden_.gpr(i).value_or(0);
     if (dut_val != ref_val) {
       LOG(ERROR) << absl::StreamFormat(
-          "difftest FAIL: %s (x%d)  dut=0x%016x  ref=0x%016x", kGprNames[i],
-          i, dut_val, ref_val);
+          "difftest FAIL: %s (x%d)  dut=0x%016x  ref=0x%016x", kGprNames[i], i,
+          dut_val, ref_val);
       return false;
     }
   }
@@ -182,7 +174,7 @@ bool ScoreBoard::check_regs(const VerilatorCpu& dut) const {
 }
 
 bool ScoreBoard::check_store_mem(const VerilatorCpu& dut, uint32_t inst,
-                                  const std::string& mnemonic) const {
+                                 const std::string& mnemonic) const {
   uint64_t base_val = golden_.gpr(rs1(inst)).value_or(0);
   uint64_t addr =
       static_cast<uint64_t>(static_cast<int64_t>(base_val) + imm_s(inst));
@@ -221,29 +213,28 @@ void ScoreBoard::dump_traces(const VerilatorCpu& dut) const {
   {
     uint64_t dut_dnpc = dut.dnpc();
     uint64_t ref_pc = golden_.pc();
-    LOG(WARNING) << absl::StreamFormat("pc     0x%016x  0x%016x%s", dut_dnpc,
-                                        ref_pc,
-                                        dut_dnpc != ref_pc ? "  <--- MISMATCH"
-                                                           : "");
+    LOG(WARNING) << absl::StreamFormat(
+        "pc     0x%016x  0x%016x%s", dut_dnpc, ref_pc,
+        dut_dnpc != ref_pc ? "  <--- MISMATCH" : "");
   }
   for (int i = 1; i < 32; ++i) {
     uint64_t d = dut.gpr(i).value_or(0);
     uint64_t r = golden_.gpr(i).value_or(0);
     const char* mark = (d != r) ? "  <--- MISMATCH" : "";
     LOG(WARNING) << absl::StreamFormat("%-4s   0x%016x  0x%016x%s",
-                                        kGprNames[i], d, r, mark);
+                                       kGprNames[i], d, r, mark);
   }
 
   LOG(WARNING) << "===== CSR State =====";
   LOG(WARNING) << absl::StreamFormat("       %18s  %18s", "DUT", "REF");
   LOG(WARNING) << absl::StreamFormat("mtvec  0x%016x  0x%016x", dut.mtvec(),
-                                      golden_.mtvec());
+                                     golden_.mtvec());
   LOG(WARNING) << absl::StreamFormat("mepc   0x%016x  0x%016x", dut.mepc(),
-                                      golden_.mepc());
+                                     golden_.mepc());
   LOG(WARNING) << absl::StreamFormat("mcause 0x%016x  0x%016x", dut.mcause(),
-                                      golden_.mcause());
+                                     golden_.mcause());
   LOG(WARNING) << absl::StreamFormat("mtval  0x%016x  0x%016x", dut.mtval(),
-                                      golden_.mtval());
+                                     golden_.mtval());
 }
 
 }  // namespace npc

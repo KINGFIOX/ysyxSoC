@@ -80,7 +80,6 @@ class IFU extends NPCModule {
   itlb.io.refill.vpn := vpn
   itlb.io.refill.ppn := 0.U
   itlb.io.refill.flags := 0.U
-  itlb.io.refill.level := 0.U
   itlb.io.flush := io.sfence_vma
 
   // PTW connections
@@ -102,11 +101,12 @@ class IFU extends NPCModule {
   }
   val state_q = RegInit(State.idle)
 
-  // icache defaults
+  // icache defaults – address must be 8-byte aligned; pa_reg(2) selects the word
+  val aligned_pa = Cat(pa_reg(busAddrBits - 1, dataBytesBits), 0.U(dataBytesBits.W))
   icache.req := false.B
   icache.wen := false.B
-  icache.size := 2.U
-  icache.addr := pa_reg
+  icache.size := dataBytesBits.U
+  icache.addr := aligned_pa
   icache.wstrb := 0.U
   icache.wdata := 0.U
 
@@ -138,7 +138,7 @@ class IFU extends NPCModule {
           page_fault_reg := true.B
           state_q := State.output_wait
         }.otherwise {
-          pa_reg := tlb_pa(busAddrBits - 1, 0)
+          pa_reg := tlb_pa.pad(busAddrBits)
           state_q := State.addr_req
         }
       }.otherwise {
@@ -163,16 +163,17 @@ class IFU extends NPCModule {
           itlb.io.refill.valid := true.B
           itlb.io.refill.ppn := ptw.io.resp.bits.ppn
           itlb.io.refill.flags := ptw.io.resp.bits.flags
-          itlb.io.refill.level := ptw.io.resp.bits.level
-          state_q := State.tlb_check // re-check TLB after refill
+          state_q := State.tlb_check
         }
       }
     }
 
     is(State.addr_req) {
       icache.req := true.B
-      icache.addr := pa_reg
-      when(icache.ack) {
+      icache.addr := aligned_pa
+      when(icache.ack && icache.done) {
+        state_q := State.output_wait
+      }.elsewhen(icache.ack) {
         state_q := State.data_wait
       }
     }

@@ -23,16 +23,19 @@ class CPU(implicit p: Parameters)
   val icacheNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "icache")))))
   val dcacheNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "dcache")))))
   val peripNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "perip")))))
-  val ptwNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "ptw")))))
+  val iptwNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "iptw")))))
+  val dptwNode = SRAMMasterNode( Seq( SRAMMasterPortParameters( masters = Seq( SRAMMasterParameters(name = "dptw")))))
   // format: on
 
   val masterNode = AXI4Xbar()
-  val licache = LazyModule(new AXI4ICache)
+  val licache = LazyModule(new AXI4ICache(0))
+  val ldcache = LazyModule(new AXI4DCache(1))
 
-  masterNode := licache.node := icacheNode // 0
-  masterNode := SRAMToAXI4(1) := dcacheNode
+  masterNode := licache.node := icacheNode
+  masterNode := ldcache.node := dcacheNode
   masterNode := SRAMToAXI4(2) := peripNode
-  masterNode := SRAMToAXI4(3) := ptwNode
+  masterNode := SRAMToAXI4(3) := iptwNode
+  masterNode := SRAMToAXI4(4) := dptwNode
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
@@ -40,7 +43,8 @@ class CPU(implicit p: Parameters)
     val (icache, _) = icacheNode.out(0)
     val (dcache, _) = dcacheNode.out(0)
     val (perip, _) = peripNode.out(0)
-    val (ptw, _) = ptwNode.out(0)
+    val (iptw, _) = iptwNode.out(0)
+    val (dptw, _) = dptwNode.out(0)
     val ext_irq = IO(Input(Bool()))
     val mtime_in = IO(Input(UInt(64.W)))
 
@@ -54,9 +58,12 @@ class CPU(implicit p: Parameters)
     icache <> core.icache
     dcache <> core.dcache
     perip <> core.perip
-    ptw <> core.ptw_port
+    iptw <> core.iptw_port
+    dptw <> core.dptw_port
 
     licache.module.fence_i := core.fence_i
+    ldcache.module.fence_i := core.fence_i
+    ldcache.module.sfence_vma := core.sfence_vma
 
     core.ext_irq := ext_irq
     core.mtime_in := mtime_in

@@ -12,7 +12,8 @@ class NPCCore extends NPCModule {
   val icache = IO(SRAMBundle(sramParams))
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
-  val ptw_port = IO(SRAMBundle(sramParams))
+  val iptw_port = IO(SRAMBundle(sramParams))
+  val dptw_port = IO(SRAMBundle(sramParams))
   val ext_irq = IO(Input(Bool()))
   val mtime_in = IO(Input(UInt(64.W)))
   val fence_i = IO(Output(Bool()))
@@ -38,17 +39,18 @@ class NPCCore extends NPCModule {
   icache.wstrb := 0.U
   icache.wdata := 0.U
 
-  // tie off ptw_port (spike doesn't use hardware PTW)
-  ptw_port.req   := false.B
-  ptw_port.wen   := false.B
-  ptw_port.size  := 0.U
-  ptw_port.addr  := 0.U
-  ptw_port.wstrb := 0.U
-  ptw_port.wdata := 0.U
+  // tie off iptw_port (spike doesn't use hardware PTW)
+  iptw_port.req   := false.B
+  iptw_port.wen   := false.B
+  iptw_port.size  := 0.U
+  iptw_port.addr  := 0.U
+  iptw_port.wstrb := 0.U
+  iptw_port.wdata := 0.U
 
   // bus
   be.dcache <> dcache
   be.perip <> perip
+  be.ptw_port <> dptw_port
 
   // interrupts
   be.ext_irq := ext_irq

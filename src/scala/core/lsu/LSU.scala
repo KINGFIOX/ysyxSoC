@@ -46,6 +46,7 @@ class MemLate extends MemInfoBundle {
 class LSU extends LateExecUnit(new MemLate, 2) {
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
+  val ptw_port = IO(SRAMBundle(sramParams))
   val satp_in = IO(Input(UInt(64.W)))
   val priv_in = IO(Input(UInt(2.W)))
   val sfence_vma = IO(Input(Bool()))
@@ -57,8 +58,10 @@ class LSU extends LateExecUnit(new MemLate, 2) {
 
   val ctrl = late.bits
 
-  // MMU: dTLB + inline PTW
+  // MMU: dTLB + PTW
   val dtlb = Module(new TLB(numEntries = 16))
+  val ptw = Module(new PTW)
+
   val sv39_enabled = satp_in(63, 60) === 8.U
   val vpn = vaddr(38, 12)
   val page_offset = vaddr(11, 0)
@@ -73,8 +76,14 @@ class LSU extends LateExecUnit(new MemLate, 2) {
   dtlb.io.refill.vpn := vpn
   dtlb.io.refill.ppn := 0.U
   dtlb.io.refill.flags := 0.U
-  dtlb.io.refill.level := 0.U
   dtlb.io.flush := sfence_vma
+
+  // PTW connections
+  ptw.io.satp := satp_in
+  ptw.io.priv := priv_in
+  ptw_port <> ptw.io.mem
+  ptw.io.req.valid := false.B
+  ptw.io.req.bits.vpn := vpn
 
   // Translated or bare physical address
   val pa = RegInit(0.U(addrBits.W))
@@ -155,29 +164,8 @@ class LSU extends LateExecUnit(new MemLate, 2) {
   late.bits.page_fault_cause := 0.U
   late.bits.page_fault_addr := 0.U
 
-  // PTW state registers (inline PTW using dcache)
-  val ptw_vpn = RegInit(0.U(27.W))
-  val ptw_level = RegInit(0.U(2.W))
-  val ptw_pte = RegInit(0.U(64.W))
-  val satp_ppn = satp_in(43, 0)
-
-  def pte_v(pte: UInt) = pte(0)
-  def pte_r(pte: UInt) = pte(1)
-  def pte_w(pte: UInt) = pte(2)
-  def pte_x(pte: UInt) = pte(3)
-  def pte_ppn(pte: UInt) = pte(53, 10)
-  def is_leaf(pte: UInt) = pte_r(pte) || pte_x(pte)
-
-  val ptw_vpn2 = ptw_vpn(26, 18)
-  val ptw_vpn1 = ptw_vpn(17, 9)
-  val ptw_vpn0 = ptw_vpn(8, 0)
-  val ptw_l2_addr = Cat(satp_ppn, 0.U(12.W)) + Cat(ptw_vpn2, 0.U(3.W))
-  val ptw_l1_addr = Cat(pte_ppn(ptw_pte), 0.U(12.W)) + Cat(ptw_vpn1, 0.U(3.W))
-  val ptw_l0_addr = Cat(pte_ppn(ptw_pte), 0.U(12.W)) + Cat(ptw_vpn0, 0.U(3.W))
-
   object LSUState extends ChiselEnum {
-    val idle, tlb_check, ptw_l2_req, ptw_l2_wait, ptw_l1_req, ptw_l1_wait,
-        ptw_l0_req, ptw_l0_wait, lsu_req, lsu_wait = Value
+    val idle, tlb_check, ptw_req, ptw_wait, lsu_req, lsu_wait = Value
   }
   val stateQ = RegInit(LSUState.idle)
 
@@ -189,7 +177,6 @@ class LSU extends LateExecUnit(new MemLate, 2) {
             is_translated := false.B
             stateQ := LSUState.lsu_req
           }.otherwise {
-            ptw_vpn := vpn
             stateQ := LSUState.tlb_check
           }
         }.otherwise {
@@ -203,7 +190,6 @@ class LSU extends LateExecUnit(new MemLate, 2) {
       when(tlb_hit) {
         val pte_r_ok = ctrl.r_en && tlb_flags(1)
         val pte_w_ok = ctrl.w_en && tlb_flags(2)
-        val pte_u = tlb_flags(4)
         val access_ok = Mux(ctrl.r_en, pte_r_ok, pte_w_ok)
         when(!access_ok) {
           late.done := true.B
@@ -218,99 +204,20 @@ class LSU extends LateExecUnit(new MemLate, 2) {
           stateQ := LSUState.lsu_req
         }
       }.otherwise {
-        // TLB miss: start inline PTW
-        stateQ := LSUState.ptw_l2_req
+        stateQ := LSUState.ptw_req
       }
     }
 
-    // PTW Level 2
-    is(LSUState.ptw_l2_req) {
-      dcache.req := true.B
-      dcache.wen := false.B
-      dcache.size := 3.U
-      dcache.addr := ptw_l2_addr(busAddrBits - 1, 0)
-      dcache.wstrb := 0.U
-      dcache.wdata := 0.U
-      when(dcache.ack) {
-        stateQ := LSUState.ptw_l2_wait
-      }
-    }
-    is(LSUState.ptw_l2_wait) {
-      when(dcache.done) {
-        ptw_pte := dcache.rdata
-        val pte = dcache.rdata
-        when(!pte_v(pte)) {
-          late.done := true.B
-          late.bits.rd_wen := false.B
-          late.bits.page_fault := true.B
-          late.bits.page_fault_cause := Mux(ctrl.r_en, 13.U, 15.U)
-          late.bits.page_fault_addr := vaddr
-          stateQ := LSUState.idle
-        }.elsewhen(is_leaf(pte)) {
-          ptw_level := 2.U
-          dtlb.io.refill.valid := true.B
-          dtlb.io.refill.ppn := pte_ppn(pte)
-          dtlb.io.refill.flags := pte(7, 0)
-          dtlb.io.refill.level := 2.U
-          stateQ := LSUState.tlb_check
-        }.otherwise {
-          stateQ := LSUState.ptw_l1_req
-        }
+    is(LSUState.ptw_req) {
+      ptw.io.req.valid := true.B
+      when(ptw.io.req.fire) {
+        stateQ := LSUState.ptw_wait
       }
     }
 
-    // PTW Level 1
-    is(LSUState.ptw_l1_req) {
-      dcache.req := true.B
-      dcache.wen := false.B
-      dcache.size := 3.U
-      dcache.addr := ptw_l1_addr(busAddrBits - 1, 0)
-      dcache.wstrb := 0.U
-      dcache.wdata := 0.U
-      when(dcache.ack) {
-        stateQ := LSUState.ptw_l1_wait
-      }
-    }
-    is(LSUState.ptw_l1_wait) {
-      when(dcache.done) {
-        ptw_pte := dcache.rdata
-        val pte = dcache.rdata
-        when(!pte_v(pte)) {
-          late.done := true.B
-          late.bits.rd_wen := false.B
-          late.bits.page_fault := true.B
-          late.bits.page_fault_cause := Mux(ctrl.r_en, 13.U, 15.U)
-          late.bits.page_fault_addr := vaddr
-          stateQ := LSUState.idle
-        }.elsewhen(is_leaf(pte)) {
-          ptw_level := 1.U
-          dtlb.io.refill.valid := true.B
-          dtlb.io.refill.ppn := pte_ppn(pte)
-          dtlb.io.refill.flags := pte(7, 0)
-          dtlb.io.refill.level := 1.U
-          stateQ := LSUState.tlb_check
-        }.otherwise {
-          stateQ := LSUState.ptw_l0_req
-        }
-      }
-    }
-
-    // PTW Level 0
-    is(LSUState.ptw_l0_req) {
-      dcache.req := true.B
-      dcache.wen := false.B
-      dcache.size := 3.U
-      dcache.addr := ptw_l0_addr(busAddrBits - 1, 0)
-      dcache.wstrb := 0.U
-      dcache.wdata := 0.U
-      when(dcache.ack) {
-        stateQ := LSUState.ptw_l0_wait
-      }
-    }
-    is(LSUState.ptw_l0_wait) {
-      when(dcache.done) {
-        val pte = dcache.rdata
-        when(!pte_v(pte) || (!pte_r(pte) && pte_w(pte))) {
+    is(LSUState.ptw_wait) {
+      when(ptw.io.resp.valid) {
+        when(ptw.io.resp.bits.fault) {
           late.done := true.B
           late.bits.rd_wen := false.B
           late.bits.page_fault := true.B
@@ -319,9 +226,8 @@ class LSU extends LateExecUnit(new MemLate, 2) {
           stateQ := LSUState.idle
         }.otherwise {
           dtlb.io.refill.valid := true.B
-          dtlb.io.refill.ppn := pte_ppn(pte)
-          dtlb.io.refill.flags := pte(7, 0)
-          dtlb.io.refill.level := 0.U
+          dtlb.io.refill.ppn := ptw.io.resp.bits.ppn
+          dtlb.io.refill.flags := ptw.io.resp.bits.flags
           stateQ := LSUState.tlb_check
         }
       }
@@ -331,10 +237,28 @@ class LSU extends LateExecUnit(new MemLate, 2) {
     is(LSUState.lsu_req) {
       when(ctrl.is_mmio) {
         perip.req := true.B
-        when(perip.ack) { stateQ := LSUState.lsu_wait }
+        when(perip.ack) {
+          when(perip.done) {
+            late.done := true.B
+            when(ctrl.w_en) { late.bits.rd_wen := false.B }
+            stateQ := LSUState.idle
+            is_translated := false.B
+          }.otherwise {
+            stateQ := LSUState.lsu_wait
+          }
+        }
       }.otherwise {
         dcache.req := true.B
-        when(dcache.ack) { stateQ := LSUState.lsu_wait }
+        when(dcache.ack) {
+          when(dcache.done) {
+            late.done := true.B
+            when(ctrl.w_en) { late.bits.rd_wen := false.B }
+            stateQ := LSUState.idle
+            is_translated := false.B
+          }.otherwise {
+            stateQ := LSUState.lsu_wait
+          }
+        }
       }
     }
     is(LSUState.lsu_wait) {

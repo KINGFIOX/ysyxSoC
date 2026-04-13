@@ -20,8 +20,8 @@ class AXI4SDRAM(address: Seq[AddressSet])(implicit p: Parameters)
           AXI4SlaveParameters(
             address = address,
             executable = true,
-            supportsWrite = TransferSizes(1, beatBytes),
-            supportsRead = TransferSizes(1, beatBytes),
+            supportsWrite = TransferSizes(1, 64),
+            supportsRead = TransferSizes(1, 64),
             interleavedId = Some(0) // no interleaved
           )
         ),
@@ -50,7 +50,7 @@ class SDRAMImpl(axiParams: AXI4BundleParameters) extends Module {
     val rIdle, rWait, rValid = Value
   }
   private val rState = RegInit(RState.rIdle)
-  private val rAddr = Reg(UInt(32.W))
+  private val rAddr = Reg(UInt(axiParams.addrBits.W))
   private val rId = Reg(UInt(axiParams.idBits.W))
   private val rLen = Reg(UInt(axiParams.lenBits.W))
 

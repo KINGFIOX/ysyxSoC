@@ -20,7 +20,6 @@ static constexpr uint64_t kResetVector = 0x30000000;
 static constexpr uint64_t kMemBases[] = {
     0x02000000,  // CLINT
     0x0c000000,  // PLIC
-    0x0f000000,  // SRAM
     0x10000000,  // UART
     0x10001000,  // SPI_CTRL
     0x21000000,  // VGA
@@ -32,7 +31,6 @@ static constexpr uint64_t kMemBases[] = {
 static constexpr uint64_t kMemSizes[] = {
     0x10000,     // CLINT
     0x400000,    // PLIC
-    0x2000,      // SRAM
     0x1000,      // UART
     0x1000,      // SPI_CTRL
     0x200000,    // VGA

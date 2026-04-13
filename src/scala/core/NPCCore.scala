@@ -25,10 +25,12 @@ class NPCCore extends NPCModule {
   val icache = IO(SRAMBundle(sramParams))
   val dcache = IO(SRAMBundle(sramParams))
   val perip = IO(SRAMBundle(sramParams))
-  val ptw_port = IO(SRAMBundle(sramParams))
+  val iptw_port = IO(SRAMBundle(sramParams))
+  val dptw_port = IO(SRAMBundle(sramParams))
   val ext_irq = IO(Input(Bool()))
   val mtime_in = IO(Input(UInt(64.W)))
   val fence_i = IO(Output(Bool()))
+  val sfence_vma = IO(Output(Bool()))
 
   // modules
   val fe = Module(new FrontEnd)
@@ -40,9 +42,10 @@ class NPCCore extends NPCModule {
 
   // bus
   fe.icache <> icache
-  fe.ptw_port <> ptw_port
+  fe.ptw_port <> iptw_port
   be.dcache <> dcache
   be.perip <> perip
+  be.ptw_port <> dptw_port
 
   // interrupts
   be.ext_irq := ext_irq
@@ -50,6 +53,12 @@ class NPCCore extends NPCModule {
 
   // fence
   fence_i := be.fence_i
+  sfence_vma := be.sfence_vma
+
+  // MMU signals: BackEnd -> FrontEnd
+  fe.io.satp := be.satp_out
+  fe.io.priv := be.priv_out
+  fe.io.sfence_vma := be.sfence_vma
 
   // MMU signals: BackEnd -> FrontEnd
   fe.io.satp := be.satp_out

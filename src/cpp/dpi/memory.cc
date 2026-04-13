@@ -8,7 +8,6 @@ namespace npc {
 
 Memory::Memory(absl::Span<const uint8_t> flash_data)
     : flash_(kFlashSize, 0),
-      sram_(kSramSize, 0),
       sdram_(kSdramSize, 0) {
   std::memcpy(flash_.data(), flash_data.data(),
               std::min(flash_data.size(), flash_.size()));
@@ -18,9 +17,6 @@ absl::StatusOr<uint8_t> Memory::load_u8(uint64_t addr) const {
   if (uint64_t off = addr - kFlashBase; off < kFlashSize) {
     return flash_[off];
   }
-  if (uint64_t off = addr - kSramBase; off < kSramSize) {
-    return sram_[off];
-  }
   if (uint64_t off = addr - kSdramBase; off < kSdramSize) {
     return sdram_[off];
   }
@@ -29,10 +25,6 @@ absl::StatusOr<uint8_t> Memory::load_u8(uint64_t addr) const {
 }
 
 absl::Status Memory::store_u8(uint64_t addr, uint8_t val) {
-  if (uint64_t off = addr - kSramBase; off < kSramSize) {
-    sram_[off] = val;
-    return absl::OkStatus();
-  }
   if (uint64_t off = addr - kSdramBase; off < kSdramSize) {
     sdram_[off] = val;
     return absl::OkStatus();

@@ -52,7 +52,7 @@ class FlashImpl(apbParams: APBBundleParameters) extends Module {
   val readEn = apbSetup && ! io.pwrite
 
   // DPI requires integer args to be 1/8/16/32/64 bits; pad to 64 to match Rust i64
-  val paddr64 = (io.paddr - SoCConfig.xipFlashBase.U(32.W)).pad(64)
+  val paddr64 = (io.paddr - SoCConfig.xipFlashBase.U).pad(64)
   val word0_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, paddr64)
   val word1_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, (paddr64 + 1.U).pad(64))
   val word2_w = RawClockedNonVoidFunctionCall("flash_read", UInt(8.W))(clock, readEn, (paddr64 + 2.U).pad(64))

@@ -40,7 +40,7 @@ verilate(verilator_model
   SOURCES ${RTL_SRCS} ${PERIP_SRCS}
   TOP_MODULE ${TOP_MODULE}
   PREFIX V${TOP_MODULE}
-  TRACE
+  TRACE_VCD
   DIRECTORY "${VERILATOR_MDIR}"
   VERILATOR_ARGS
     --no-timing
