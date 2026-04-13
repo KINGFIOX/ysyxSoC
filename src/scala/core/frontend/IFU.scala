@@ -101,11 +101,12 @@ class IFU extends NPCModule {
   }
   val state_q = RegInit(State.idle)
 
-  // icache defaults
+  // icache defaults – address must be 8-byte aligned; pa_reg(2) selects the word
+  val aligned_pa = Cat(pa_reg(busAddrBits - 1, dataBytesBits), 0.U(dataBytesBits.W))
   icache.req := false.B
   icache.wen := false.B
-  icache.size := 2.U
-  icache.addr := pa_reg
+  icache.size := dataBytesBits.U
+  icache.addr := aligned_pa
   icache.wstrb := 0.U
   icache.wdata := 0.U
 
@@ -169,7 +170,7 @@ class IFU extends NPCModule {
 
     is(State.addr_req) {
       icache.req := true.B
-      icache.addr := pa_reg
+      icache.addr := aligned_pa
       when(icache.ack && icache.done) {
         state_q := State.output_wait
       }.elsewhen(icache.ack) {

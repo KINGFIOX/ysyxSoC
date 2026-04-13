@@ -301,7 +301,7 @@ class DCacheImpl(
   }
 }
 
-class AXI4DCache(implicit p: Parameters) extends LazyModule {
+class AXI4DCache(id: Int)(implicit p: Parameters) extends LazyModule {
 
   val node = SRAMToAXI4Node()
 
@@ -312,7 +312,7 @@ class AXI4DCache(implicit p: Parameters) extends LazyModule {
     (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
       val sramParams = edgeIn.bundle
       val axiParams = edgeOut.bundle
-      val cache = Module(new DCacheImpl(id = 1, sramParams, axiParams))
+      val cache = Module(new DCacheImpl(id = id, sramParams, axiParams))
       cache.io.in <> in
       out <> cache.io.out
       cache.fence_i := fence_i

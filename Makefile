@@ -75,7 +75,7 @@ gdb: all
 # =============================== 开发工具 ===============================
 
 wave:
-	@gtkwave $(BUILD_DIR)/npc_core.vcd
+	@surfer $(BUILD_DIR)/npc_core.vcd
 
 dev-init:
 	git submodule update --init --recursive
