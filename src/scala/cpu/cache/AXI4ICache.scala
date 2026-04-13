@@ -2,7 +2,6 @@ package ysyx.cpu.cache
 
 import chisel3._
 import chisel3.util._
-import chisel3.util.circt.dpi._
 
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.amba._
@@ -13,10 +12,10 @@ import freechips.rocketchip.util._
 import ysyx.core.sram._
 import ysyx.core.common.HasCoreParameter
 
-// PIPT ICache: 64B cacheline, 4-way set associative, tree-PLRU
+// PIPT ICache: 64B cacheline, 4-way set associative, FIFO replacement
 // 64 sets, offset 6 bits, index 6 bits, tag = addrBits - 12
 // 8 beats x 8B = 64B per cacheline (64-bit data bus)
-// Single-cycle hit: combinational lookup from in.addr, ack+done in same cycle
+// Main FSM: IDLE -> LOOKUP -> MISS -> REPLACE -> REFILL
 class ICacheImpl(
     id: Int,
     sramParams: SRAMBundleParameters,
@@ -28,32 +27,29 @@ class ICacheImpl(
   })
   val fence_i = IO(Input(Bool()))
 
-  private val offsetBits = 6 // 64B cacheline
-  private val indexBits = 6 // 64 sets
+  private val offsetBits = 6
+  private val indexBits = 6
+  private val nSets = 64
+  private val nWays = 4
   private val sramAddrBits = sramParams.addrBits
   private val tagBits = sramAddrBits - offsetBits - indexBits
-  private val nBeats = 8 // 8 beats x 8B = 64B
+  private val nBeats = 8
   private val beatIdxBits = log2Ceil(nBeats)
 
   val in = io.in
   val out = io.out
 
-  // Combinational address decode from input (VIPT: index within page offset)
-  val offset = in.addr(offsetBits - 1, 0)
-  val index = in.addr(offsetBits + indexBits - 1, offsetBits)
-  val tag = in.addr(sramAddrBits - 1, offsetBits + indexBits)
-  val target_beat = offset(offsetBits - 1, dataBytesBits)
-
+  // ----- Storage -----
   class CacheSet extends Bundle {
-    val tags = Vec(4, UInt(tagBits.W))
-    val valids = Vec(4, Bool())
-    val plru = Vec(3, Bool())
+    val tags = Vec(nWays, UInt(tagBits.W))
+    val valids = Vec(nWays, Bool())
   }
 
-  val tag_ram = Reg(Vec(64, new CacheSet))
-  val data_bank_sram = Reg(Vec(64, Vec(4, Vec(nBeats, UInt(dataBits.W)))))
+  val tag_ram = Reg(Vec(nSets, new CacheSet))
+  val data_bank = Reg(Vec(nSets, Vec(nWays, Vec(nBeats, UInt(dataBits.W)))))
+  val replace_ptrs = RegInit(VecInit(Seq.fill(nSets)(0.U(2.W))))
 
-  // Registered address for refill path
+  // ----- Registered request (latched in IDLE) -----
   val index_reg = Reg(UInt(indexBits.W))
   val tag_reg = Reg(UInt(tagBits.W))
   val target_beat_reg = Reg(UInt(beatIdxBits.W))
@@ -61,22 +57,18 @@ class ICacheImpl(
   val beat_counter = RegInit(0.U(beatIdxBits.W))
   val refill_data = Reg(UInt(dataBits.W))
 
-  // Combinational hit detection (uses current in.addr, not registered)
-  val set = tag_ram(index)
-  val hit_vec = VecInit((0 until 4).map(i => set.valids(i) && (set.tags(i) === tag)))
+  // ----- Hit detection (on registered address, used in LOOKUP) -----
+  val set_reg = tag_ram(index_reg)
+  val hit_vec = VecInit((0 until nWays).map(i => set_reg.valids(i) && (set_reg.tags(i) === tag_reg)))
   val hit = hit_vec.asUInt.orR
   val hit_way = OHToUInt(hit_vec)
 
-  // tree-PLRU replacement selection
-  val plru = set.plru
-  val replace_way = Cat(!plru(0), Mux(!plru(0), !plru(2), !plru(1)))
-
-  // SRAM interface defaults
+  // ----- SRAM interface defaults -----
   in.ack := false.B
   in.done := false.B
   in.rdata := 0.U
 
-  // AXI4 AR channel defaults (uses registered values for refill)
+  // ----- AXI4 AR defaults -----
   out.ar.valid := false.B
   out.ar.bits := DontCare
   out.ar.bits.id := id.U
@@ -89,7 +81,7 @@ class ICacheImpl(
   out.ar.bits.prot := 0.U
   out.ar.bits.qos := 0.U
 
-  // AXI4 R channel default
+  // AXI4 R default
   out.r.ready := false.B
 
   // AXI4 write channels tie off (ICache is read-only)
@@ -99,40 +91,50 @@ class ICacheImpl(
   out.w.bits := DontCare
   out.b.ready := false.B
 
+  // ----- Main FSM -----
   object State extends ChiselEnum {
-    val idle, replace, refill = Value
+    val idle, lookup, miss, replace, refill = Value
   }
-
   val state_q = RegInit(State.idle)
 
   switch(state_q) {
 
     is(State.idle) {
       when(fence_i) {
-        for (i <- 0 until 64; j <- 0 until 4) {
+        for (i <- 0 until nSets; j <- 0 until nWays) {
           tag_ram(i).valids(j) := false.B
         }
       }.elsewhen(in.req) {
-        when(hit) {
-          in.ack := true.B
-          in.done := true.B
-          in.rdata := data_bank_sram(index)(hit_way)(target_beat)
-          // Update tree-PLRU on hit
-          tag_ram(index).plru(0) := hit_way(1)
-          when(!hit_way(1)) {
-            tag_ram(index).plru(1) := hit_way(0)
-          }.otherwise {
-            tag_ram(index).plru(2) := hit_way(0)
-          }
-        }.otherwise {
-          in.ack := true.B
-          index_reg := index
-          tag_reg := tag
-          target_beat_reg := target_beat
-          replace_way_reg := replace_way
-          state_q := State.replace
-        }
+        in.ack := true.B
+        index_reg := in.addr(offsetBits + indexBits - 1, offsetBits)
+        tag_reg := in.addr(sramAddrBits - 1, offsetBits + indexBits)
+        target_beat_reg := in.addr(offsetBits - 1, dataBytesBits)
+        state_q := State.lookup
       }
+    }
+
+    is(State.lookup) {
+      when(hit) {
+        in.done := true.B
+        in.rdata := data_bank(index_reg)(hit_way)(target_beat_reg)
+        when(in.req) {
+          in.ack := true.B
+          index_reg := in.addr(offsetBits + indexBits - 1, offsetBits)
+          tag_reg := in.addr(sramAddrBits - 1, offsetBits + indexBits)
+          target_beat_reg := in.addr(offsetBits - 1, dataBytesBits)
+          state_q := State.lookup
+        }.otherwise {
+          state_q := State.idle
+        }
+      }.otherwise {
+        replace_way_reg := replace_ptrs(index_reg)
+        state_q := State.miss
+      }
+    }
+
+    is(State.miss) {
+      // ICache: wr_rdy always 1, single-cycle pass-through
+      state_q := State.replace
     }
 
     is(State.replace) {
@@ -146,7 +148,7 @@ class ICacheImpl(
     is(State.refill) {
       out.r.ready := true.B
       when(out.r.fire) {
-        data_bank_sram(index_reg)(replace_way_reg)(beat_counter) := out.r.bits.data
+        data_bank(index_reg)(replace_way_reg)(beat_counter) := out.r.bits.data
         when(beat_counter === target_beat_reg) {
           refill_data := out.r.bits.data
         }
@@ -154,12 +156,7 @@ class ICacheImpl(
         when(out.r.bits.last) {
           tag_ram(index_reg).tags(replace_way_reg) := tag_reg
           tag_ram(index_reg).valids(replace_way_reg) := true.B
-          tag_ram(index_reg).plru(0) := replace_way_reg(1)
-          when(!replace_way_reg(1)) {
-            tag_ram(index_reg).plru(1) := replace_way_reg(0)
-          }.otherwise {
-            tag_ram(index_reg).plru(2) := replace_way_reg(0)
-          }
+          replace_ptrs(index_reg) := replace_ptrs(index_reg) + 1.U
           state_q := State.idle
           in.done := true.B
           in.rdata := Mux(beat_counter === target_beat_reg, out.r.bits.data, refill_data)
@@ -184,8 +181,6 @@ class AXI4ICache(id: Int)(implicit p: Parameters) extends LazyModule {
       val cache = Module(new ICacheImpl(id = id, sramParams, axiParams))
       cache.io.in <> in
       out <> cache.io.out
-
-      // fence_i
       cache.fence_i := fence_i
     }
   }
