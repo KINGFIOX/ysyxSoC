@@ -123,7 +123,9 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort, 1) {
   // sstatus / sie / sip views (masked views of mstatus / mie / mip)
   // ================================================================
   val sstatus_mask = SSTATUS_MASK.U(dataBits.W)
+  val sstatus_wmask = SSTATUS_WMASK.U(dataBits.W)
   val sie_mask = SIE_MASK.U(dataBits.W)
+  val mstatus_sxl_uxl_mask = MSTATUS_SXL_UXL.U(dataBits.W)
 
   val sstatus_read = mstatus & sstatus_mask
   val sie_read = mie & sie_mask
@@ -288,7 +290,7 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort, 1) {
   when(late.bits.wen) {
     val addr = late.bits.addr
     // S-mode CSRs
-    when(addr === SSTATUS.U)    { mstatus := (mstatus & ~sstatus_mask) | (csrWdata & sstatus_mask) }
+    when(addr === SSTATUS.U)    { mstatus := (mstatus & ~sstatus_wmask) | (csrWdata & sstatus_wmask) }
     when(addr === SIE.U)        { mie := (mie & ~sie_mask) | (csrWdata & sie_mask) }
     when(addr === STVEC.U)      { stvec := csrWdata }
     when(addr === SSCRATCH.U)   { sscratch := csrWdata }
@@ -299,7 +301,7 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort, 1) {
     when(addr === STIMECMP.U)   { stimecmp := csrWdata }
     when(addr === SATP.U)       { satp := csrWdata }
     // M-mode CSRs
-    when(addr === MSTATUS.U)    { mstatus := csrWdata }
+    when(addr === MSTATUS.U)    { mstatus := (mstatus & mstatus_sxl_uxl_mask) | (csrWdata & ~mstatus_sxl_uxl_mask) }
     when(addr === MEDELEG.U)    { medeleg := csrWdata }
     when(addr === MIDELEG.U)    { mideleg := csrWdata }
     when(addr === MIE.U)        { mie := csrWdata }

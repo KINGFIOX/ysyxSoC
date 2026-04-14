@@ -75,9 +75,17 @@ trait HasCSRParameter {
   val MSTATUS_SUM_BIT  = 18
   val MSTATUS_MXR_BIT  = 19
 
-  // sstatus mask: bits visible through sstatus view of mstatus
+  // sstatus read mask: bits visible through sstatus view of mstatus
   val SSTATUS_MASK: Long = (1L << 1) | (1L << 5) | (1L << 8) |
+    (1L << 18) | (1L << 19) | // SIE, SPIE, SPP, SUM, MXR
+    (3L << 32)                // UXL (bits 33:32, read-only in sstatus)
+
+  // sstatus write mask: writable bits only (UXL is read-only)
+  val SSTATUS_WMASK: Long = (1L << 1) | (1L << 5) | (1L << 8) |
     (1L << 18) | (1L << 19) // SIE, SPIE, SPP, SUM, MXR
+
+  // mstatus read-only mask: SXL (bits 35:34) and UXL (bits 33:32) are WARL, hardwired to 2 for RV64
+  val MSTATUS_SXL_UXL: Long = (3L << 32) | (3L << 34) // bits 35:32
 
   // mip/mie bit positions
   val IRQ_SSIP = 1

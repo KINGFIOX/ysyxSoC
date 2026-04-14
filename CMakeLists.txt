@@ -53,6 +53,7 @@ verilate(verilator_model
     "-I${RTL_DIR}/verification/assume"
     "-I${RTL_DIR}/verification/cover"
   OPT_FAST -O2
+  THREADS 6
   OPT_SLOW -O2
   OPT_GLOBAL -O2
 )
