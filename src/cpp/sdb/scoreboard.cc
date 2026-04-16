@@ -68,6 +68,7 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
     return StepResult::kEBreak;
   }
 
+#ifndef NPC_NODIFF
   if (dut.is_mmio()) {
     handle_mmio(dut, pc, inst, mnemonic, disasm_str);
   } else {
@@ -96,6 +97,14 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
   if (!check_regs(dut)) {
     return StepResult::kDifftestFail;
   }
+#else
+  if ((mnemonic == "jal" || mnemonic == "jalr") && rd(inst) == 1) {
+    ftrace_->push_call(pc, dut.dnpc(), disasm_str);
+  } else if (mnemonic == "ret") {
+    ftrace_->push_ret(pc, dut.dnpc(), disasm_str);
+  }
+#endif
+
   return StepResult::kContinue;
 }
 

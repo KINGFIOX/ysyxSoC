@@ -13,6 +13,7 @@
 #include "absl/strings/str_replace.h"
 #include "common/args.h"
 #include "cpu/verilator_cpu.h"
+#include "dpi/sync_disk.h"
 #include "sdb/scoreboard.h"
 #include "sdb/sdb.h"
 #include "tracer/ftrace.h"
@@ -23,6 +24,7 @@ ABSL_FLAG(bool, wave, false, "Enable waveform dumping");
 ABSL_FLAG(uint64_t, wave_tail, 100000,
           "Keep last N cycles in waveform (0 = unlimited)");
 ABSL_FLAG(std::string, image, "", "Path to binary image file");
+ABSL_FLAG(std::string, fsimg, "", "Disk image file for sync MMIO disk");
 ABSL_FLAG(std::string, log, "", "Path to log file (unused currently)");
 
 int main(int argc, char* argv[]) {
@@ -52,6 +54,15 @@ int main(int argc, char* argv[]) {
   ifs.close();
 
   npc::VerilatorCpu dut(flash_data, absl::GetFlag(FLAGS_nvboard));
+  npc::g_memory->load_sdram(flash_data);
+
+  std::string fsimg_path = absl::GetFlag(FLAGS_fsimg);
+  std::unique_ptr<npc::SyncDisk> sync_disk;
+  if (!fsimg_path.empty()) {
+    sync_disk = std::make_unique<npc::SyncDisk>(fsimg_path);
+    npc::g_sync_disk = sync_disk.get();
+  }
+
   if (absl::GetFlag(FLAGS_wave)) {
     dut.enable_wave(absl::GetFlag(FLAGS_wave_tail));
   }

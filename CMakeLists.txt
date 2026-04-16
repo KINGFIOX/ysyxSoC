@@ -83,6 +83,7 @@ add_executable(npc
   ${SRC}/cpu/spike_cpu.cc
   ${SRC}/dpi/memory.cc
   ${SRC}/dpi/dpi.cc
+  ${SRC}/dpi/sync_disk.cc
   ${SRC}/sdb/sdb.cc
   ${SRC}/sdb/command.cc
   ${SRC}/sdb/watchpoint.cc
@@ -100,8 +101,13 @@ target_include_directories(npc PRIVATE
   "${VERILATOR_MDIR}"
 )
 
+option(NPC_NODIFF "Disable difftest (skip scoreboard comparison)" OFF)
+
 target_compile_options(npc PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_compile_definitions(npc PRIVATE VL_USER_STOP)
+if(NPC_NODIFF)
+  target_compile_definitions(npc PRIVATE NPC_NODIFF)
+endif()
 
 # ========================== Link verilator model ==========================
 

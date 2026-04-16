@@ -24,6 +24,8 @@ class Memory {
   uint8_t* sdram_data() { return sdram_.data(); }
   size_t sdram_size() const { return sdram_.size(); }
 
+  void load_sdram(absl::Span<const uint8_t> data);
+
   absl::StatusOr<uint8_t> load_u8(uint64_t addr) const;
   absl::Status store_u8(uint64_t addr, uint8_t val);
 

@@ -13,6 +13,11 @@ Memory::Memory(absl::Span<const uint8_t> flash_data)
               std::min(flash_data.size(), flash_.size()));
 }
 
+void Memory::load_sdram(absl::Span<const uint8_t> data) {
+  std::memcpy(sdram_.data(), data.data(),
+              std::min(data.size(), sdram_.size()));
+}
+
 absl::StatusOr<uint8_t> Memory::load_u8(uint64_t addr) const {
   if (uint64_t off = addr - kFlashBase; off < kFlashSize) {
     return flash_[off];

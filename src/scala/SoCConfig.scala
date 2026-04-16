@@ -5,7 +5,7 @@
 package ysyx
 
 object SoCConfig {
-  val resetVector: Long = 0x30000000L
+  val resetVector: Long = 0x80000000L
   val uartBase: Long = 0x10000000L
   val uartSize: Long = 0x1000L
   val gpioBase: Long = 0x10002000L
@@ -14,8 +14,8 @@ object SoCConfig {
   val keyboardSize: Long = 0x8L
   val vgaBase: Long = 0x21000000L
   val vgaSize: Long = 0x200000L
-  val spiCtrlBase: Long = 0x10001000L
-  val spiCtrlSize: Long = 0x1000L
+  val syncDiskBase: Long = 0x10001000L
+  val syncDiskSize: Long = 0x1000L
   val xipFlashBase: Long = 0x30000000L
   val xipFlashSize: Long = 0x10000000L
   val clintBase: Long = 0x02000000L

@@ -15,7 +15,7 @@
 namespace npc {
 
 static constexpr const char* kIsa = "RV64IMAFDC";
-static constexpr uint64_t kResetVector = 0x30000000;
+static constexpr uint64_t kResetVector = 0x80000000;
 
 static constexpr uint64_t kMemBases[] = {
     0x02000000,  // CLINT
