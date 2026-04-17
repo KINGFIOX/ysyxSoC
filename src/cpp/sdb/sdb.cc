@@ -26,9 +26,13 @@ auto Sdb::GetCommands() -> const std::vector<Sdb::CommandDef>& {
       {{"info"}, "info r(egisters) / info w(atchpoints)", &Sdb::cmd_info},
       {{"examine", "x"}, "x N EXPR - examine N words at EXPR", &Sdb::cmd_examine},
       {{"print", "p", "eval"}, "evaluate expression", &Sdb::cmd_print},
+#ifdef NPC_WATCHPOINT
       {{"watch", "w"}, "add watchpoint on expression", &Sdb::cmd_watch},
       {{"delete", "d"}, "delete watchpoint by id", &Sdb::cmd_delete},
+#endif
+#ifdef NPC_BREAKPOINT
       {{"break", "b"}, "set breakpoint at address", &Sdb::cmd_break},
+#endif
   };
   return *commands;
 }
@@ -123,18 +127,23 @@ Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut, ScoreBoard & scrb
         return CmdResult::Fatal("difftest failed");
     }
 
+#ifdef NPC_BREAKPOINT
     if (check_breakpoints(dut)) {
       return CmdResult::Continue();
     }
+#endif
+#ifdef NPC_WATCHPOINT
     std::string wp_buf;
     if (watchpoints_.check(dut, wp_buf)) {
       LOG(INFO) << wp_buf;
       return CmdResult::Continue();
     }
+#endif
   }
   return CmdResult::Continue();
 }
 
+#ifdef NPC_BREAKPOINT
 bool Sdb::check_breakpoints(const VerilatorCpu& dut) const {
   uint64_t pc = dut.pc();
   for (uint64_t bp : breakpoints_) {
@@ -145,6 +154,7 @@ bool Sdb::check_breakpoints(const VerilatorCpu& dut) const {
   }
   return false;
 }
+#endif
 
 // ========================== Command Handlers ==========================
 
@@ -183,7 +193,7 @@ Sdb::CmdResult Sdb::cmd_step(const std::string& args, VerilatorCpu& dut, ScoreBo
   return execute_steps(n, dut, scrbrd);
 }
 
-Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut,  ScoreBoard& ) {
+Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut, ScoreBoard&) {
   absl::string_view sub = absl::StripAsciiWhitespace(args);
   if (sub == "r" || sub == "registers" || sub == "reg") {
     std::string buf = absl::StrFormat("pc  = 0x%016x\n", dut.pc());
@@ -193,10 +203,13 @@ Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut,  ScoreB
       if ((i + 1) % 4 == 0) buf += "\n";
     }
     LOG(INFO) << buf;
+#ifdef NPC_WATCHPOINT
   } else if (sub == "w" || sub == "watchpoints" || sub == "wp") {
     std::string buf;
     watchpoints_.list(buf);
     LOG(INFO) << buf;
+#endif
+#ifdef NPC_BREAKPOINT
   } else if (sub == "b" || sub == "breakpoints" || sub == "bp") {
     if (breakpoints_.empty()) {
       LOG(INFO) << "no breakpoints";
@@ -207,13 +220,21 @@ Sdb::CmdResult Sdb::cmd_info(const std::string& args, VerilatorCpu& dut,  ScoreB
       }
       LOG(INFO) << buf;
     }
+#endif
   } else {
-    return CmdResult::InputError("usage: info r|w|b");
+    return CmdResult::InputError("usage: info r"
+#ifdef NPC_WATCHPOINT
+        "|w"
+#endif
+#ifdef NPC_BREAKPOINT
+        "|b"
+#endif
+    );
   }
   return CmdResult::Continue();
 }
 
-Sdb::CmdResult Sdb::cmd_examine(const std::string& args, VerilatorCpu& dut,   ScoreBoard&) {
+Sdb::CmdResult Sdb::cmd_examine(const std::string& args, VerilatorCpu& dut, ScoreBoard&) {
   std::vector<absl::string_view> parts =
       absl::StrSplit(args, absl::MaxSplits(' ', 1), absl::SkipEmpty());
   if (parts.size() < 2) {
@@ -261,6 +282,7 @@ Sdb::CmdResult Sdb::cmd_print(const std::string& args, VerilatorCpu& dut, ScoreB
   return CmdResult::Continue();
 }
 
+#ifdef NPC_WATCHPOINT
 Sdb::CmdResult Sdb::cmd_watch(const std::string& args, VerilatorCpu& dut, ScoreBoard&) {
   absl::string_view expr = absl::StripAsciiWhitespace(args);
   if (expr.empty()) {
@@ -288,14 +310,15 @@ Sdb::CmdResult Sdb::cmd_delete(const std::string& args, VerilatorCpu& /*dut*/, S
   }
   return CmdResult::Continue();
 }
+#endif
 
+#ifdef NPC_BREAKPOINT
 Sdb::CmdResult Sdb::cmd_break(const std::string& args, VerilatorCpu& dut, ScoreBoard&) {
   absl::string_view expr = absl::StripAsciiWhitespace(args);
   if (expr.empty()) {
     return CmdResult::InputError("usage: b ADDR");
   }
 
-  // Sub-commands: b ls, b rm N
   absl::string_view first_word = expr.substr(0, expr.find(' '));
   if (first_word == "ls" || first_word == "list") {
     if (breakpoints_.empty()) {
@@ -334,5 +357,6 @@ Sdb::CmdResult Sdb::cmd_break(const std::string& args, VerilatorCpu& dut, ScoreB
                                   breakpoints_.size(), *addr);
   return CmdResult::Continue();
 }
+#endif
 
 }  // namespace npc

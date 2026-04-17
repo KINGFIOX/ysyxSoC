@@ -1,3 +1,5 @@
+#ifdef NPC_FTRACE
+
 #include "tracer/ftrace.h"
 
 #include <fstream>
@@ -57,3 +59,5 @@ void FuncTracer::push_ret(uint64_t pc, uint64_t dnpc,
 }
 
 }  // namespace npc
+
+#endif  // NPC_FTRACE

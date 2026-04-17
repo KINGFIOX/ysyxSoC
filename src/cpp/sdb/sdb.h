@@ -9,7 +9,9 @@
 #include "absl/status/status.h"
 #include "cpu/verilator_cpu.h"
 #include "sdb/scoreboard.h"
+#ifdef NPC_WATCHPOINT
 #include "sdb/watchpoint.h"
+#endif
 
 namespace npc {
 
@@ -63,7 +65,6 @@ class Sdb {
 
   auto execute_line(const std::string& input, VerilatorCpu& dut, ScoreBoard & scrbrd) -> CmdResult;
   auto execute_steps(size_t n, VerilatorCpu& dut, ScoreBoard & scrbrd) -> CmdResult;
-  [[nodiscard]] auto check_breakpoints(const VerilatorCpu& dut) const -> bool;
 
   auto cmd_help(const std::string& args, VerilatorCpu& dut    , ScoreBoard& scrbrd) -> CmdResult;
   auto cmd_quit(const std::string& args, VerilatorCpu& dut    , ScoreBoard& scrbrd) -> CmdResult;
@@ -72,12 +73,18 @@ class Sdb {
   auto cmd_info(const std::string& args, VerilatorCpu& dut    , ScoreBoard& scrbrd) -> CmdResult;
   auto cmd_examine(const std::string& args, VerilatorCpu& dut , ScoreBoard& scrbrd) -> CmdResult;
   auto cmd_print(const std::string& args, VerilatorCpu& dut   , ScoreBoard& scrbrd) -> CmdResult;
+#ifdef NPC_WATCHPOINT
   auto cmd_watch(const std::string& args, VerilatorCpu& dut   , ScoreBoard& scrbrd) -> CmdResult;
   auto cmd_delete(const std::string& args, VerilatorCpu& dut  , ScoreBoard& scrbrd) -> CmdResult;
+#endif
+#ifdef NPC_BREAKPOINT
   auto cmd_break(const std::string& args, VerilatorCpu& dut   , ScoreBoard& scrbrd) -> CmdResult;
-
+  [[nodiscard]] auto check_breakpoints(const VerilatorCpu& dut) const -> bool;
   std::vector<uint64_t> breakpoints_;
+#endif
+#ifdef NPC_WATCHPOINT
   WatchpointPool watchpoints_;
+#endif
   std::optional<std::string> last_cmd_;
 };
 

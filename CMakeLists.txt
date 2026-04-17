@@ -101,13 +101,24 @@ target_include_directories(npc PRIVATE
   "${VERILATOR_MDIR}"
 )
 
-option(NPC_NODIFF "Disable difftest (skip scoreboard comparison)" OFF)
+option(NPC_NODIFF     "Disable difftest (skip scoreboard comparison)" OFF)
+option(NPC_ITRACE     "Enable instruction trace ring buffer"          ON)
+option(NPC_DTRACE     "Enable device/MMIO trace ring buffer"          ON)
+option(NPC_MTRACE     "Enable memory trace ring buffer"               ON)
+option(NPC_FTRACE     "Enable function call trace"                    ON)
+option(NPC_WATCHPOINT "Enable watchpoint support in SDB"              ON)
+option(NPC_BREAKPOINT "Enable breakpoint support in SDB"              ON)
 
 target_compile_options(npc PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_compile_definitions(npc PRIVATE VL_USER_STOP)
 if(NPC_NODIFF)
   target_compile_definitions(npc PRIVATE NPC_NODIFF)
 endif()
+foreach(_feat ITRACE DTRACE MTRACE FTRACE WATCHPOINT BREAKPOINT)
+  if(NPC_${_feat})
+    target_compile_definitions(npc PRIVATE NPC_${_feat})
+  endif()
+endforeach()
 
 # ========================== Link verilator model ==========================
 

@@ -10,13 +10,17 @@
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "absl/log/log.h"
+#ifdef NPC_FTRACE
 #include "absl/strings/str_replace.h"
+#endif
 #include "common/args.h"
 #include "cpu/verilator_cpu.h"
 #include "dpi/sync_disk.h"
 #include "sdb/scoreboard.h"
 #include "sdb/sdb.h"
+#ifdef NPC_FTRACE
 #include "tracer/ftrace.h"
+#endif
 
 ABSL_FLAG(bool, batch, false, "Run in batch mode (no interactive debugger)");
 ABSL_FLAG(bool, nvboard, false, "Enable NVBoard visualization");
@@ -39,10 +43,21 @@ int main(int argc, char* argv[]) {
   }
   LOG(INFO) << "bin_path: " << bin_path;
 
+#ifdef NPC_FTRACE
+  // Try <image>.elf first, then fall back to <image without ".bin">
   std::string elf_path = absl::StrReplaceAll(bin_path, {{".bin", ".elf"}});
+  if (!std::ifstream(elf_path).good()) {
+    std::string alt = bin_path;
+    const std::string bin_ext = ".bin";
+    if (alt.size() >= bin_ext.size() &&
+        alt.compare(alt.size() - bin_ext.size(), bin_ext.size(), bin_ext) == 0) {
+      alt = alt.substr(0, alt.size() - bin_ext.size());
+    }
+    if (std::ifstream(alt).good()) elf_path = alt;
+  }
   LOG(INFO) << "elf_path: " << elf_path;
-
   auto ftrace = std::make_unique<npc::FuncTracer>(elf_path);
+#endif
 
   // Read binary image
   std::ifstream ifs(bin_path, std::ios::binary);
@@ -66,7 +81,11 @@ int main(int argc, char* argv[]) {
   if (absl::GetFlag(FLAGS_wave)) {
     dut.enable_wave(absl::GetFlag(FLAGS_wave_tail));
   }
+#ifdef NPC_FTRACE
   npc::ScoreBoard scrbrd(flash_data, std::move(ftrace));
+#else
+  npc::ScoreBoard scrbrd(flash_data);
+#endif
   npc::Sdb sdb;
 
   auto status = sdb.mainloop(scrbrd, dut, absl::GetFlag(FLAGS_batch));

@@ -1,3 +1,5 @@
+#ifdef NPC_WATCHPOINT
+
 #include "sdb/watchpoint.h"
 
 #include <algorithm>
@@ -61,3 +63,5 @@ void WatchpointPool::list(std::string& out) const {
 }
 
 }  // namespace npc
+
+#endif  // NPC_WATCHPOINT

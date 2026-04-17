@@ -2,17 +2,28 @@
 #define NPC_SDB_SCOREBOARD_H_
 
 #include <cstdint>
-#include <memory>
 #include <string>
-#include <utility>
+#ifdef NPC_FTRACE
+#include <memory>
+#endif
 
 #include "cpu/spike_cpu.h"
 #include "cpu/verilator_cpu.h"
-#include "tracer/dtrace.h"
-#include "tracer/ftrace.h"
+#ifdef NPC_ITRACE
 #include "tracer/itrace.h"
+#endif
+#ifdef NPC_DTRACE
+#include "tracer/dtrace.h"
+#endif
+#ifdef NPC_MTRACE
 #include "tracer/mtrace.h"
+#endif
+#ifdef NPC_FTRACE
+#include "tracer/ftrace.h"
+#endif
+#if defined(NPC_ITRACE) || defined(NPC_DTRACE) || defined(NPC_MTRACE)
 #include "tracer/ring_buf.h"
+#endif
 
 namespace npc {
 
@@ -26,14 +37,17 @@ enum class StepResult {
 
 class ScoreBoard {
  public:
+#ifdef NPC_FTRACE
   ScoreBoard(absl::Span<const uint8_t> flash_data,
              std::unique_ptr<FuncTracer> ftrace);
+#else
+  explicit ScoreBoard(absl::Span<const uint8_t> flash_data);
+#endif
   ~ScoreBoard();
 
   ScoreBoard(const ScoreBoard&) = delete;
   ScoreBoard& operator=(const ScoreBoard&) = delete;
 
-  // Returns the step result and (for EBreak) the a0 value via out param.
   StepResult scoreboard(const VerilatorCpu& dut, uint64_t* ebreak_a0 = nullptr);
   void dump_traces(const VerilatorCpu& dut) const;
 
@@ -47,10 +61,18 @@ class ScoreBoard {
                        const std::string& mnemonic) const;
 
   SpikeCpu golden_;
+#ifdef NPC_ITRACE
   RingBuf<ITraceEntry> itrace_;
+#endif
+#ifdef NPC_DTRACE
   RingBuf<DTraceEntry> dtrace_;
+#endif
+#ifdef NPC_MTRACE
   RingBuf<MTraceEntry> mtrace_;
+#endif
+#ifdef NPC_FTRACE
   std::unique_ptr<FuncTracer> ftrace_;
+#endif
 };
 
 }  // namespace npc

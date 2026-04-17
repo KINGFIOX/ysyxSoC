@@ -20,9 +20,8 @@ struct VlStopException : std::runtime_error {
 __attribute__((weak)) double sc_time_stamp() { return 0; }
 
 void vl_stop(const char* filename, int linenum, const char* hier) {
-  throw VlStopException(std::string(filename) + ":" +
-                         std::to_string(linenum) + ": Verilog $stop (in " +
-                         hier + ")");
+  throw VlStopException(std::string(filename) + ":" + std::to_string(linenum) +
+                        ": Verilog $stop (in " + hier + ")");
 }
 
 namespace npc {
@@ -83,8 +82,7 @@ void UartTxDecoder::Tick(bool tx, nvboard::Board* board) {
 static constexpr const char* kVcdPath = "build/npc_core.vcd";
 
 VerilatorCpu::VerilatorCpu(absl::Span<const uint8_t> flash_data, bool nvboard)
-    : ctx_(std::make_unique<VerilatedContext>()),
-      mem_(flash_data) {
+    : ctx_(std::make_unique<VerilatedContext>()), mem_(flash_data) {
   g_memory = &mem_;
 
   top_ = new VNPCSoC(ctx_.get(), "TOP");
@@ -165,17 +163,11 @@ void VerilatorCpu::enable_wave(uint64_t tail) {
 
 // ========================== Probe signals ==========================
 
-bool VerilatorCpu::is_mmio() const {
-  return top_->probe_bits_is_mmio != 0;
-}
+bool VerilatorCpu::is_mmio() const { return top_->probe_bits_is_mmio != 0; }
 
-uint64_t VerilatorCpu::dnpc() const {
-  return top_->probe_bits_dnpc;
-}
+uint64_t VerilatorCpu::dnpc() const { return top_->probe_bits_dnpc; }
 
-uint32_t VerilatorCpu::inst() const {
-  return top_->probe_bits_inst;
-}
+uint32_t VerilatorCpu::inst() const { return top_->probe_bits_inst; }
 
 uint32_t VerilatorCpu::perf_commit_cnt() const {
   return top_->probe_bits_perf_commit_cnt;
@@ -195,9 +187,7 @@ uint32_t VerilatorCpu::perf_flush_cnt() const {
 
 // ========================== AbstractCpu ==========================
 
-uint64_t VerilatorCpu::pc() const {
-  return top_->probe_bits_pc;
-}
+uint64_t VerilatorCpu::pc() const { return top_->probe_bits_pc; }
 
 absl::Status VerilatorCpu::set_pc(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_pc");
@@ -209,39 +199,72 @@ absl::StatusOr<uint64_t> VerilatorCpu::gpr(int index) const {
   }
   // Direct access to probe signals -- no bridge needed.
   switch (index) {
-    case 0:  return top_->probe_bits_gpr_0;
-    case 1:  return top_->probe_bits_gpr_1;
-    case 2:  return top_->probe_bits_gpr_2;
-    case 3:  return top_->probe_bits_gpr_3;
-    case 4:  return top_->probe_bits_gpr_4;
-    case 5:  return top_->probe_bits_gpr_5;
-    case 6:  return top_->probe_bits_gpr_6;
-    case 7:  return top_->probe_bits_gpr_7;
-    case 8:  return top_->probe_bits_gpr_8;
-    case 9:  return top_->probe_bits_gpr_9;
-    case 10: return top_->probe_bits_gpr_10;
-    case 11: return top_->probe_bits_gpr_11;
-    case 12: return top_->probe_bits_gpr_12;
-    case 13: return top_->probe_bits_gpr_13;
-    case 14: return top_->probe_bits_gpr_14;
-    case 15: return top_->probe_bits_gpr_15;
-    case 16: return top_->probe_bits_gpr_16;
-    case 17: return top_->probe_bits_gpr_17;
-    case 18: return top_->probe_bits_gpr_18;
-    case 19: return top_->probe_bits_gpr_19;
-    case 20: return top_->probe_bits_gpr_20;
-    case 21: return top_->probe_bits_gpr_21;
-    case 22: return top_->probe_bits_gpr_22;
-    case 23: return top_->probe_bits_gpr_23;
-    case 24: return top_->probe_bits_gpr_24;
-    case 25: return top_->probe_bits_gpr_25;
-    case 26: return top_->probe_bits_gpr_26;
-    case 27: return top_->probe_bits_gpr_27;
-    case 28: return top_->probe_bits_gpr_28;
-    case 29: return top_->probe_bits_gpr_29;
-    case 30: return top_->probe_bits_gpr_30;
-    case 31: return top_->probe_bits_gpr_31;
-    default: return uint64_t{0};
+    case 0:
+      return top_->probe_bits_gpr_0;
+    case 1:
+      return top_->probe_bits_gpr_1;
+    case 2:
+      return top_->probe_bits_gpr_2;
+    case 3:
+      return top_->probe_bits_gpr_3;
+    case 4:
+      return top_->probe_bits_gpr_4;
+    case 5:
+      return top_->probe_bits_gpr_5;
+    case 6:
+      return top_->probe_bits_gpr_6;
+    case 7:
+      return top_->probe_bits_gpr_7;
+    case 8:
+      return top_->probe_bits_gpr_8;
+    case 9:
+      return top_->probe_bits_gpr_9;
+    case 10:
+      return top_->probe_bits_gpr_10;
+    case 11:
+      return top_->probe_bits_gpr_11;
+    case 12:
+      return top_->probe_bits_gpr_12;
+    case 13:
+      return top_->probe_bits_gpr_13;
+    case 14:
+      return top_->probe_bits_gpr_14;
+    case 15:
+      return top_->probe_bits_gpr_15;
+    case 16:
+      return top_->probe_bits_gpr_16;
+    case 17:
+      return top_->probe_bits_gpr_17;
+    case 18:
+      return top_->probe_bits_gpr_18;
+    case 19:
+      return top_->probe_bits_gpr_19;
+    case 20:
+      return top_->probe_bits_gpr_20;
+    case 21:
+      return top_->probe_bits_gpr_21;
+    case 22:
+      return top_->probe_bits_gpr_22;
+    case 23:
+      return top_->probe_bits_gpr_23;
+    case 24:
+      return top_->probe_bits_gpr_24;
+    case 25:
+      return top_->probe_bits_gpr_25;
+    case 26:
+      return top_->probe_bits_gpr_26;
+    case 27:
+      return top_->probe_bits_gpr_27;
+    case 28:
+      return top_->probe_bits_gpr_28;
+    case 29:
+      return top_->probe_bits_gpr_29;
+    case 30:
+      return top_->probe_bits_gpr_30;
+    case 31:
+      return top_->probe_bits_gpr_31;
+    default:
+      return uint64_t{0};
   }
 }
 
@@ -249,37 +272,27 @@ absl::Status VerilatorCpu::set_gpr(int /*index*/, uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_gpr");
 }
 
-uint64_t VerilatorCpu::mstatus() const {
-  return top_->probe_bits_csr_mstatus;
-}
+uint64_t VerilatorCpu::mstatus() const { return top_->probe_bits_csr_mstatus; }
 absl::Status VerilatorCpu::set_mstatus(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_mstatus");
 }
 
-uint64_t VerilatorCpu::mtvec() const {
-  return top_->probe_bits_csr_mtvec;
-}
+uint64_t VerilatorCpu::mtvec() const { return top_->probe_bits_csr_mtvec; }
 absl::Status VerilatorCpu::set_mtvec(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_mtvec");
 }
 
-uint64_t VerilatorCpu::mepc() const {
-  return top_->probe_bits_csr_mepc;
-}
+uint64_t VerilatorCpu::mepc() const { return top_->probe_bits_csr_mepc; }
 absl::Status VerilatorCpu::set_mepc(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_mepc");
 }
 
-uint64_t VerilatorCpu::mcause() const {
-  return top_->probe_bits_csr_mcause;
-}
+uint64_t VerilatorCpu::mcause() const { return top_->probe_bits_csr_mcause; }
 absl::Status VerilatorCpu::set_mcause(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_mcause");
 }
 
-uint64_t VerilatorCpu::mtval() const {
-  return top_->probe_bits_csr_mtval;
-}
+uint64_t VerilatorCpu::mtval() const { return top_->probe_bits_csr_mtval; }
 absl::Status VerilatorCpu::set_mtval(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_mtval");
 }
@@ -291,20 +304,18 @@ absl::Status VerilatorCpu::set_mvendorid(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_mvendorid");
 }
 
-uint64_t VerilatorCpu::marchid() const {
-  return top_->probe_bits_csr_marchid;
-}
+uint64_t VerilatorCpu::marchid() const { return top_->probe_bits_csr_marchid; }
 absl::Status VerilatorCpu::set_marchid(uint64_t /*value*/) {
   return absl::UnimplementedError("DUT does not support set_marchid");
 }
 
 absl::StatusOr<uint64_t> VerilatorCpu::mem_load(uint64_t addr,
-                                                  uint8_t width) const {
+                                                uint8_t width) const {
   return mem_.load(addr, width);
 }
 
 absl::Status VerilatorCpu::mem_store(uint64_t addr, uint64_t value,
-                                      uint8_t width) {
+                                     uint8_t width) {
   return mem_.store(addr, value, width);
 }
 

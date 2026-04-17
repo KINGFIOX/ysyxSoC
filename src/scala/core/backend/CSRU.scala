@@ -71,7 +71,9 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort, 1) {
   // ================================================================
   // M-mode registers
   // ================================================================
-  val mstatus    = RegInit("h0000000a00001800".U(dataBits.W)) // MPP=M, MXR=0, SUM=0
+  // Match Spike's compute_mstatus_initial_value(): SXL=UXL=2 (RV64), MPP=0.
+  // priv is separately reset to M below, so boot still starts in M-mode.
+  val mstatus    = RegInit("h0000000a00000000".U(dataBits.W))
   val mtvec      = RegInit(0.U(dataBits.W))
   val mepc       = RegInit(0.U(dataBits.W))
   val mcause     = RegInit(0.U(dataBits.W))
