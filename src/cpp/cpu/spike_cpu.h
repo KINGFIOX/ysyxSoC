@@ -51,6 +51,8 @@ class SpikeCpu final : public AbstractCpu {
   void reset() override;
   absl::Status step() override;
 
+  void raise_interrupt(uint64_t cause);
+
   std::pair<std::string, std::string> disasm(uint32_t inst) const;
 
  private:

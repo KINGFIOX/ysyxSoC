@@ -114,10 +114,10 @@ endif()
 target_link_libraries(npc PRIVATE verilator_model)
 target_link_libraries(npc PRIVATE z)
 
-# ========================== Spike ==========================
+# ========================== Spike (built from third_party) ==========================
 
-find_package(spike REQUIRED)
-target_link_libraries(npc PRIVATE spike::riscv)
+add_subdirectory(third_party/spike EXCLUDE_FROM_ALL)
+target_link_libraries(npc PRIVATE riscv)
 
 # ========================== NVBoard + SDL2 ==========================
 

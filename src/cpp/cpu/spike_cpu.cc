@@ -62,7 +62,7 @@ SpikeCpu::SpikeCpu(absl::Span<const uint8_t> flash_data) {
   std::vector<std::string> htif_args{""};
 
   sim_ = new sim_t(cfg, false, mems, plugin_devices, htif_args, dm_config,
-                    nullptr, false, nullptr, false, nullptr, true);
+                    nullptr, false, nullptr, false, nullptr);
 
   proc_ = sim_->get_core(0);
   state_ = proc_->get_state();
@@ -210,6 +210,11 @@ absl::Status SpikeCpu::step() {
     return absl::InternalError(
         std::format("spike trap during step (pc=0x%016x)", state_->pc));
   }
+}
+
+void SpikeCpu::raise_interrupt(uint64_t cause) {
+  trap_t trap(cause);
+  proc_->take_trap_public(trap, state_->pc);
 }
 
 std::pair<std::string, std::string> SpikeCpu::disasm(uint32_t inst) const {

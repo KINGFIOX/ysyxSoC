@@ -22,7 +22,7 @@ FuncTracer::FuncTracer(const std::filesystem::path& elf_path)
         section->get_type() != ELFIO::SHT_DYNSYM) {
       continue;
     }
-    ELFIO::symbol_section_accessor symbols(reader, section);
+    ELFIO::symbol_section_accessor symbols(reader, section.get());
     for (ELFIO::Elf_Xword i = 0; i < symbols.get_symbols_num(); ++i) {
       std::string name;
       ELFIO::Elf64_Addr value = 0;
