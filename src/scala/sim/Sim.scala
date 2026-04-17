@@ -51,12 +51,10 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     cpu.module.mtime_in := lclint.module.mtime_out
 
     val probe = IO(chiselTypeOf(cpu.module.probe))
-    val uart = IO(chiselTypeOf(luart.module.uart))
     val gpio = IO(chiselTypeOf(lgpio.module.gpio_bundle))
     val ps2 = IO(chiselTypeOf(lkeyboard.module.ps2_bundle))
     val vga = IO(chiselTypeOf(lvga.module.vga_bundle))
     probe := cpu.module.probe
-    uart <> luart.module.uart
     gpio <> lgpio.module.gpio_bundle
     ps2 <> lkeyboard.module.ps2_bundle
     vga <> lvga.module.vga_bundle
@@ -76,12 +74,10 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
       val gpio = chiselTypeOf(masic.gpio)
       val ps2 = chiselTypeOf(masic.ps2)
       val vga = chiselTypeOf(masic.vga)
-      val uart = chiselTypeOf(masic.uart)
     })
     externalPins.gpio <> masic.gpio
     externalPins.ps2 <> masic.ps2
     externalPins.vga <> masic.vga
-    externalPins.uart <> masic.uart
 
     val probe = IO(chiselTypeOf(masic.probe))
     probe := masic.probe

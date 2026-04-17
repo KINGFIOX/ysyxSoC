@@ -30,6 +30,13 @@ class RingBuf {
 
   size_t size() const { return std::min(write_pos_, capacity_); }
 
+  bool empty() const { return write_pos_ == 0; }
+
+  // Returns a reference to the most recently pushed entry.  UB if empty().
+  const T& back() const {
+    return entries_[(write_pos_ - 1) % capacity_];
+  }
+
  private:
   std::vector<T> entries_;
   size_t capacity_;

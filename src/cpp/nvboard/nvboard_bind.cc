@@ -7,6 +7,15 @@ namespace npc {
 
 using namespace nvboard;
 
+namespace {
+
+// Attached board used by the ns16550 software model.  Set by
+// VerilatorCpu::VerilatorCpu (via nvboard_uart_attach) and cleared in its
+// destructor.
+nvboard::Board* g_uart_board = nullptr;
+
+}  // namespace
+
 static void bind_all_pins(nvboard::Board& board, VNPCSoC* top) {
   board.BindPin(&top->externalPins_gpio_out,
                 {LD15, LD14, LD13, LD12, LD11, LD10, LD9, LD8,
@@ -46,8 +55,9 @@ static void bind_all_pins(nvboard::Board& board, VNPCSoC* top) {
   board.BindPin(&top->externalPins_vga_b,
                 {VGA_B7, VGA_B6, VGA_B5, VGA_B4, VGA_B3, VGA_B2, VGA_B1, VGA_B0});
 
-  board.BindPin(&top->externalPins_uart_tx, {UART_TX});
-  board.BindPin(&top->externalPins_uart_rx, {UART_RX});
+  // UART pins are intentionally not bound here: the serial TX/RX lines on the
+  // SoC are stubs (see npc/src/scala/device/Uart16550.scala) and character
+  // transport happens byte-wise via DPI-C instead.
 }
 
 std::unique_ptr<nvboard::Board> nvboard_create(VNPCSoC* top,
@@ -55,6 +65,21 @@ std::unique_ptr<nvboard::Board> nvboard_create(VNPCSoC* top,
   auto board = nvboard::Board::Create(vga_clk_cycle);
   bind_all_pins(*board, top);
   return board;
+}
+
+void nvboard_uart_attach(nvboard::Board* board) { g_uart_board = board; }
+
+void nvboard_uart_putchar(uint8_t ch) {
+  if (g_uart_board == nullptr) return;
+  g_uart_board->uart().Putchar(ch);
+}
+
+bool nvboard_uart_try_getchar(uint8_t* out) {
+  if (g_uart_board == nullptr) return false;
+  auto& u = g_uart_board->uart();
+  if (!u.Available()) return false;
+  if (out != nullptr) *out = u.Getchar();
+  return true;
 }
 
 }  // namespace npc

@@ -30,6 +30,14 @@ ABSL_FLAG(uint64_t, wave_tail, 100000,
 ABSL_FLAG(std::string, image, "", "Path to binary image file");
 ABSL_FLAG(std::string, fsimg, "", "Disk image file for sync MMIO disk");
 ABSL_FLAG(std::string, log, "", "Path to log file (unused currently)");
+ABSL_FLAG(std::string, itrace_log, "",
+          "Append itrace (instruction trace) to this file in real time");
+ABSL_FLAG(std::string, dtrace_log, "",
+          "Append dtrace (MMIO trace) to this file in real time");
+ABSL_FLAG(std::string, mtrace_log, "",
+          "Append mtrace (memory trace) to this file in real time");
+ABSL_FLAG(std::string, ftrace_log, "",
+          "Append ftrace (function call trace) to this file in real time");
 
 int main(int argc, char* argv[]) {
   absl::ParseCommandLine(argc, argv);
@@ -86,6 +94,10 @@ int main(int argc, char* argv[]) {
 #else
   npc::ScoreBoard scrbrd(flash_data);
 #endif
+  scrbrd.open_itrace_log(absl::GetFlag(FLAGS_itrace_log));
+  scrbrd.open_dtrace_log(absl::GetFlag(FLAGS_dtrace_log));
+  scrbrd.open_mtrace_log(absl::GetFlag(FLAGS_mtrace_log));
+  scrbrd.open_ftrace_log(absl::GetFlag(FLAGS_ftrace_log));
   npc::Sdb sdb;
 
   auto status = sdb.mainloop(scrbrd, dut, absl::GetFlag(FLAGS_batch));

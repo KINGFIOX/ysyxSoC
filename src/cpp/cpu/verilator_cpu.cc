@@ -1,6 +1,5 @@
 #include "cpu/verilator_cpu.h"
 
-#include <climits>
 #include <stdexcept>
 #include <string>
 
@@ -26,59 +25,6 @@ void vl_stop(const char* filename, int linenum, const char* hier) {
 
 namespace npc {
 
-// ========================== UartTxDecoder ==========================
-//
-// Decodes 8N1 frames from the TX pin. The baud rate is auto-detected by
-// tracking the shortest pulse width (= 1 bit period). The first few
-// characters may be lost before calibration completes.
-
-void UartTxDecoder::Tick(bool tx, nvboard::Board* board) {
-  // Track pulse width for baud-rate auto-detection.
-  if (tx == prev_tx_) {
-    ++pulse_cycles_;
-  } else {
-    if (pulse_cycles_ > 0 && pulse_cycles_ < min_pulse_) {
-      min_pulse_ = pulse_cycles_;
-    }
-    pulse_cycles_ = 1;
-  }
-
-  switch (state_) {
-    case kIdle:
-      if (prev_tx_ && !tx) {
-        state_ = kReceiving;
-        counter_ = 0;
-        bit_index_ = 0;
-        byte_ = 0;
-      }
-      break;
-
-    case kReceiving:
-      ++counter_;
-      if (min_pulse_ < INT_MAX) {
-        const int bp = min_pulse_;
-        // Sample at the centre of each data bit:
-        //   centre of D[i] = bp + bp/2 + bp*i   (counted from falling edge)
-        const int target = bp + bp / 2 + bp * bit_index_;
-        if (counter_ == target) {
-          if (tx) byte_ |= static_cast<uint8_t>(1 << bit_index_);
-          ++bit_index_;
-          if (bit_index_ >= 8) {
-            if (board) board->uart().Putchar(byte_);
-            state_ = kIdle;
-          }
-        }
-      } else {
-        // Baud rate unknown yet — skip this frame.
-        // Timeout after a generous upper bound (e.g. 1M cycles).
-        if (counter_ > 1000000) state_ = kIdle;
-      }
-      break;
-  }
-
-  prev_tx_ = tx;
-}
-
 static constexpr const char* kVcdPath = "build/npc_core.vcd";
 
 VerilatorCpu::VerilatorCpu(absl::Span<const uint8_t> flash_data, bool nvboard)
@@ -90,12 +36,14 @@ VerilatorCpu::VerilatorCpu(absl::Span<const uint8_t> flash_data, bool nvboard)
 
   if (nvboard) {
     nvboard_ = nvboard_create(top_, 1);
+    nvboard_uart_attach(nvboard_.get());
   }
 
   reset();
 }
 
 VerilatorCpu::~VerilatorCpu() {
+  nvboard_uart_attach(nullptr);
   nvboard_.reset();
   if (tfp_ != nullptr) {
     tfp_->flush();
@@ -129,7 +77,6 @@ absl::Status VerilatorCpu::tick() {
 
   if (nvboard_) {
     nvboard_->Update();
-    uart_decoder_.Tick(top_->externalPins_uart_tx != 0, nvboard_.get());
   }
 
   if (tfp_ != nullptr && wave_tail_ > 0) {

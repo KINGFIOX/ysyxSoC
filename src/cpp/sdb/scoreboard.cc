@@ -1,5 +1,8 @@
 #include "sdb/scoreboard.h"
 
+#include <sstream>
+#include <ctime>
+
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
 #include "cpu/abstract_cpu.h"
@@ -38,16 +41,16 @@ static bool is_counter_csr_read(uint32_t inst, uint16_t* csr_out) {
   if (funct3 == 0 || funct3 == 4) return false;
   uint16_t csr = static_cast<uint16_t>((inst >> 20) & 0xfff);
   switch (csr) {
-    case 0xC00: // cycle
-    case 0xC01: // time
-    case 0xC02: // instret
-    case 0xC80: // cycleh
-    case 0xC81: // timeh
-    case 0xC82: // instreth
-    case 0xB00: // mcycle
-    case 0xB02: // minstret
-    case 0xB80: // mcycleh
-    case 0xB82: // minstreth
+    case 0xC00:  // cycle
+    case 0xC01:  // time
+    case 0xC02:  // instret
+    case 0xC80:  // cycleh
+    case 0xC81:  // timeh
+    case 0xC82:  // instreth
+    case 0xB00:  // mcycle
+    case 0xB02:  // minstret
+    case 0xB80:  // mcycleh
+    case 0xB82:  // minstreth
       if (csr_out) *csr_out = csr;
       return true;
     default:
@@ -85,23 +88,69 @@ ScoreBoard::ScoreBoard(absl::Span<const uint8_t> flash_data,
 #ifdef NPC_MTRACE
       mtrace_(kTraceCapacity),
 #endif
-      ftrace_(std::move(ftrace)) {}
+      ftrace_(std::move(ftrace)) {
+}
 #else
 ScoreBoard::ScoreBoard(absl::Span<const uint8_t> flash_data)
     : golden_(flash_data)
 #ifdef NPC_ITRACE
-      , itrace_(kTraceCapacity)
+      ,
+      itrace_(kTraceCapacity)
 #endif
 #ifdef NPC_DTRACE
-      , dtrace_(kTraceCapacity)
+      ,
+      dtrace_(kTraceCapacity)
 #endif
 #ifdef NPC_MTRACE
-      , mtrace_(kTraceCapacity)
+      ,
+      mtrace_(kTraceCapacity)
 #endif
-      {}
+{
+}
 #endif
 
 ScoreBoard::~ScoreBoard() = default;
+
+namespace {
+// Flush trace logs to disk once every N committed trace lines.  Small enough
+// that a watcher (tail -f) sees near-real-time updates, large enough not to
+// murder throughput.
+constexpr uint64_t kTraceFlushInterval = 4096;
+}  // namespace
+
+void ScoreBoard::open_itrace_log(const std::string& path) {
+  if (path.empty()) return;
+  itrace_log_.open(path, std::ios::out | std::ios::trunc);
+  if (!itrace_log_) LOG(WARNING) << "failed to open itrace log: " << path;
+}
+void ScoreBoard::open_dtrace_log(const std::string& path) {
+  if (path.empty()) return;
+  dtrace_log_.open(path, std::ios::out | std::ios::trunc);
+  if (!dtrace_log_) LOG(WARNING) << "failed to open dtrace log: " << path;
+}
+void ScoreBoard::open_mtrace_log(const std::string& path) {
+  if (path.empty()) return;
+  mtrace_log_.open(path, std::ios::out | std::ios::trunc);
+  if (!mtrace_log_) LOG(WARNING) << "failed to open mtrace log: " << path;
+}
+void ScoreBoard::open_ftrace_log(const std::string& path) {
+  if (path.empty()) return;
+  ftrace_log_.open(path, std::ios::out | std::ios::trunc);
+  if (!ftrace_log_) LOG(WARNING) << "failed to open ftrace log: " << path;
+}
+
+#ifdef NPC_FTRACE
+// Helper that serialises the last entry pushed into the ftrace ring buffer
+// and appends it to the live ftrace log (if one is open).
+void ScoreBoard::write_ftrace_last() {
+  if (!ftrace_log_.is_open() || !ftrace_) return;
+  const auto& ring = ftrace_->ring_buf;
+  if (ring.empty()) return;
+  std::ostringstream oss;
+  oss << ring.back();
+  ftrace_log_ << oss.str() << '\n';
+}
+#endif
 
 StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
                                   uint64_t* ebreak_a0) {
@@ -110,7 +159,11 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
   auto [mnemonic, disasm_str] = golden_.disasm(inst);
 
 #ifdef NPC_ITRACE
-  itrace_.push(ITraceEntry(pc, inst, disasm_str));
+  ITraceEntry itrace_entry(pc, inst, disasm_str);
+  itrace_.push(itrace_entry);
+  if (itrace_log_.is_open()) {
+    itrace_log_ << itrace_entry << '\n';
+  }
 #endif
 
   if (mnemonic == "ebreak") {
@@ -142,7 +195,9 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
           static_cast<uint64_t>(static_cast<int64_t>(base_val) + imm_s(inst));
       uint64_t data = golden_.gpr(rs2(inst)).value_or(0);
       uint8_t w = mem_width(mnemonic);
-      mtrace_.push(MTraceEntry(pc, MemDir::kWrite, addr, data, w, disasm_str));
+      MTraceEntry mentry(pc, MemDir::kWrite, addr, data, w, disasm_str);
+      mtrace_.push(mentry);
+      if (mtrace_log_.is_open()) mtrace_log_ << mentry << '\n';
 #endif
     } else if (is_load(mnemonic)) {
       uint64_t base_val = golden_.gpr(rs1(inst)).value_or(0);
@@ -151,13 +206,17 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
       uint8_t w = mem_width(mnemonic);
       [[maybe_unused]] uint64_t data = dut.mem_load(addr, w).value_or(0);
 #ifdef NPC_MTRACE
-      mtrace_.push(MTraceEntry(pc, MemDir::kRead, addr, data, w, disasm_str));
+      MTraceEntry mentry(pc, MemDir::kRead, addr, data, w, disasm_str);
+      mtrace_.push(mentry);
+      if (mtrace_log_.is_open()) mtrace_log_ << mentry << '\n';
 #endif
 #ifdef NPC_FTRACE
     } else if ((mnemonic == "jal" || mnemonic == "jalr") && rd(inst) == 1) {
       ftrace_->push_call(pc, dut.dnpc(), disasm_str);
+      write_ftrace_last();
     } else if (mnemonic == "ret") {
       ftrace_->push_ret(pc, dut.dnpc(), disasm_str);
+      write_ftrace_last();
 #endif
     }
   }
@@ -169,12 +228,21 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
 #ifdef NPC_FTRACE
   if ((mnemonic == "jal" || mnemonic == "jalr") && rd(inst) == 1) {
     ftrace_->push_call(pc, dut.dnpc(), disasm_str);
+    write_ftrace_last();
   } else if (mnemonic == "ret") {
     ftrace_->push_ret(pc, dut.dnpc(), disasm_str);
+    write_ftrace_last();
   }
 #endif
 #endif
 
+  if (++trace_line_cnt_ >= kTraceFlushInterval) {
+    trace_line_cnt_ = 0;
+    if (itrace_log_.is_open()) itrace_log_.flush();
+    if (dtrace_log_.is_open()) dtrace_log_.flush();
+    if (mtrace_log_.is_open()) mtrace_log_.flush();
+    if (ftrace_log_.is_open()) ftrace_log_.flush();
+  }
   return StepResult::kContinue;
 }
 
@@ -191,17 +259,31 @@ void ScoreBoard::handle_mmio(const VerilatorCpu& dut, uint64_t pc,
       (void)golden_.set_gpr(rd_idx, data);
     }
 #ifdef NPC_DTRACE
-    dtrace_.push(DTraceEntry(pc, MemDir::kRead, addr, data, mem_width(mnemonic),
-                             disasm_str));
+    DTraceEntry dentry(pc, MemDir::kRead, addr, data, mem_width(mnemonic),
+                       disasm_str);
+    dtrace_.push(dentry);
+    if (dtrace_log_.is_open()) dtrace_log_ << dentry << '\n';
 #endif
   } else if (is_store(mnemonic)) {
     uint64_t base_val = golden_.gpr(rs1(inst)).value_or(0);
     [[maybe_unused]] uint64_t addr =
         static_cast<uint64_t>(static_cast<int64_t>(base_val) + imm_s(inst));
     [[maybe_unused]] uint64_t data = golden_.gpr(rs2(inst)).value_or(0);
+    // Diagnostic: whenever the kernel writes to the 16550 THR (0x10000000)
+    // log the byte.  Any stdout character we ever see should appear here if
+    // it's coming from the MMIO path — otherwise it must be coming from the
+    // verilated UART TX pin decoder (see UartTxDecoder).
+    if (addr == 0x10000000) {
+      uint8_t ch = static_cast<uint8_t>(data & 0xff);
+      char pr[2] = {(ch >= 0x20 && ch < 0x7f) ? static_cast<char>(ch) : '.', '\0'};
+      LOG(INFO) << absl::StreamFormat("[MMIO-THR] pc=0x%016x data=0x%02x '%s'",
+                                      pc, static_cast<unsigned>(ch), pr);
+    }
 #ifdef NPC_DTRACE
-    dtrace_.push(DTraceEntry(pc, MemDir::kWrite, addr, data,
-                             mem_width(mnemonic), disasm_str));
+    DTraceEntry dentry(pc, MemDir::kWrite, addr, data, mem_width(mnemonic),
+                       disasm_str);
+    dtrace_.push(dentry);
+    if (dtrace_log_.is_open()) dtrace_log_ << dentry << '\n';
 #endif
   } else {
     LOG(WARNING) << absl::StreamFormat(

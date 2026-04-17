@@ -47,7 +47,6 @@ verilate(verilator_model
     --timescale "1ns/1ns"
     -O2 -Wall -Wno-fatal
     "-I${NPC_HOME}/src/verilog/spi/rtl"
-    "-I${NPC_HOME}/src/verilog/uart16550/rtl"
     "-I${RTL_DIR}/verification"
     "-I${RTL_DIR}/verification/assert"
     "-I${RTL_DIR}/verification/assume"
@@ -84,6 +83,7 @@ add_executable(npc
   ${SRC}/dpi/memory.cc
   ${SRC}/dpi/dpi.cc
   ${SRC}/dpi/sync_disk.cc
+  ${SRC}/dpi/uart_ns16550.cc
   ${SRC}/sdb/sdb.cc
   ${SRC}/sdb/command.cc
   ${SRC}/sdb/watchpoint.cc

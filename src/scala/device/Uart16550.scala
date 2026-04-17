@@ -6,45 +6,92 @@ import chisel3.util._
 import freechips.rocketchip.amba.apb._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.util._
 
 // ============================================================================
-// Uart
+// Fake UART (ns16550 in software via DPI-C)
 // ============================================================================
+//
+// The real uart16550 Verilog IP has been removed.  This module keeps the same
+// APB-facing interface but forwards every register access to a C++ software
+// model (see npc/src/cpp/dpi/uart_ns16550.cc, a port of spike's ns16550_t).
+//
+// There is no longer a serial `uart.tx` / `uart.rx` pin pair: characters are
+// transported byte-wise across the DPI-C boundary.  NVBoard's UART widget is
+// driven directly from the C++ side via `board.uart().Putchar(...)`; likewise
+// the keyboard RX queue is polled via `board.uart().Getchar()`.
+//
+// The interrupt line `interrupt` is sampled once per clock from the C++ model
+// via the `uart_tick` DPI call.
 
-class UARTIO extends Bundle {
-  val rx = Input(Bool())
-  val tx = Output(Bool())
+// --------------------------- DPI-C shells -----------------------------------
+
+// Synchronous DPI access shell: at each rising clock edge, if `valid` is
+// asserted, forward the access to the C++ ns16550 model and latch the read
+// data into `rdata`.  Also sample the current interrupt level every cycle.
+class UartDpiHelper
+    extends FixedIOExtModule(new Bundle {
+      val clock = Input(Clock())
+      val reset = Input(Reset())
+      val valid = Input(Bool())
+      val we    = Input(Bool())
+      val addr  = Input(UInt(8.W))
+      val wdata = Input(UInt(8.W))
+      val rdata = Output(UInt(8.W))
+      val int_o = Output(Bool())
+    }) {
+  setInline(
+    "UartDpiHelper.sv",
+    """module UartDpiHelper(
+      |  input         clock,
+      |  input         reset,
+      |  input         valid,
+      |  input         we,
+      |  input  [7:0]  addr,
+      |  input  [7:0]  wdata,
+      |  output reg [7:0] rdata,
+      |  output reg    int_o
+      |);
+      |import "DPI-C" function void uart_req(
+      |    input  bit   we,
+      |    input  byte  addr,
+      |    input  byte  wdata,
+      |    output byte  rdata);
+      |import "DPI-C" function void uart_tick(output bit int_o);
+      |byte dpi_rdata;
+      |bit  dpi_int;
+      |always @(posedge clock) begin
+      |  if (reset) begin
+      |    rdata <= 8'h00;
+      |    int_o <= 1'b0;
+      |  end else begin
+      |    if (valid) begin
+      |      uart_req(we, addr, wdata, dpi_rdata);
+      |      rdata <= dpi_rdata;
+      |    end
+      |    uart_tick(dpi_int);
+      |    int_o <= dpi_int;
+      |  end
+      |end
+      |endmodule
+    """.stripMargin
+  )
 }
+
+// --------------------------- APB wrapper ------------------------------------
 
 class uart_top_apb extends Module {
   val io = IO(new Bundle {
-    val in = Flipped(new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32)))
-    val uart = new UARTIO
+    val in        = Flipped(new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32)))
     val interrupt = Output(Bool())
   })
-  // module
-  val core = Module(new uart_regs)
-  core.io.clk := clock
-  core.io.wb_rst_i := reset
 
-  // modem inputs
-  val cts_n = false.B
-  val dsr_pad_i = false.B
-  val ri_pad_i = false.B
-  val dcd_pad_i = false.B
-  core.io.modem_inputs := Cat(!cts_n, dsr_pad_i, ri_pad_i, dcd_pad_i)
-
-  // uart tx rx
-  core.io.srx_pad_i := io.uart.rx
-  io.uart.tx := core.io.stx_pad_o
-
-  // interrupt
-  io.interrupt := core.io.int_o
+  val dpi = Module(new UartDpiHelper)
+  dpi.io.clock := clock
+  dpi.io.reset := reset
+  io.interrupt := dpi.io.int_o
 
   val apbSetupW = io.in.psel && !io.in.penable
 
-  // pstrb mux
   val wdataW = MuxLookup(io.in.pstrb, 0.U(8.W))(
     Seq(
       "b0001".U(4.W) -> io.in.pwdata(7, 0),
@@ -53,31 +100,29 @@ class uart_top_apb extends Module {
       "b1000".U(4.W) -> io.in.pwdata(31, 24)
     )
   )
-  val addrW = io.in.paddr(2,0) + MuxLookup(io.in.pstrb, 0.U(3.W)) {
+  val addrW = io.in.paddr(2, 0) + MuxLookup(io.in.pstrb, 0.U(3.W))(
     Seq(
       "b0001".U(4.W) -> 0.U,
       "b0010".U(4.W) -> 1.U,
       "b0100".U(4.W) -> 2.U,
       "b1000".U(4.W) -> 3.U
     )
-  }
+  )
 
-  // latch registers
-  val writeDataQ = RegInit(0.U(8.W))
-  val addrQ = RegInit(0.U(3.W))
+  // DPI request strobe and operands.  Fire exactly one DPI `uart_req` per APB
+  // transfer, on the transition idle -> setup.
+  val reqValid = WireInit(false.B)
+  dpi.io.valid := reqValid
+  dpi.io.we    := io.in.pwrite
+  dpi.io.addr  := Cat(0.U(5.W), addrW)
+  dpi.io.wdata := wdataW
 
-  // core io
-  core.io.wb_dat_i := writeDataQ
-  core.io.wb_addr_i := addrQ
-  io.in.prdata := core.io.wb_dat_o
-
-  // core io defaults
-  core.io.wb_we_i := false.B
-  core.io.wb_re_i := false.B
-
-  // apb defaults
-  io.in.pready := false.B
+  // For reads, replicate the decoded byte across all four APB lanes.  The
+  // master is expected to honour `pstrb` / `paddr(1,0)` and extract the right
+  // lane itself.
+  io.in.prdata  := Cat(dpi.io.rdata, dpi.io.rdata, dpi.io.rdata, dpi.io.rdata)
   io.in.pslverr := false.B
+  io.in.pready  := false.B
 
   object State extends ChiselEnum {
     val idle, setup = Value
@@ -85,24 +130,10 @@ class uart_top_apb extends Module {
   val stateQ = RegInit(State.idle)
 
   switch(stateQ) {
-    
     is(State.idle) {
       when(apbSetupW) {
-        // latch
-        writeDataQ := wdataW
-        addrQ := addrW
-
-        // io
-        core.io.wb_dat_i := wdataW
-        core.io.wb_addr_i := addrW
-        when(io.in.pwrite) {
-          core.io.wb_we_i := true.B
-        } .otherwise {
-          assert( io.in.pstrb === 0.U, "read not supported pstrb" )
-          core.io.wb_re_i := true.B
-        }
-
-        stateQ := State.setup
+        reqValid := true.B
+        stateQ   := State.setup
       }
     }
 
@@ -115,22 +146,7 @@ class uart_top_apb extends Module {
   }
 }
 
-class uart_regs
-    extends FixedIOExtModule(new Bundle {
-      val clk = Input(Clock())
-      val wb_rst_i = Input(Reset())
-      val wb_addr_i = Input(UInt(3.W))
-      val wb_dat_i = Input(UInt(8.W))
-      val wb_dat_o = Output(UInt(8.W))
-      val wb_we_i = Input(Bool())
-      val wb_re_i = Input(Bool())
-      val modem_inputs = Input(UInt(4.W))
-      val stx_pad_o = Output(Bool())
-      val srx_pad_i = Input(Bool())
-      val rts_pad_o = Output(Bool())
-      val dtr_pad_o = Output(Bool())
-      val int_o = Output(Bool())
-    })
+// --------------------------- Diplomatic node --------------------------------
 
 class APBUart16550(address: Seq[AddressSet])(implicit p: Parameters)
     extends LazyModule {
@@ -152,13 +168,11 @@ class APBUart16550(address: Seq[AddressSet])(implicit p: Parameters)
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
-    val (in, _) = node.in(0)
-    val uart = IO(new UARTIO)
+    val (in, _)   = node.in(0)
     val interrupt = IO(Output(Bool()))
 
     val muart = Module(new uart_top_apb)
     muart.io.in <> in
-    uart <> muart.io.uart
     interrupt := muart.io.interrupt
   }
 }

@@ -132,6 +132,7 @@ Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut, ScoreBoard & scrb
       return CmdResult::Continue();
     }
 #endif
+
 #ifdef NPC_WATCHPOINT
     std::string wp_buf;
     if (watchpoints_.check(dut, wp_buf)) {
@@ -139,6 +140,7 @@ Sdb::CmdResult Sdb::execute_steps(size_t n, VerilatorCpu& dut, ScoreBoard & scrb
       return CmdResult::Continue();
     }
 #endif
+
   }
   return CmdResult::Continue();
 }
