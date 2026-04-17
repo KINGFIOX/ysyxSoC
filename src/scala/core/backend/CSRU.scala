@@ -24,13 +24,34 @@ class CSRUDebugBundle
     extends Bundle
     with HasCoreParameter
     with HasCSRParameter {
-  val mstatus = UInt(dataBits.W)
-  val mtvec = UInt(dataBits.W)
-  val mepc = UInt(dataBits.W)
-  val mcause = UInt(dataBits.W)
-  val mtval = UInt(dataBits.W)
+  // M-mode trap setup / handling
+  val mstatus    = UInt(dataBits.W)
+  val mtvec      = UInt(dataBits.W)
+  val mepc       = UInt(dataBits.W)
+  val mcause     = UInt(dataBits.W)
+  val mtval      = UInt(dataBits.W)
+  val medeleg    = UInt(dataBits.W)
+  val mideleg    = UInt(dataBits.W)
+  val mie        = UInt(dataBits.W)
+  val mscratch   = UInt(dataBits.W)
+  val menvcfg    = UInt(dataBits.W)
+  val mcounteren = UInt(dataBits.W)
+  val pmpcfg0    = UInt(dataBits.W)
+  val pmpaddr0   = UInt(dataBits.W)
+
+  // S-mode trap setup / handling
+  val stvec    = UInt(dataBits.W)
+  val sepc     = UInt(dataBits.W)
+  val scause   = UInt(dataBits.W)
+  val stval    = UInt(dataBits.W)
+  val sscratch = UInt(dataBits.W)
+  val satp     = UInt(dataBits.W)
+  val stimecmp = UInt(dataBits.W)
+
+  // Read-only identifiers
   val mvendorid = UInt(dataBits.W)
-  val marchid = UInt(dataBits.W)
+  val marchid   = UInt(dataBits.W)
+  val mhartid   = UInt(dataBits.W)
 }
 
 class CSRU extends LateExecUnit(new CsrWriteOnlyPort, 1) {
@@ -322,12 +343,30 @@ class CSRU extends LateExecUnit(new CsrWriteOnlyPort, 1) {
   // Debug probe
   // ================================================================
   val csrDebugBundle = Wire(new CSRUDebugBundle)
-  csrDebugBundle.mstatus := mstatus
-  csrDebugBundle.mtvec := mtvec
-  csrDebugBundle.mepc := mepc
-  csrDebugBundle.mcause := mcause
-  csrDebugBundle.mtval := mtval
+  csrDebugBundle.mstatus    := mstatus
+  csrDebugBundle.mtvec      := mtvec
+  csrDebugBundle.mepc       := mepc
+  csrDebugBundle.mcause     := mcause
+  csrDebugBundle.mtval      := mtval
+  csrDebugBundle.medeleg    := medeleg
+  csrDebugBundle.mideleg    := mideleg
+  csrDebugBundle.mie        := mie
+  csrDebugBundle.mscratch   := mscratch
+  csrDebugBundle.menvcfg    := menvcfg
+  csrDebugBundle.mcounteren := mcounteren
+  csrDebugBundle.pmpcfg0    := pmpcfg0
+  csrDebugBundle.pmpaddr0   := pmpaddr0
+
+  csrDebugBundle.stvec    := stvec
+  csrDebugBundle.sepc     := sepc
+  csrDebugBundle.scause   := scause
+  csrDebugBundle.stval    := stval
+  csrDebugBundle.sscratch := sscratch
+  csrDebugBundle.satp     := satp
+  csrDebugBundle.stimecmp := stimecmp
+
   csrDebugBundle.mvendorid := mvendorid
-  csrDebugBundle.marchid := marchid
+  csrDebugBundle.marchid   := marchid
+  csrDebugBundle.mhartid   := mhartid
   probe := csrDebugBundle
 }

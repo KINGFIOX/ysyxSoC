@@ -132,13 +132,9 @@ uint32_t VerilatorCpu::perf_flush_cnt() const {
   return top_->probe_bits_perf_flush_cnt;
 }
 
-// ========================== AbstractCpu ==========================
+// ========================== CpuRegView ==========================
 
 uint64_t VerilatorCpu::pc() const { return top_->probe_bits_pc; }
-
-absl::Status VerilatorCpu::set_pc(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_pc");
-}
 
 absl::StatusOr<uint64_t> VerilatorCpu::gpr(int index) const {
   if (index < 0 || index >= 32) {
@@ -215,55 +211,55 @@ absl::StatusOr<uint64_t> VerilatorCpu::gpr(int index) const {
   }
 }
 
-absl::Status VerilatorCpu::set_gpr(int /*index*/, uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_gpr");
-}
-
 uint64_t VerilatorCpu::mstatus() const { return top_->probe_bits_csr_mstatus; }
-absl::Status VerilatorCpu::set_mstatus(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_mstatus");
-}
-
 uint64_t VerilatorCpu::mtvec() const { return top_->probe_bits_csr_mtvec; }
-absl::Status VerilatorCpu::set_mtvec(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_mtvec");
-}
-
 uint64_t VerilatorCpu::mepc() const { return top_->probe_bits_csr_mepc; }
-absl::Status VerilatorCpu::set_mepc(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_mepc");
-}
-
 uint64_t VerilatorCpu::mcause() const { return top_->probe_bits_csr_mcause; }
-absl::Status VerilatorCpu::set_mcause(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_mcause");
+uint64_t VerilatorCpu::mtval() const { return top_->probe_bits_csr_mtval; }
+uint64_t VerilatorCpu::medeleg() const {
+  return top_->probe_bits_csr_medeleg;
+}
+uint64_t VerilatorCpu::mideleg() const {
+  return top_->probe_bits_csr_mideleg;
+}
+uint64_t VerilatorCpu::mie() const { return top_->probe_bits_csr_mie; }
+uint64_t VerilatorCpu::mscratch() const {
+  return top_->probe_bits_csr_mscratch;
+}
+uint64_t VerilatorCpu::menvcfg() const {
+  return top_->probe_bits_csr_menvcfg;
+}
+uint64_t VerilatorCpu::mcounteren() const {
+  return top_->probe_bits_csr_mcounteren;
+}
+uint64_t VerilatorCpu::pmpcfg0() const {
+  return top_->probe_bits_csr_pmpcfg0;
+}
+uint64_t VerilatorCpu::pmpaddr0() const {
+  return top_->probe_bits_csr_pmpaddr0;
 }
 
-uint64_t VerilatorCpu::mtval() const { return top_->probe_bits_csr_mtval; }
-absl::Status VerilatorCpu::set_mtval(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_mtval");
+uint64_t VerilatorCpu::stvec() const { return top_->probe_bits_csr_stvec; }
+uint64_t VerilatorCpu::sepc() const { return top_->probe_bits_csr_sepc; }
+uint64_t VerilatorCpu::scause() const { return top_->probe_bits_csr_scause; }
+uint64_t VerilatorCpu::stval() const { return top_->probe_bits_csr_stval; }
+uint64_t VerilatorCpu::sscratch() const {
+  return top_->probe_bits_csr_sscratch;
+}
+uint64_t VerilatorCpu::satp() const { return top_->probe_bits_csr_satp; }
+uint64_t VerilatorCpu::stimecmp() const {
+  return top_->probe_bits_csr_stimecmp;
 }
 
 uint64_t VerilatorCpu::mvendorid() const {
   return top_->probe_bits_csr_mvendorid;
 }
-absl::Status VerilatorCpu::set_mvendorid(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_mvendorid");
-}
-
 uint64_t VerilatorCpu::marchid() const { return top_->probe_bits_csr_marchid; }
-absl::Status VerilatorCpu::set_marchid(uint64_t /*value*/) {
-  return absl::UnimplementedError("DUT does not support set_marchid");
-}
+uint64_t VerilatorCpu::mhartid() const { return top_->probe_bits_csr_mhartid; }
 
 absl::StatusOr<uint64_t> VerilatorCpu::mem_load(uint64_t addr,
                                                 uint8_t width) const {
   return mem_.load(addr, width);
-}
-
-absl::Status VerilatorCpu::mem_store(uint64_t addr, uint64_t value,
-                                     uint8_t width) {
-  return mem_.store(addr, value, width);
 }
 
 void VerilatorCpu::reset() {

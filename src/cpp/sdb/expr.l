@@ -4,10 +4,10 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 #include "expr.tab.h"
 
-extern const npc::AbstractCpu* expr_cpu;
+extern const npc::CpuRegView* expr_cpu;
 extern bool expr_lexer_error;
 extern int yyerror(const char* msg);
 %}

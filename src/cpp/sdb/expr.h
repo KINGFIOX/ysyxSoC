@@ -5,7 +5,7 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 
 namespace npc {
 
@@ -13,7 +13,7 @@ namespace npc {
 // Supports: decimal, hex (0x...), $register, arithmetic (+,-,*,/),
 // comparison (==,!=,<,<=,>,>=), logical (&&,||), unary (-), deref (*addr).
 absl::StatusOr<uint64_t> ExprEval(absl::string_view expr,
-                                   const AbstractCpu& cpu);
+                                   const CpuRegView& cpu);
 
 }  // namespace npc
 

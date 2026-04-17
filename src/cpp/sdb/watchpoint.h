@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "absl/status/statusor.h"
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 
 namespace npc {
 
@@ -20,12 +20,12 @@ class WatchpointPool {
  public:
   WatchpointPool() = default;
 
-  absl::StatusOr<int> add(const std::string& expr, const AbstractCpu& cpu);
+  absl::StatusOr<int> add(const std::string& expr, const CpuRegView& cpu);
   bool remove(int id);
 
   // Check all watchpoints. Returns true if any watchpoint triggered.
   // Appends messages about triggered watchpoints to `out`.
-  bool check(const AbstractCpu& cpu, std::string& out);
+  bool check(const CpuRegView& cpu, std::string& out);
 
   void list(std::string& out) const;
 

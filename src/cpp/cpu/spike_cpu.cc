@@ -151,6 +151,104 @@ absl::Status SpikeCpu::set_marchid(uint64_t v) {
   return absl::OkStatus();
 }
 
+uint64_t SpikeCpu::medeleg() const { return proc_->get_csr(kCsrMedeleg); }
+absl::Status SpikeCpu::set_medeleg(uint64_t v) {
+  proc_->put_csr(kCsrMedeleg, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::mideleg() const { return proc_->get_csr(kCsrMideleg); }
+absl::Status SpikeCpu::set_mideleg(uint64_t v) {
+  proc_->put_csr(kCsrMideleg, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::mie() const { return proc_->get_csr(kCsrMie); }
+absl::Status SpikeCpu::set_mie(uint64_t v) {
+  proc_->put_csr(kCsrMie, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::mscratch() const { return proc_->get_csr(kCsrMscratch); }
+absl::Status SpikeCpu::set_mscratch(uint64_t v) {
+  proc_->put_csr(kCsrMscratch, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::menvcfg() const { return proc_->get_csr(kCsrMenvcfg); }
+absl::Status SpikeCpu::set_menvcfg(uint64_t v) {
+  proc_->put_csr(kCsrMenvcfg, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::mcounteren() const {
+  return proc_->get_csr(kCsrMcounteren);
+}
+absl::Status SpikeCpu::set_mcounteren(uint64_t v) {
+  proc_->put_csr(kCsrMcounteren, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::pmpcfg0() const { return proc_->get_csr(kCsrPmpcfg0); }
+absl::Status SpikeCpu::set_pmpcfg0(uint64_t v) {
+  proc_->put_csr(kCsrPmpcfg0, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::pmpaddr0() const { return proc_->get_csr(kCsrPmpaddr0); }
+absl::Status SpikeCpu::set_pmpaddr0(uint64_t v) {
+  proc_->put_csr(kCsrPmpaddr0, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::stvec() const { return proc_->get_csr(kCsrStvec); }
+absl::Status SpikeCpu::set_stvec(uint64_t v) {
+  proc_->put_csr(kCsrStvec, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::sepc() const { return proc_->get_csr(kCsrSepc); }
+absl::Status SpikeCpu::set_sepc(uint64_t v) {
+  proc_->put_csr(kCsrSepc, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::scause() const { return proc_->get_csr(kCsrScause); }
+absl::Status SpikeCpu::set_scause(uint64_t v) {
+  proc_->put_csr(kCsrScause, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::stval() const { return proc_->get_csr(kCsrStval); }
+absl::Status SpikeCpu::set_stval(uint64_t v) {
+  proc_->put_csr(kCsrStval, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::sscratch() const { return proc_->get_csr(kCsrSscratch); }
+absl::Status SpikeCpu::set_sscratch(uint64_t v) {
+  proc_->put_csr(kCsrSscratch, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::satp() const { return proc_->get_csr(kCsrSatp); }
+absl::Status SpikeCpu::set_satp(uint64_t v) {
+  proc_->put_csr(kCsrSatp, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::stimecmp() const { return proc_->get_csr(kCsrStimecmp); }
+absl::Status SpikeCpu::set_stimecmp(uint64_t v) {
+  proc_->put_csr(kCsrStimecmp, v);
+  return absl::OkStatus();
+}
+
+uint64_t SpikeCpu::mhartid() const { return proc_->get_csr(kCsrMhartid); }
+absl::Status SpikeCpu::set_mhartid(uint64_t v) {
+  proc_->put_csr(kCsrMhartid, v);
+  return absl::OkStatus();
+}
+
 absl::StatusOr<uint64_t> SpikeCpu::mem_load(uint64_t addr,
                                              uint8_t width) const {
   try {

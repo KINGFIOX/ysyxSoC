@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 
 typedef struct yy_buffer_state* YY_BUFFER_STATE;
 int yylex(void);
@@ -18,7 +18,7 @@ bool expr_parse_error;
 bool expr_lexer_error;
 static bool runtime_error;
 
-const npc::AbstractCpu* expr_cpu = nullptr;
+const npc::CpuRegView* expr_cpu = nullptr;
 
 %}
 
@@ -115,7 +115,7 @@ primary:
 
 %%
 
-uint64_t expr_eval(const char* expr_str, const npc::AbstractCpu* cpu,
+uint64_t expr_eval(const char* expr_str, const npc::CpuRegView* cpu,
                    bool* success) {
   parse_result = 0;
   expr_parse_error = false;

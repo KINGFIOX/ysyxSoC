@@ -10,7 +10,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 #include "sdb/command.h"
 #include "sdb/expr.h"
 #include "sdb/scoreboard.h"

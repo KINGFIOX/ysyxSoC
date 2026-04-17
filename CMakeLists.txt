@@ -77,7 +77,7 @@ add_flex_bison_dependency(ExprLexer ExprParser)
 
 add_executable(npc
   ${SRC}/main.cc
-  ${SRC}/cpu/abstract_cpu.cc
+  ${SRC}/cpu/cpu_reg_view.cc
   ${SRC}/cpu/verilator_cpu.cc
   ${SRC}/cpu/spike_cpu.cc
   ${SRC}/dpi/memory.cc

@@ -10,7 +10,7 @@
 namespace npc {
 
 absl::StatusOr<int> WatchpointPool::add(const std::string& expr,
-                                        const AbstractCpu& cpu) {
+                                        const CpuRegView& cpu) {
   auto val = ExprEval(expr, cpu);
   if (!val.ok()) {
     return val.status();
@@ -32,7 +32,7 @@ bool WatchpointPool::remove(int id) {
   return true;
 }
 
-bool WatchpointPool::check(const AbstractCpu& cpu, std::string& out) {
+bool WatchpointPool::check(const CpuRegView& cpu, std::string& out) {
   bool triggered = false;
   for (auto& wp : watchpoints_) {
     auto val = ExprEval(wp.expr, cpu);

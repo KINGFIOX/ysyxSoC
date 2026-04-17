@@ -1,4 +1,4 @@
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
@@ -6,31 +6,44 @@
 
 namespace npc {
 
-absl::StatusOr<uint64_t> AbstractCpu::value(absl::string_view name) const {
+absl::StatusOr<uint64_t> CpuRegView::value(absl::string_view name) const {
   if (name == "pc") {
     return pc();
   }
 
-  if (name == "mstatus") {
-    return mstatus();
-  }
-  if (name == "mtvec") {
-    return mtvec();
-  }
-  if (name == "mepc") {
-    return mepc();
-  }
-  if (name == "mcause") {
-    return mcause();
-  }
-  if (name == "mtval") {
-    return mtval();
-  }
-  if (name == "mvendorid") {
-    return mvendorid();
-  }
-  if (name == "marchid") {
-    return marchid();
+  struct CsrEntry {
+    absl::string_view name;
+    uint64_t (CpuRegView::*getter)() const;
+  };
+  static constexpr CsrEntry kCsrEntries[] = {
+      {.name = "mstatus", .getter = &CpuRegView::mstatus},
+      {.name = "mtvec", .getter = &CpuRegView::mtvec},
+      {.name = "mepc", .getter = &CpuRegView::mepc},
+      {.name = "mcause", .getter = &CpuRegView::mcause},
+      {.name = "mtval", .getter = &CpuRegView::mtval},
+      {.name = "medeleg", .getter = &CpuRegView::medeleg},
+      {.name = "mideleg", .getter = &CpuRegView::mideleg},
+      {.name = "mie", .getter = &CpuRegView::mie},
+      {.name = "mscratch", .getter = &CpuRegView::mscratch},
+      {.name = "menvcfg", .getter = &CpuRegView::menvcfg},
+      {.name = "mcounteren", .getter = &CpuRegView::mcounteren},
+      {.name = "pmpcfg0", .getter = &CpuRegView::pmpcfg0},
+      {.name = "pmpaddr0", .getter = &CpuRegView::pmpaddr0},
+      {.name = "stvec", .getter = &CpuRegView::stvec},
+      {.name = "sepc", .getter = &CpuRegView::sepc},
+      {.name = "scause", .getter = &CpuRegView::scause},
+      {.name = "stval", .getter = &CpuRegView::stval},
+      {.name = "sscratch", .getter = &CpuRegView::sscratch},
+      {.name = "satp", .getter = &CpuRegView::satp},
+      {.name = "stimecmp", .getter = &CpuRegView::stimecmp},
+      {.name = "mvendorid", .getter = &CpuRegView::mvendorid},
+      {.name = "marchid", .getter = &CpuRegView::marchid},
+      {.name = "mhartid", .getter = &CpuRegView::mhartid},
+  };
+  for (const auto& e : kCsrEntries) {
+    if (name == e.name) {
+      return (this->*e.getter)();
+    }
   }
 
   // x0..x31

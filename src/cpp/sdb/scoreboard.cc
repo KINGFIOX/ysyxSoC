@@ -5,7 +5,7 @@
 
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 
 namespace npc {
 
@@ -317,13 +317,13 @@ bool ScoreBoard::check_regs(const VerilatorCpu& dut) const {
 
   struct CsrCheck {
     const char* name;
-    uint64_t (AbstractCpu::*getter)() const;
+    uint64_t (CpuRegView::*getter)() const;
   };
   static constexpr CsrCheck kCsrChecks[] = {
-      {"mtvec", &AbstractCpu::mtvec},
-      {"mepc", &AbstractCpu::mepc},
-      {"mcause", &AbstractCpu::mcause},
-      {"mtval", &AbstractCpu::mtval},
+      {"mtvec", &CpuRegView::mtvec},
+      {"mepc", &CpuRegView::mepc},
+      {"mcause", &CpuRegView::mcause},
+      {"mtval", &CpuRegView::mtval},
   };
   for (const auto& [name, getter] : kCsrChecks) {
     uint64_t dut_val = (dut.*getter)();

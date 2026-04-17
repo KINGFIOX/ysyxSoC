@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "absl/types/span.h"
-#include "cpu/abstract_cpu.h"
+#include "cpu/cpu_reg_view.h"
 #include "dpi/memory.h"
 
 class VerilatedContext;
@@ -21,7 +21,7 @@ namespace npc {
 inline constexpr int kResetCycles = 15;
 inline constexpr int kMaxStepCycles = 100000;
 
-class VerilatorCpu final : public AbstractCpu {
+class VerilatorCpu final : public CpuRegView {
  public:
   VerilatorCpu(absl::Span<const uint8_t> flash_data, bool nvboard);
   ~VerilatorCpu() override;
@@ -30,6 +30,9 @@ class VerilatorCpu final : public AbstractCpu {
   uint64_t sim_time() const { return sim_time_; }
   absl::Status run_until(uint64_t target_sim_time);
   void enable_wave(uint64_t tail = 0);
+
+  void reset();
+  absl::Status step();
 
   // Probe signals from RTL
   bool is_mmio() const;
@@ -42,33 +45,38 @@ class VerilatorCpu final : public AbstractCpu {
   uint32_t perf_branch_mispredict_cnt() const;
   uint32_t perf_flush_cnt() const;
 
-  // AbstractCpu interface
+  // CpuRegView interface (read-only)
   uint64_t pc() const override;
-  absl::Status set_pc(uint64_t value) override;
   absl::StatusOr<uint64_t> gpr(int index) const override;
-  absl::Status set_gpr(int index, uint64_t value) override;
 
   uint64_t mstatus() const override;
-  absl::Status set_mstatus(uint64_t value) override;
   uint64_t mtvec() const override;
-  absl::Status set_mtvec(uint64_t value) override;
   uint64_t mepc() const override;
-  absl::Status set_mepc(uint64_t value) override;
   uint64_t mcause() const override;
-  absl::Status set_mcause(uint64_t value) override;
   uint64_t mtval() const override;
-  absl::Status set_mtval(uint64_t value) override;
+  uint64_t medeleg() const override;
+  uint64_t mideleg() const override;
+  uint64_t mie() const override;
+  uint64_t mscratch() const override;
+  uint64_t menvcfg() const override;
+  uint64_t mcounteren() const override;
+  uint64_t pmpcfg0() const override;
+  uint64_t pmpaddr0() const override;
+
+  uint64_t stvec() const override;
+  uint64_t sepc() const override;
+  uint64_t scause() const override;
+  uint64_t stval() const override;
+  uint64_t sscratch() const override;
+  uint64_t satp() const override;
+  uint64_t stimecmp() const override;
+
   uint64_t mvendorid() const override;
-  absl::Status set_mvendorid(uint64_t value) override;
   uint64_t marchid() const override;
-  absl::Status set_marchid(uint64_t value) override;
+  uint64_t mhartid() const override;
 
   absl::StatusOr<uint64_t> mem_load(uint64_t addr,
                                      uint8_t width) const override;
-  absl::Status mem_store(uint64_t addr, uint64_t value,
-                         uint8_t width) override;
-  void reset() override;
-  absl::Status step() override;
 
  private:
   absl::Status tick();
