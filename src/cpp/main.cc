@@ -38,6 +38,9 @@ ABSL_FLAG(std::string, mtrace_log, "",
           "Append mtrace (memory trace) to this file in real time");
 ABSL_FLAG(std::string, ftrace_log, "",
           "Append ftrace (function call trace) to this file in real time");
+ABSL_FLAG(bool, ftrace_stdout, false,
+          "Also mirror ftrace entries to stdout as they happen (useful when "
+          "debugging a long-running boot with no other output channel).");
 
 int main(int argc, char* argv[]) {
   absl::ParseCommandLine(argc, argv);
@@ -94,10 +97,14 @@ int main(int argc, char* argv[]) {
 #else
   npc::ScoreBoard scrbrd(flash_data);
 #endif
+  npc::g_golden_cpu = &scrbrd.golden();
   scrbrd.open_itrace_log(absl::GetFlag(FLAGS_itrace_log));
   scrbrd.open_dtrace_log(absl::GetFlag(FLAGS_dtrace_log));
   scrbrd.open_mtrace_log(absl::GetFlag(FLAGS_mtrace_log));
   scrbrd.open_ftrace_log(absl::GetFlag(FLAGS_ftrace_log));
+#ifdef NPC_FTRACE
+  scrbrd.set_ftrace_stdout(absl::GetFlag(FLAGS_ftrace_stdout));
+#endif
   npc::Sdb sdb;
 
   auto status = sdb.mainloop(scrbrd, dut, absl::GetFlag(FLAGS_batch));

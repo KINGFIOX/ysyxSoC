@@ -175,6 +175,7 @@ object CU {
     InstPattern( func7 = BitPat("b0011000"), rs2 = BitPat("b00010"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // MRET
     InstPattern( func7 = BitPat("b0001000"), rs2 = BitPat("b00010"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // SRET
     InstPattern( func7 = BitPat("b0001001"),                         func3 = BitPat("b000"), opcode = BitPat("b1110011")), // SFENCE.VMA
+    InstPattern( func7 = BitPat("b0001000"), rs2 = BitPat("b00101"), func3 = BitPat("b000"), opcode = BitPat("b1110011")), // WFI (treated as NOP = add x0, x0, x0)
     // CSR (func3 + opcode)
     InstPattern(func3 = BitPat("b001"), opcode = BitPat("b1110011")), // CSRRW
     InstPattern(func3 = BitPat("b010"), opcode = BitPat("b1110011")), // CSRRS
@@ -216,6 +217,7 @@ object CU {
           case ("0011000", "00010", "000") => bp(InstType.MRET)
           case ("0001000", "00010", "000") => bp(InstType.SRET)
           case ("0001001", _,      "000") => bp(InstType.SFENCE_VMA)
+          case ("0001000", "00101", "000") => bp(InstType.R_ALU) // WFI -> NOP (add x0,x0,x0)
           case ("???????", "?????", "001") => bp(InstType.CSR)
           case ("???????", "?????", "010") => bp(InstType.CSR)
           case ("???????", "?????", "011") => bp(InstType.CSR)
@@ -291,11 +293,11 @@ object CU {
     private def bp(v: ImmType.Type): BitPat = litBP(v.litValue, width)
     def genTable(op: InstPattern): BitPat = op.opcode.rawString match {
       case OP_I_ALU | OP_I_ALU_W | OP_LOAD | OP_JALR | OP_SYSTEM => bp(ImmType.IMM_I)
-      case OP_STORE                                               => bp(ImmType.IMM_S)
-      case OP_BRANCH                                              => bp(ImmType.IMM_B)
+      case OP_STORE                                              => bp(ImmType.IMM_S)
+      case OP_BRANCH                                             => bp(ImmType.IMM_B)
       case OP_LUI | OP_AUIPC                                     => bp(ImmType.IMM_U)
-      case OP_JAL                                                 => bp(ImmType.IMM_J)
-      case _                                                      => dc
+      case OP_JAL                                                => bp(ImmType.IMM_J)
+      case _                                                     => dc
     }
   }
   // format: on

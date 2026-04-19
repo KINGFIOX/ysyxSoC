@@ -9,6 +9,7 @@
 // The DPI entry points match the SystemVerilog imports in UartDpiHelper.sv.
 
 #include <cstdint>
+#include <cstdio>
 #include <queue>
 
 #include "nvboard/nvboard_bind.h"
@@ -100,6 +101,8 @@ class Ns16550 {
           break;
         }
         TxByte(val);
+        // NS16550: writing THR re-enables THRE interrupt generation.
+        thri_suppress_ = false;
         break;
       case UART_IER:
         if (!(lcr_ & UART_LCR_DLAB)) {
@@ -151,6 +154,13 @@ class Ns16550 {
         break;
       case UART_IIR:
         val = iir_ | UART_IIR_TYPE_BITS;
+        // NS16550: reading IIR clears the THRE interrupt indication until
+        // the next THR write.  Without this, a simulated UART that keeps THR
+        // empty permanently would fire the IRQ every cycle.
+        if ((iir_ & ~UART_IIR_NO_INT) == UART_IIR_THRI) {
+          thri_suppress_ = true;
+          update = true;
+        }
         break;
       case UART_LCR:
         val = lcr_;
@@ -235,7 +245,7 @@ class Ns16550 {
     if ((ier_ & UART_IER_RDI) && (lsr_ & UART_LSR_DR)) {
       interrupts |= UART_IIR_RDI;
     }
-    if ((ier_ & UART_IER_THRI) && (lsr_ & UART_LSR_TEMT)) {
+    if ((ier_ & UART_IER_THRI) && (lsr_ & UART_LSR_TEMT) && !thri_suppress_) {
       interrupts |= UART_IIR_THRI;
     }
 
@@ -265,6 +275,7 @@ class Ns16550 {
   uint8_t scr_ = 0;
   int backoff_counter_ = 0;
   uint8_t int_level_ = 0;
+  bool thri_suppress_ = false;
 };
 
 Ns16550 g_uart;

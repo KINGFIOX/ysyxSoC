@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "absl/log/log.h"
+#include "cpu/spike_cpu.h"
 #include "dpi/memory.h"
 
 namespace npc {
@@ -146,6 +147,23 @@ void SyncDisk::execute_command() {
       std::memset(sdram_ptr + got, 0, total_bytes - got);
     }
     last_result_bytes_ = static_cast<uint32_t>(total_bytes);
+
+    // Mirror the DMA-written bytes into the golden (Spike) memory so that
+    // subsequent loads from the kernel see the same content as the DUT.
+    if (g_golden_cpu != nullptr) {
+      const size_t n = total_bytes;
+      size_t i = 0;
+      while (i + 8 <= n) {
+        uint64_t v;
+        std::memcpy(&v, sdram_ptr + i, 8);
+        (void)g_golden_cpu->mem_store(pa + i, v, 8);
+        i += 8;
+      }
+      while (i < n) {
+        (void)g_golden_cpu->mem_store(pa + i, sdram_ptr[i], 1);
+        ++i;
+      }
+    }
   } else {
     ssize_t wrote = pwrite(fd_, sdram_ptr, total_bytes, disk_offset);
     if (wrote < 0 || static_cast<size_t>(wrote) != total_bytes) {

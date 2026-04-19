@@ -330,6 +330,8 @@ class DCacheImpl(
           state_q := State.flush_wb
         }
       }.otherwise {
+        // Clean (or empty) line: invalidate it so DMA-updated memory is re-fetched.
+        tag_ram(flush_set).valids(flush_way) := false.B
         val way_wrap = flush_way === (nWays - 1).U
         val set_wrap = flush_set === (nSets - 1).U
         when(way_wrap) {
@@ -367,6 +369,8 @@ class DCacheImpl(
 
       when(wb_burst_done && b_received) {
         tag_ram(index_reg).dirtys(replace_way_reg) := false.B
+        // Invalidate the line after writeback so DMA-updated memory is re-fetched.
+        tag_ram(index_reg).valids(replace_way_reg) := false.B
         val way_wrap = flush_way === (nWays - 1).U
         val set_wrap = flush_set === (nSets - 1).U
         when(way_wrap) {

@@ -33,13 +33,18 @@ class plic_apb(numSources: Int = 32) extends Module {
   val s_threshold = RegInit(0.U(32.W))
   val claimed  = RegInit(0.U(numSources.W))
 
-  // Edge detection: latch rising edges of source signals into pending
-  val sources_prev = RegNext(io.sources)
-  for (i <- 1 until numSources) {
-    when(io.sources(i) && !sources_prev(i) && !claimed(i)) {
-      pending := pending | (1.U << i.U)
-    }
-  }
+  // Level-sensitive gateway: while source is high and the IRQ is not currently
+  // being serviced (claimed), keep pending asserted. Once claimed, hold until
+  // plic_complete clears `claimed`, then re-arm if source is still high.
+  val sources_vec = io.sources.asUInt
+  // claim_set/clear are driven by the access path below; defaults are 0
+  val claim_set   = WireDefault(0.U(numSources.W))
+  val claim_clear = WireDefault(0.U(numSources.W))
+  // Use the in-flight claim (claim_set) to mask the gateway in the same cycle
+  // so the just-claimed bit cannot be re-asserted before plic_complete runs.
+  val claimed_eff = claimed | claim_set
+  val gateway_set = sources_vec & ~claimed_eff
+  pending := (pending & ~claim_clear) | gateway_set
 
   // Determine highest-priority pending & enabled interrupt for S-mode claim
   val claimable = pending & s_enable & ~claimed
@@ -91,7 +96,8 @@ class plic_apb(numSources: Int = 32) extends Module {
             // S-mode claim (hart 0)
             rdataQ := best_irq
             when(best_irq =/= 0.U) {
-              pending := pending & ~(1.U << best_irq)
+              claim_clear := (1.U << best_irq)
+              claim_set   := (1.U << best_irq)
               claimed := claimed | (1.U << best_irq)
             }
           }.otherwise {

@@ -40,13 +40,12 @@ class SyncDiskImpl(apbParams: APBBundleParameters) extends Module {
   val io = IO(Flipped(new APBBundle(apbParams)))
 
   object State extends ChiselEnum {
-    val idle, readWait, access = Value
+    val idle, access = Value
   }
   val state = RegInit(State.idle)
 
   io.pready := false.B
   io.pslverr := false.B
-  io.prdata := 0.U
 
   val apbSetup = io.psel && !io.penable
   val offset = (io.paddr - SoCConfig.syncDiskBase.U)(11, 0).pad(64)
@@ -55,31 +54,25 @@ class SyncDiskImpl(apbParams: APBBundleParameters) extends Module {
   val readResult = RawClockedNonVoidFunctionCall(
     "sync_disk_load", SInt(32.W)
   )(clock, readEn, offset)
-  val readResultReg = RegEnable(readResult, readEn)
 
   val writeEn = WireInit(false.B)
   RawClockedVoidFunctionCall("sync_disk_store")(
     clock, writeEn, offset, io.pwdata.asSInt.pad(32)
   )
 
+  io.prdata := readResult.asUInt
+
   switch(state) {
     is(State.idle) {
       when(apbSetup) {
         when(io.pwrite) {
           writeEn := true.B
-          state := State.access
-        }.otherwise {
-          state := State.readWait
         }
+        state := State.access
       }
-    }
-    is(State.readWait) {
-      io.prdata := readResultReg.asUInt
-      state := State.access
     }
     is(State.access) {
       io.pready := true.B
-      io.prdata := readResultReg.asUInt
       state := State.idle
     }
   }

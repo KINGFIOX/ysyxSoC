@@ -1,5 +1,7 @@
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <chrono>
 
 #include "absl/log/log.h"
 #include "cpu/spike_cpu.h"

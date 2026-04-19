@@ -49,6 +49,9 @@ class SyncDisk {
 
 inline SyncDisk* g_sync_disk = nullptr;
 
+class SpikeCpu;
+inline SpikeCpu* g_golden_cpu = nullptr;
+
 }  // namespace npc
 
 #endif  // NPC_DPI_SYNC_DISK_H_

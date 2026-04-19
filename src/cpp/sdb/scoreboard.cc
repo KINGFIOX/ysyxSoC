@@ -2,10 +2,15 @@
 
 #include <sstream>
 #include <ctime>
+#ifdef NPC_FTRACE
+#include <iostream>
+#endif
 
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
 #include "cpu/cpu_reg_view.h"
+
+#include "dpi/memory.h"
 
 namespace npc {
 
@@ -141,14 +146,26 @@ void ScoreBoard::open_ftrace_log(const std::string& path) {
 
 #ifdef NPC_FTRACE
 // Helper that serialises the last entry pushed into the ftrace ring buffer
-// and appends it to the live ftrace log (if one is open).
+// and appends it to the live ftrace log (if one is open), and/or mirrors it
+// to stdout when requested.
 void ScoreBoard::write_ftrace_last() {
-  if (!ftrace_log_.is_open() || !ftrace_) return;
+  if (!ftrace_) return;
+  const bool want_file = ftrace_log_.is_open();
+  if (!want_file && !ftrace_stdout_) return;
   const auto& ring = ftrace_->ring_buf;
   if (ring.empty()) return;
   std::ostringstream oss;
   oss << ring.back();
-  ftrace_log_ << oss.str() << '\n';
+  const std::string line = oss.str();
+  if (want_file) {
+    ftrace_log_ << line << '\n';
+  }
+  if (ftrace_stdout_) {
+    // Unbuffered write + newline so `make npc FTRACE_STDOUT=1` shows
+    // progress immediately even if stdout is line-buffered to a pipe.
+    std::cout << line << '\n';
+    std::cout.flush();
+  }
 }
 #endif
 
@@ -221,6 +238,33 @@ StepResult ScoreBoard::scoreboard(const VerilatorCpu& dut,
     }
   }
 
+  // Sync external/software interrupts that the DUT observed (via PLIC/CLINT)
+  // but Spike does not model.  Detection: DUT just retired a normal insn
+  // whose dnpc jumped to stvec/mtvec, scause/mcause's MSB is set (= interrupt),
+  // and the x/sepc is the sequential next PC (= the DUT injected a taken
+  // interrupt, not an exception on the committed instruction).  If so, rewind
+  // Spike's pc to the x/sepc and invoke raise_interrupt so that Spike takes
+  // the same trap, updating its stvec/scause/sepc/mstatus to match the DUT.
+  {
+    uint64_t dut_dnpc = dut.dnpc();
+    uint64_t ref_pc = golden_.pc();
+    if (dut_dnpc != ref_pc) {
+      uint64_t dut_scause = dut.scause();
+      uint64_t dut_mcause = dut.mcause();
+      constexpr uint64_t kIntrBit = 1ULL << 63;
+      bool s_intr = (dut_scause & kIntrBit) && (dut_dnpc == dut.stvec());
+      bool m_intr = (dut_mcause & kIntrBit) && (dut_dnpc == dut.mtvec());
+      if (s_intr || m_intr) {
+        uint64_t sepc = s_intr ? dut.sepc() : dut.mepc();
+        uint64_t cause = s_intr ? dut_scause : dut_mcause;
+        if (sepc == ref_pc) {
+          (void)golden_.set_pc(sepc);
+          golden_.raise_interrupt(cause);
+        }
+      }
+    }
+  }
+
   if (!check_regs(dut)) {
     return StepResult::kDifftestFail;
   }
@@ -269,16 +313,6 @@ void ScoreBoard::handle_mmio(const VerilatorCpu& dut, uint64_t pc,
     [[maybe_unused]] uint64_t addr =
         static_cast<uint64_t>(static_cast<int64_t>(base_val) + imm_s(inst));
     [[maybe_unused]] uint64_t data = golden_.gpr(rs2(inst)).value_or(0);
-    // Diagnostic: whenever the kernel writes to the 16550 THR (0x10000000)
-    // log the byte.  Any stdout character we ever see should appear here if
-    // it's coming from the MMIO path — otherwise it must be coming from the
-    // verilated UART TX pin decoder (see UartTxDecoder).
-    if (addr == 0x10000000) {
-      uint8_t ch = static_cast<uint8_t>(data & 0xff);
-      char pr[2] = {(ch >= 0x20 && ch < 0x7f) ? static_cast<char>(ch) : '.', '\0'};
-      LOG(INFO) << absl::StreamFormat("[MMIO-THR] pc=0x%016x data=0x%02x '%s'",
-                                      pc, static_cast<unsigned>(ch), pr);
-    }
 #ifdef NPC_DTRACE
     DTraceEntry dentry(pc, MemDir::kWrite, addr, data, mem_width(mnemonic),
                        disasm_str);

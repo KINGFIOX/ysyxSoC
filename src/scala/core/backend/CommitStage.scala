@@ -141,7 +141,12 @@ class CommitStage extends NPCModule {
   )
   val is_diff = (redirect.bits.dnpc =/= head_entry.predict_npc)
   redirect.bits.mispredict := false.B
-  flush := rob.fire && (is_diff || head_is_fence_i)
+  // Must also flush on sfence.vma: the frontend may have speculatively
+  // fetched past a csrw satp / sfence.vma under the OLD satp, producing
+  // stale PTW translations and stale inst_q contents.  Flushing ensures the
+  // next instruction (and its jalr/branch targets) get re-fetched under the
+  // new satp with a fresh TLB.
+  flush := rob.fire && (is_diff || head_is_fence_i || head_is_sfence)
 
   // ---- Commit logic ----
   when(head_valid) {

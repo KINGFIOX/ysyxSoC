@@ -63,6 +63,14 @@ class ScoreBoard {
   void open_mtrace_log(const std::string& path);
   void open_ftrace_log(const std::string& path);
 
+#ifdef NPC_FTRACE
+  // Toggle mirroring of each new ftrace entry to stdout.  Intended as a
+  // lightweight "what's the kernel doing right now?" view when neither the
+  // console nor nvboard surface anything useful (e.g. xv6 hanging between
+  // `xv6 kernel is booting` and the shell prompt).
+  void set_ftrace_stdout(bool enable) { ftrace_stdout_ = enable; }
+#endif
+
  private:
   void handle_mmio(const VerilatorCpu& dut, uint64_t pc, uint32_t inst,
                    const std::string& mnemonic, const std::string& disasm_str);
@@ -85,6 +93,7 @@ class ScoreBoard {
 #endif
 #ifdef NPC_FTRACE
   std::unique_ptr<FuncTracer> ftrace_;
+  bool ftrace_stdout_ = false;
 #endif
 
   // Live append-mode logs.  Each one is opened only when the corresponding

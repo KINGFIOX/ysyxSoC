@@ -151,8 +151,8 @@ class LSU extends LateExecUnit(new MemLate, 2) {
   // perip defaults
   perip.req := false.B
   perip.wen := ctrl.w_en
-  perip.size := Mux(ctrl.w_en, dataBytesBits.U, ctrl.size)
-  perip.addr := Mux(ctrl.w_en, aligned_addr, addr)(busAddrBits - 1, 0)
+  perip.size := ctrl.size
+  perip.addr := addr(busAddrBits - 1, 0)
   perip.wstrb := Mux(ctrl.w_en, store_wstrb, 0.U)
   perip.wdata := Mux(ctrl.w_en, store_wdata, 0.U)
 

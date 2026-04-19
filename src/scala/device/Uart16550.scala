@@ -92,20 +92,16 @@ class uart_top_apb extends Module {
 
   val apbSetupW = io.in.psel && !io.in.penable
 
-  val wdataW = MuxLookup(io.in.pstrb, 0.U(8.W))(
+  // Byte-accurate APB address: the master (LSU) drives `paddr` to the exact
+  // byte offset being accessed and sets `pstrb` to the corresponding lane.
+  // Select wdata lane from `paddr(1,0)`.
+  val addrW = io.in.paddr(2, 0)
+  val wdataW = MuxLookup(io.in.paddr(1, 0), 0.U(8.W))(
     Seq(
-      "b0001".U(4.W) -> io.in.pwdata(7, 0),
-      "b0010".U(4.W) -> io.in.pwdata(15, 8),
-      "b0100".U(4.W) -> io.in.pwdata(23, 16),
-      "b1000".U(4.W) -> io.in.pwdata(31, 24)
-    )
-  )
-  val addrW = io.in.paddr(2, 0) + MuxLookup(io.in.pstrb, 0.U(3.W))(
-    Seq(
-      "b0001".U(4.W) -> 0.U,
-      "b0010".U(4.W) -> 1.U,
-      "b0100".U(4.W) -> 2.U,
-      "b1000".U(4.W) -> 3.U
+      "b00".U(2.W) -> io.in.pwdata(7, 0),
+      "b01".U(2.W) -> io.in.pwdata(15, 8),
+      "b10".U(2.W) -> io.in.pwdata(23, 16),
+      "b11".U(2.W) -> io.in.pwdata(31, 24)
     )
   )
 

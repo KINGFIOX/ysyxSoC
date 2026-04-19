@@ -46,6 +46,7 @@ class RenameStage extends NPCModule {
   val rd_wen = Seq(
     InstType.R_ALU,
     InstType.I_ALU,
+    InstType.R_MUL,
     InstType.JALR,
     InstType.LOAD,
     InstType.JAL,

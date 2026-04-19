@@ -32,6 +32,7 @@ verilog: $(V_SIM)
 # =============================== CMake 公共参数 ===============================
 
 RELEASE ?= 1
+
 CMAKE_BUILD_TYPE := $(if $(findstring 1,$(RELEASE)),Release,Debug)
 NPC_BUILD_DIR    := $(BUILD_DIR)/npc-build
 BINARY           := $(NPC_BUILD_DIR)/npc
