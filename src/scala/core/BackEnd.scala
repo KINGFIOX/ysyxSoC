@@ -290,6 +290,5 @@ class BackEnd extends NPCModule {
   probe.bits.is_mmio := commitStage_.probe.bits.is_mmio
   probe.bits.gpr := prf_.probe.gpr
   probe.bits.csr := csru_.probe
-  probe.bits.perf := commitStage_.perf
   probe.valid := commitStage_.probe.valid
 }

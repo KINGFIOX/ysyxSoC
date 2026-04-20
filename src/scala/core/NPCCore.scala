@@ -17,7 +17,6 @@ class DebugBundle extends NPCBundle {
   val is_mmio = Bool()
   val gpr = Vec(NRReg, UInt(dataBits.W))
   val csr = new CSRUDebugBundle
-  val perf = new PerfBundle
 }
 
 class NPCCore extends NPCModule {

@@ -6,13 +6,6 @@ import chisel3.util._
 import ysyx.core.common._
 import ysyx.core.frontend._
 
-class PerfBundle extends NPCBundle {
-  val commit_cnt = UInt(dataBits.W)
-  val branch_cnt = UInt(dataBits.W)
-  val branch_mispredict_cnt = UInt(dataBits.W)
-  val flush_cnt = UInt(dataBits.W)
-}
-
 class DebugCommitBundle extends NPCBundle {
   val pc = UInt(dataBits.W)
   val dnpc = UInt(dataBits.W)
@@ -191,31 +184,37 @@ class CommitStage extends NPCModule {
   probe.bits.inst := RegNext(head_entry.inst)
   probe.bits.is_mmio := RegNext(dbg_is_mmio)
 
-  // ---- Perf counters ----
-  val perf_commit_cnt = RegInit(0.U(dataBits.W))
-  val perf_branch_cnt = RegInit(0.U(dataBits.W))
-  val perf_branch_mispredict_cnt = RegInit(0.U(dataBits.W))
-  val perf_flush_cnt = RegInit(0.U(dataBits.W))
+  // ---- Perf counters (DPI-C event pulses) ----
+  // No RTL registers: every event is dispatched via PerfEvent() to the C++
+  // side, which maintains the accumulators. `commit_pulse` guards the
+  // per-class classification so mispredicts/flushes on non-committing
+  // cycles never leak through.
+  val commit_pulse = rob.fire
+  val it = head_entry.inst_type
+  val is_cf = it === InstType.BRANCH || it === InstType.JAL || it === InstType.JALR
 
-  when(rob.fire) {
-    perf_commit_cnt := perf_commit_cnt + 1.U
-    val is_cf = head_entry.inst_type === InstType.BRANCH ||
-      head_entry.inst_type === InstType.JAL ||
-      head_entry.inst_type === InstType.JALR
-    when(is_cf) {
-      perf_branch_cnt := perf_branch_cnt + 1.U
-      when(redirect.bits.mispredict) {
-        perf_branch_mispredict_cnt := perf_branch_mispredict_cnt + 1.U
-      }
-    }
-    when(flush) {
-      perf_flush_cnt := perf_flush_cnt + 1.U
-    }
-  }
+  PerfEvent(PerfEvent.COMMIT,              commit_pulse)
+  PerfEvent(PerfEvent.BRANCH,              commit_pulse && is_cf)
+  PerfEvent(PerfEvent.BRANCH_MISPREDICT,   commit_pulse && is_cf && redirect.bits.mispredict)
+  // `flush` already implies rob.fire (see its definition above), so no
+  // additional guard is needed.
+  PerfEvent(PerfEvent.FLUSH,               flush)
 
-  val perf = IO(Output(new PerfBundle))
-  perf.commit_cnt := perf_commit_cnt
-  perf.branch_cnt := perf_branch_cnt
-  perf.branch_mispredict_cnt := perf_branch_mispredict_cnt
-  perf.flush_cnt := perf_flush_cnt
+  val is_alu = it === InstType.R_ALU || it === InstType.I_ALU ||
+               it === InstType.LUI   || it === InstType.AUIPC
+  val is_system = it === InstType.ECALL || it === InstType.EBREAK ||
+                  it === InstType.MRET  || it === InstType.SRET   ||
+                  it === InstType.SFENCE_VMA
+  val is_fence = it === InstType.FENCE || it === InstType.FENCE_I
+
+  PerfEvent(PerfEvent.COMMIT_ALU,       commit_pulse && is_alu)
+  PerfEvent(PerfEvent.COMMIT_MUL_DIV,   commit_pulse && (it === InstType.R_MUL))
+  PerfEvent(PerfEvent.COMMIT_LOAD,      commit_pulse && (it === InstType.LOAD))
+  PerfEvent(PerfEvent.COMMIT_STORE,     commit_pulse && (it === InstType.STORE))
+  PerfEvent(PerfEvent.COMMIT_CF_BRANCH, commit_pulse && (it === InstType.BRANCH))
+  PerfEvent(PerfEvent.COMMIT_CF_JAL,    commit_pulse && (it === InstType.JAL))
+  PerfEvent(PerfEvent.COMMIT_CF_JALR,   commit_pulse && (it === InstType.JALR))
+  PerfEvent(PerfEvent.COMMIT_CSR,       commit_pulse && (it === InstType.CSR))
+  PerfEvent(PerfEvent.COMMIT_SYSTEM,    commit_pulse && is_system)
+  PerfEvent(PerfEvent.COMMIT_FENCE,     commit_pulse && is_fence)
 }

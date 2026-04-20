@@ -7,6 +7,7 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
 
 import ysyx.core.common._
+import ysyx.core.common.PerfEvent
 import ysyx.core.lsu._
 import ysyx.core.sram._
 import ysyx.core.backend.InstType
@@ -197,4 +198,11 @@ class IFU extends NPCModule {
     pc_q := io.dnpc
     page_fault_reg := false.B
   }
+
+  // ----- Perf events (DPI-C, sim only) -----
+  // IFU produced an instruction this cycle (fire): downstream accepted it.
+  // When the IFU has a valid output but downstream is not ready, it's a backend stall.
+  // When the IFU is not in output_wait at all, it's a frontend-side stall (cache/tlb/ptw).
+  PerfEvent(PerfEvent.IFU_OUT_VALID, io.out.fire)
+  PerfEvent(PerfEvent.IFU_STALL, !io.out.valid)
 }

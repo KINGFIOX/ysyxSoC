@@ -84,6 +84,7 @@ add_executable(npc
   ${SRC}/dpi/dpi.cc
   ${SRC}/dpi/sync_disk.cc
   ${SRC}/dpi/uart_ns16550.cc
+  ${SRC}/perf/perf_counters.cc
   ${SRC}/sdb/sdb.cc
   ${SRC}/sdb/command.cc
   ${SRC}/sdb/watchpoint.cc

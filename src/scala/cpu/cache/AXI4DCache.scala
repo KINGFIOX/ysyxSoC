@@ -10,7 +10,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
 import ysyx.core.sram._
-import ysyx.core.common.HasCoreParameter
+import ysyx.core.common.{HasCoreParameter, PerfEvent}
 
 // PIPT DCache: 64B cacheline, 4-way set associative, FIFO replacement, write-back
 // 64 sets, offset 6 bits, index 6 bits, tag = addrBits - 12
@@ -161,6 +161,14 @@ class DCacheImpl(
     val idle, lookup, miss, replace, refill, flush_scan, flush_wb = Value
   }
   val state_q = RegInit(State.idle)
+
+  // ----- Perf events (DPI-C, sim only) -----
+  val dc_is_lookup = state_q === State.lookup
+  val dc_is_miss_cycle = state_q === State.miss || state_q === State.replace || state_q === State.refill
+  PerfEvent(PerfEvent.DCACHE_ACCESS, dc_is_lookup)
+  PerfEvent(PerfEvent.DCACHE_HIT,    dc_is_lookup &&  hit)
+  PerfEvent(PerfEvent.DCACHE_MISS,   dc_is_lookup && !hit)
+  PerfEvent(PerfEvent.DCACHE_MISS_CYCLES, dc_is_miss_cycle)
 
   // REPLACE sub-phase tracking
   val wb_burst_done = RegInit(false.B)

@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -16,6 +17,7 @@
 #include "common/args.h"
 #include "cpu/verilator_cpu.h"
 #include "dpi/sync_disk.h"
+#include "perf/perf_counters.h"
 #include "sdb/scoreboard.h"
 #include "sdb/sdb.h"
 #ifdef NPC_FTRACE
@@ -41,6 +43,10 @@ ABSL_FLAG(std::string, ftrace_log, "",
 ABSL_FLAG(bool, ftrace_stdout, false,
           "Also mirror ftrace entries to stdout as they happen (useful when "
           "debugging a long-running boot with no other output channel).");
+ABSL_FLAG(std::string, perf_json, "",
+          "If non-empty, dump performance counters as JSON to this path");
+ABSL_FLAG(std::string, perf_name, "",
+          "Benchmark name to embed in the performance report/JSON");
 
 int main(int argc, char* argv[]) {
   absl::ParseCommandLine(argc, argv);
@@ -107,24 +113,35 @@ int main(int argc, char* argv[]) {
 #endif
   npc::Sdb sdb;
 
+  auto wall_start = std::chrono::steady_clock::now();
   auto status = sdb.mainloop(scrbrd, dut, absl::GetFlag(FLAGS_batch));
+  auto wall_end = std::chrono::steady_clock::now();
+  uint64_t wall_us = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(wall_end -
+                                                            wall_start)
+          .count());
   if (!status.ok()) {
     scrbrd.dump_traces(dut);
     LOG(ERROR) << status;
     return 1;
   }
 
-  uint32_t branch_cnt = dut.perf_branch_cnt();
-  uint32_t mispredict_cnt = dut.perf_branch_mispredict_cnt();
-  float hit_rate = branch_cnt > 0
-                       ? static_cast<float>(branch_cnt - mispredict_cnt) /
-                             static_cast<float>(branch_cnt)
-                       : 0.0F;
-  LOG(INFO) << "commit: " << dut.perf_commit_cnt();
-  LOG(INFO) << "branch: " << branch_cnt;
-  LOG(INFO) << "mispredict: " << mispredict_cnt;
-  LOG(INFO) << "hit rate: " << hit_rate;
-  LOG(INFO) << "flush: " << dut.perf_flush_cnt();
+  // ---- Finalize perf report ----
+  // All commit / branch / inst-mix counters are accumulated via DPI-C
+  // events.  We only need to supply the host-side stats: benchmark name,
+  // wall time, and the full simulation cycle count.
+  auto& perf = npc::perf::PerfCounters::Instance();
+  perf.set_benchmark_name(absl::GetFlag(FLAGS_perf_name));
+  perf.set_cycles(dut.cycle_count());
+  perf.set_elapsed_us(wall_us);
+
+  perf.ReportStdout();
+  std::string perf_json_path = absl::GetFlag(FLAGS_perf_json);
+  if (!perf_json_path.empty()) {
+    if (perf.DumpJson(perf_json_path)) {
+      LOG(INFO) << "perf: wrote " << perf_json_path;
+    }
+  }
 
   return 0;
 }

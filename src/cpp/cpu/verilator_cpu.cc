@@ -79,6 +79,11 @@ absl::Status VerilatorCpu::tick() {
     nvboard_->Update();
   }
 
+  // Count a full clock cycle only after reset is deasserted.
+  if (top_->reset == 0) {
+    ++cycle_count_;
+  }
+
   if (tfp_ != nullptr && wave_tail_ > 0) {
     ++wave_cycle_;
     if (wave_cycle_ >= wave_tail_) {
@@ -115,22 +120,6 @@ bool VerilatorCpu::is_mmio() const { return top_->probe_bits_is_mmio != 0; }
 uint64_t VerilatorCpu::dnpc() const { return top_->probe_bits_dnpc; }
 
 uint32_t VerilatorCpu::inst() const { return top_->probe_bits_inst; }
-
-uint32_t VerilatorCpu::perf_commit_cnt() const {
-  return top_->probe_bits_perf_commit_cnt;
-}
-
-uint32_t VerilatorCpu::perf_branch_cnt() const {
-  return top_->probe_bits_perf_branch_cnt;
-}
-
-uint32_t VerilatorCpu::perf_branch_mispredict_cnt() const {
-  return top_->probe_bits_perf_branch_mispredict_cnt;
-}
-
-uint32_t VerilatorCpu::perf_flush_cnt() const {
-  return top_->probe_bits_perf_flush_cnt;
-}
 
 // ========================== CpuRegView ==========================
 

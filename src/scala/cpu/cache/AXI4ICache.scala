@@ -10,7 +10,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
 import ysyx.core.sram._
-import ysyx.core.common.HasCoreParameter
+import ysyx.core.common.{HasCoreParameter, PerfEvent}
 
 // PIPT ICache: 64B cacheline, 4-way set associative, FIFO replacement
 // 64 sets, offset 6 bits, index 6 bits, tag = addrBits - 12
@@ -96,6 +96,14 @@ class ICacheImpl(
     val idle, lookup, miss, replace, refill = Value
   }
   val state_q = RegInit(State.idle)
+
+  // ----- Perf events (DPI-C, sim only) -----
+  val is_lookup = state_q === State.lookup
+  val is_miss_cycle = state_q === State.miss || state_q === State.replace || state_q === State.refill
+  PerfEvent(PerfEvent.ICACHE_ACCESS, is_lookup)
+  PerfEvent(PerfEvent.ICACHE_HIT,    is_lookup &&  hit)
+  PerfEvent(PerfEvent.ICACHE_MISS,   is_lookup && !hit)
+  PerfEvent(PerfEvent.ICACHE_MISS_CYCLES, is_miss_cycle)
 
   switch(state_q) {
 

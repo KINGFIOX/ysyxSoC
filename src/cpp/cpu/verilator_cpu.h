@@ -28,6 +28,8 @@ class VerilatorCpu final : public CpuRegView {
 
   // Simulation control
   uint64_t sim_time() const { return sim_time_; }
+  // Number of full clock cycles after reset completed (1 cycle = 2 sim_time).
+  uint64_t cycle_count() const { return cycle_count_; }
   absl::Status run_until(uint64_t target_sim_time);
   void enable_wave(uint64_t tail = 0);
 
@@ -39,11 +41,8 @@ class VerilatorCpu final : public CpuRegView {
   uint64_t dnpc() const;
   uint32_t inst() const;
 
-  // Performance counters
-  uint32_t perf_commit_cnt() const;
-  uint32_t perf_branch_cnt() const;
-  uint32_t perf_branch_mispredict_cnt() const;
-  uint32_t perf_flush_cnt() const;
+  // Perf counters are now routed entirely through DPI-C events; see
+  // npc/src/cpp/perf/perf_counters.h.
 
   // CpuRegView interface (read-only)
   uint64_t pc() const override;
@@ -86,6 +85,7 @@ class VerilatorCpu final : public CpuRegView {
   VerilatedVcdC* tfp_ = nullptr;
   Memory mem_;
   uint64_t sim_time_ = 0;
+  uint64_t cycle_count_ = 0;
   uint64_t wave_tail_ = 0;
   uint64_t wave_cycle_ = 0;
   std::unique_ptr<nvboard::Board> nvboard_;
