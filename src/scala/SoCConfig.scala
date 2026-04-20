@@ -5,7 +5,7 @@
 package ysyx
 
 object SoCConfig {
-  val resetVector: Long = 0x80000000L
+  val resetVector: Long = 0x3000_0000L
   val uartBase: Long = 0x10000000L
   val uartSize: Long = 0x1000L
   val gpioBase: Long = 0x10002000L
