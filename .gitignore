@@ -53,3 +53,5 @@ out/
 !report/*
 
 !CMakeLists.txt
+
+!tools/*
