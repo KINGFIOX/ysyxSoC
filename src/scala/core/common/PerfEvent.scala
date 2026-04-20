@@ -34,12 +34,20 @@ import chisel3.util._
   *  19  cf_jal
   *  20  cf_jalr
   *  21  csr
-  *  22  system             (ECALL/EBREAK/MRET/SRET/SFENCE_VMA)
-  *  23  fence              (FENCE | FENCE_I)
-  *
-  * Using an id-based scheme keeps the RTL hook extremely small (one extmodule
-  * per event source) and avoids blowing up the Verilator port count.
-  */
+ *  22  system             (ECALL/EBREAK/MRET/SRET/SFENCE_VMA)
+ *  23  fence              (FENCE | FENCE_I)
+ *
+ * Frontend pipeline events (Step E; pulsed from IFU.scala):
+ *  24  fe_redirect_branch    (F3 taken-branch/jump triggered self-redirect)
+ *  25  (free; formerly fe_redirect_serial — removed with fe_wait_flush)
+ *  26  (free; formerly fe_wait_flush_stall — removed with fe_wait_flush)
+ *  27  fe_f1_tlb_miss        (F1 had a valid VPN that missed in the iTLB)
+ *  28  fe_f2_icache_wait     (F2 has a req pending but the cache isn't accepting)
+ *  29  fe_fp_resp_wait       (Fp holds an inflight req still waiting on rdata)
+ *
+ * Using an id-based scheme keeps the RTL hook extremely small (one extmodule
+ * per event source) and avoids blowing up the Verilator port count.
+ */
 class PerfEventHelper
     extends FixedIOExtModule(new Bundle {
       val clock = Input(Clock())
@@ -92,6 +100,15 @@ object PerfEvent {
   val COMMIT_CSR          = 21
   val COMMIT_SYSTEM       = 22
   val COMMIT_FENCE        = 23
+
+  // Frontend pipeline events
+  val FE_REDIRECT_BRANCH  = 24
+  // 25, 26 are intentionally left unused (formerly fe_redirect_serial
+  // and fe_wait_flush_stall; removed when the ICache began handling
+  // fence.i drain itself).  Not reassigned to keep DPI-C IDs stable.
+  val FE_F1_TLB_MISS      = 27
+  val FE_F2_ICACHE_WAIT   = 28
+  val FE_FP_RESP_WAIT     = 29
 
   /** Emit `pulse` cycles of the given event id.
     *

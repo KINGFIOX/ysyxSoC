@@ -105,11 +105,20 @@ void PerfCounters::ReportStdout() const {
                   : 1.0 + SafeRatio(dcache_miss_cycles, dcache_access));
   std::printf("\n");
 
+  const uint64_t fe_redir_br = Get(kFeRedirectBranch);
+  const uint64_t fe_f1_miss  = Get(kFeF1TlbMiss);
+  const uint64_t fe_f2_wait  = Get(kFeF2IcacheWait);
+  const uint64_t fe_fp_wait  = Get(kFeFpRespWait);
+
   std::printf("-- Frontend (IFU) --\n");
   std::printf("  deliver cycles   : %" PRIu64 "\n", ifu_out);
   std::printf("  stall   cycles   : %" PRIu64 "\n", ifu_stall);
   std::printf("  stall ratio      : %s\n",
               FmtRate(ifu_stall, cycles_).c_str());
+  std::printf("  FE redirect (branch)    : %" PRIu64 "\n", fe_redir_br);
+  std::printf("  F1 TLB-miss cyc         : %" PRIu64 "\n", fe_f1_miss);
+  std::printf("  F2 ICache-wait cyc      : %" PRIu64 "\n", fe_f2_wait);
+  std::printf("  Fp response-wait cyc    : %" PRIu64 "\n", fe_fp_wait);
   std::printf("\n");
 
   std::printf("-- Instruction mix (committed) --\n");
@@ -201,11 +210,20 @@ bool PerfCounters::DumpJson(const std::string& path) const {
                                : 1.0 + SafeRatio(dcache_miss_cycles,
                                                  dcache_access));
   os << "  },\n";
+  const uint64_t fe_redir_br = Get(kFeRedirectBranch);
+  const uint64_t fe_f1_miss  = Get(kFeF1TlbMiss);
+  const uint64_t fe_f2_wait  = Get(kFeF2IcacheWait);
+  const uint64_t fe_fp_wait  = Get(kFeFpRespWait);
+
   os << "  \"ifu\": {\n";
   os << "    \"deliver_cycles\": " << ifu_out << ",\n";
   os << "    \"stall_cycles\": " << ifu_stall << ",\n";
-  os << absl::StreamFormat("    \"stall_ratio\": %.6f\n",
+  os << absl::StreamFormat("    \"stall_ratio\": %.6f,\n",
                            SafeRatio(ifu_stall, cycles_));
+  os << "    \"redirect_branch\": " << fe_redir_br << ",\n";
+  os << "    \"f1_tlb_miss_cycles\": " << fe_f1_miss << ",\n";
+  os << "    \"f2_icache_wait_cycles\": " << fe_f2_wait << ",\n";
+  os << "    \"fp_resp_wait_cycles\": " << fe_fp_wait << "\n";
   os << "  },\n";
   os << "  \"inst_mix\": {\n";
   os << "    \"alu\": " << Get(kCommitAlu) << ",\n";

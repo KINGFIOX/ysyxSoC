@@ -37,6 +37,15 @@ enum EventId : uint8_t {
   kCommitSystem      = 22,  // ECALL/EBREAK/MRET/SRET/SFENCE_VMA
   kCommitFence       = 23,  // FENCE | FENCE_I
 
+  // Frontend pipeline events (Step E).
+  kFeRedirectBranch  = 24,  // F3 self-redirect fired because of taken branch/jump
+  // 25, 26 intentionally left unused (formerly kFeRedirectSerial and
+  // kFeWaitFlushStall; removed when the ICache began handling fence.i
+  // drain itself).  Not reassigned to keep DPI-C IDs stable.
+  kFeF1TlbMiss       = 27,  // F1 TLB miss pulse (one per cycle spent missing)
+  kFeF2IcacheWait    = 28,  // F2 req pending but cache/Fp not accepting
+  kFeFpRespWait      = 29,  // Fp inflight waiting for rdata
+
   kNumEvents
 };
 

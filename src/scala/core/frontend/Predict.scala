@@ -54,11 +54,15 @@ class Predict extends NPCModule {
   ijtc_.io.lookup.pc := io.predict.pc
 
   // ============================================================
-  // RAS (front-end only push/pop)
+  // RAS (front-end only push/pop).  Gated by `io.predict.commit` so the
+  // stack is only updated when F3 actually hands the instruction off.
+  // Otherwise a multi-cycle F3 stall or a wrong-path F3 (about to be
+  // squashed by fe_redirect / back-end flush) would push/pop multiple
+  // times per real call/ret.
   // ============================================================
-  ras_.io.push.valid := is_call
+  ras_.io.push.valid := is_call && io.predict.commit
   ras_.io.push.bits.dnpc := snpc
-  ras_.io.pop.valid := is_ret
+  ras_.io.pop.valid := is_ret && io.predict.commit
 
   // ============================================================
   // Prediction mux

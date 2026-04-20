@@ -51,6 +51,18 @@ class CommitStage extends NPCModule {
   val head_is_fence = head_entry.inst_type === InstType.FENCE
   val head_is_fence_i = head_entry.inst_type === InstType.FENCE_I
 
+  // A CSR instruction genuinely writes a CSR (and thus can change satp /
+  // mstatus / mtvec / ... in ways that invalidate speculative fetches)
+  // unless it is a read-only form: CSRRS/CSRRC with rs1 == x0.  CSRRW with
+  // rs1 == x0 still writes (zero) and so counts as a write.  This backend
+  // does not implement CSRRWI/SI/CI, so inst[19:15] is always the rs1 field.
+  val head_csr_rs1 = head_entry.inst(19, 15)
+  val head_csr_op  = head_entry.csr.op
+  val head_is_csrw = head_is_csr && !(
+    (head_csr_op === CSROpType.CSR_RS || head_csr_op === CSROpType.CSR_RC) &&
+    head_csr_rs1 === 0.U
+  )
+
   // ---- Defaults ----
   rob.done := head_valid
 
@@ -134,12 +146,18 @@ class CommitStage extends NPCModule {
   )
   val is_diff = (redirect.bits.dnpc =/= head_entry.predict_npc)
   redirect.bits.mispredict := false.B
-  // Must also flush on sfence.vma: the frontend may have speculatively
-  // fetched past a csrw satp / sfence.vma under the OLD satp, producing
-  // stale PTW translations and stale inst_q contents.  Flushing ensures the
-  // next instruction (and its jalr/branch targets) get re-fetched under the
-  // new satp with a fresh TLB.
-  flush := rob.fire && (is_diff || head_is_fence_i || head_is_sfence)
+  // Flush reasons:
+  //  * is_diff         - branch/jalr/exception redirect.
+  //  * head_is_fence_i - i-cache contents may be stale after fence.i.
+  //  * head_is_sfence  - translation cache / in-flight PTW under old satp.
+  //  * head_is_csrw    - any CSR write (csrrw, or csrrs/csrrc with rs1!=x0)
+  //                      may change satp / mstatus / priv-related bits that
+  //                      the frontend has already speculated past.  Flushing
+  //                      on every CSR write moves all "serialize around CSR
+  //                      write" responsibility to the backend, so the
+  //                      frontend no longer needs to distinguish csr reads
+  //                      from writes by funct3/opcode.
+  flush := rob.fire && (is_diff || head_is_fence_i || head_is_sfence || head_is_csrw)
 
   // ---- Commit logic ----
   when(head_valid) {
